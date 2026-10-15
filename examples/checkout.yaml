@@ -1,5 +1,4 @@
-# A1, A2a and A2b demo: a three-hop chain where retries multiply (x27 at ledger)
-# and the retry budgets overrun the callers' deadlines.
+# examples/checkout.yaml
 services:
   gateway:  { entry: true, deadline: 3s }
   orders:   { deadline: 2s }
@@ -8,7 +7,7 @@ services:
 edges:
   - { from: gateway,  to: orders,
       layers: [ { kind: resilience4j, maxAttempts: 3, perTryTimeout: 1s,    backoff: 100ms, jitter: false } ] }
-  - { from: orders,   to: payments,
+  - { from: orders,   to: payments, idempotent: false,
       layers: [ { kind: istio,        attempts: 2,    perTryTimeout: 800ms, backoff: 25ms,  jitter: true } ] }
   - { from: payments, to: ledger,
       layers: [ { kind: resilience4j, maxAttempts: 3, perTryTimeout: 300ms, backoff: 0ms,   jitter: false } ] }
