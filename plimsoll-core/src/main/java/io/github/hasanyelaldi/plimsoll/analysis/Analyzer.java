@@ -16,6 +16,7 @@ public final class Analyzer {
         findings.addAll(RetryBudgetRule.evaluate(graph));
         findings.addAll(AbandonedWorkRule.evaluate(graph));
         findings.addAll(NonIdempotentRetryRule.evaluate(graph));
+        findings.addAll(BackoffHygieneRule.evaluate(graph));
         findings.sort(Finding.ORDER);
         return new AnalysisResult(amplification.services(), findings);
     }
