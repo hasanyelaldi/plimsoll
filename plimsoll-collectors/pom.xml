@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>io.github.hasanyelaldi</groupId>
+    <artifactId>plimsoll-parent</artifactId>
+    <version>0.1.0-SNAPSHOT</version>
+  </parent>
+
+  <artifactId>plimsoll-collectors</artifactId>
+  <name>Plimsoll Collectors</name>
+  <description>Read resilience settings from real configuration and code into the Plimsoll model.</description>
+
+  <dependencies>
+    <dependency>
+      <groupId>io.github.hasanyelaldi</groupId>
+      <artifactId>plimsoll-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.github.javaparser</groupId>
+      <artifactId>javaparser-core</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.junit.jupiter</groupId>
+      <artifactId>junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.assertj</groupId>
+      <artifactId>assertj-core</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <resources>
+      <resource>
+        <directory>src/main/resources</directory>
+      </resource>
+      <!-- One knowledge base in the repository, served from the classpath (and the CLI jar) -->
+      <resource>
+        <directory>${project.basedir}/../kb/defaults</directory>
+        <targetPath>kb/defaults</targetPath>
+      </resource>
+    </resources>
+  </build>
+
+  <profiles>
+    <!-- Differential oracles: real Spring Boot binds the same application.yml the collector reads.
+         resilience4j-spring-boot4 exists from 2.4.0 on; skip with -DnoSpringOracle on older versions. -->
+    <profile>
+      <id>spring-oracle</id>
+      <activation>
+        <property>
+          <name>!noSpringOracle</name>
+        </property>
+      </activation>
+      <dependencies>
+        <dependency>
+          <groupId>io.github.resilience4j</groupId>
+          <artifactId>resilience4j-spring-boot4</artifactId>
+          <scope>test</scope>
+        </dependency>
+        <dependency>
+          <groupId>io.github.resilience4j</groupId>
+          <artifactId>resilience4j-timelimiter</artifactId>
+          <scope>test</scope>
+        </dependency>
+        <dependency>
+          <groupId>org.springframework.boot</groupId>
+          <artifactId>spring-boot-starter-aspectj</artifactId>
+          <scope>test</scope>
+        </dependency>
+      </dependencies>
+    </profile>
+    <profile>
+      <id>no-spring-oracle</id>
+      <activation>
+        <property>
+          <name>noSpringOracle</name>
+        </property>
+      </activation>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-compiler-plugin</artifactId>
+            <configuration>
+              <testExcludes>
+                <testExclude>**/oracle/**</testExclude>
+              </testExcludes>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
+</project>
