@@ -1,0 +1,9 @@
+# Resilience4j TimeLimiter defaults.
+# verified_by: oracle -> plimsoll-collectors/src/test/java/io/github/hasanyelaldi/plimsoll/collect/oracle/Resilience4jConfigOracleTest.java
+- library: resilience4j-timelimiter
+  versions: "2.4.0"
+  parameter: timeoutDuration
+  value: 1s
+  unit: duration
+  source: https://resilience4j.readme.io/docs/timeout
+  verified_by: oracle

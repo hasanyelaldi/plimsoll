@@ -1,0 +1,62 @@
+# Each instance probes one resolution rule; Resilience4jConfigOracleTest binds this file with real Spring Boot.
+resilience4j:
+  retry:
+    configs:
+      default:
+        max-attempts: 4
+        wait-duration: 200ms
+      exponential:
+        waitDuration: 100ms
+        enableExponentialBackoff: true
+        exponentialBackoffMultiplier: 2
+        exponentialMaxWaitDuration: 350ms
+      exponentialNoMultiplier:
+        wait-duration: 100ms
+        enable-exponential-backoff: true
+      randomized:
+        wait-duration: 100ms
+        enable-randomized-wait: true
+    instances:
+      plain:                         # maxAttempts own, waitDuration from configs.default
+        maxAttempts: 2
+      fromBase:                      # everything else from baseConfig
+        baseConfig: exponential
+        max-attempts: 5
+      overrideWait:                  # own waitDuration, base's exponential flags and multiplier
+        baseConfig: exponential
+        wait-duration: 50ms
+      flagWithoutWait:               # no own waitDuration: the 'false' has no effect, base backoff stays
+        baseConfig: exponential
+        enable-exponential-backoff: false
+      flagWithWait:                  # own waitDuration: the 'false' applies
+        baseConfig: exponential
+        wait-duration: 100ms
+        enable-exponential-backoff: false
+      defaultMultiplier:
+        baseConfig: exponentialNoMultiplier
+        max-attempts: 5
+      jittered:
+        baseConfig: randomized
+      underscoreStyle:
+        max_attempts: 6
+        wait_duration: PT0.3S
+      backendA:                      # instance names keep their case
+        maxAttempts: 7
+        waitDuration: 1000
+  timelimiter:
+    configs:
+      default:
+        timeout-duration: 2s
+      slow:
+        timeoutDuration: 5s
+    instances:
+      own:
+        timeoutDuration: 750ms
+      fromBase:
+        baseConfig: slow
+      fromDefault:
+        cancel-running-future: false
+resilience4j.retry.instances.dotted.max-attempts: 3
+---
+spring.config.activate.on-profile: prod
+resilience4j.retry.instances.plain.max-attempts: 9

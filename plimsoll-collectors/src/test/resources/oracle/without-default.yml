@@ -1,0 +1,9 @@
+# No configs.default: unconfigured values come from the library defaults.
+resilience4j.retry.instances:
+  waitOnly:
+    wait-duration: 100ms
+  attemptsOnly:
+    max-attempts: 5
+resilience4j.timelimiter.instances:
+  cancelOnly:
+    cancel-running-future: true

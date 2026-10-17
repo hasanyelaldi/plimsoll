@@ -4,7 +4,15 @@ import static io.github.hasanyelaldi.plimsoll.analysis.Specs.analyze;
 import static io.github.hasanyelaldi.plimsoll.analysis.Specs.findings;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.hasanyelaldi.plimsoll.model.Edge;
+import io.github.hasanyelaldi.plimsoll.model.Layer;
+import io.github.hasanyelaldi.plimsoll.model.RetryPolicy;
+import io.github.hasanyelaldi.plimsoll.model.Service;
+import io.github.hasanyelaldi.plimsoll.model.ServiceGraph;
+import io.github.hasanyelaldi.plimsoll.model.Val;
+import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class RetryBudgetRuleTest {
@@ -127,5 +135,48 @@ class RetryBudgetRuleTest {
                         + "{ kind: istio, attempts: 2, perTryTimeout: 900ms, backoff: 0ms }"));
         assertThat(f).hasSize(1);
         assertThat(f.get(0).detail()).isEqualTo("layer 2 (istio): budget 2.7 s > deadline 2 s, 2 of 3 tries fit");
+    }
+
+    /** The spec loader always sets a multiplier; collectors may not. */
+    private static List<Finding> a2aUnknownMultiplier(String callerDeadline, int attempts) {
+        RetryPolicy retry = new RetryPolicy(
+                Val.explicit(attempts, "app.yml:1"),
+                Val.explicit(Duration.ofSeconds(1), "app.yml:2"),
+                Val.explicit(Duration.ofMillis(100), "app.yml:3"),
+                Val.unknown("exponentialBackoffMultiplier absent"),
+                Val.unknown("exponentialMaxWaitDuration absent"),
+                Val.explicit(false, "app.yml:4"),
+                Val.unknown("retryExceptions absent"));
+        Service a = new Service("a", Val.explicit(Duration.parse("PT" + callerDeadline), "spec:1"), true);
+        Service b = new Service("b", Val.unknown("deadline absent"), false);
+        Edge edge = new Edge("a", "b", null, Val.unknown("idempotent absent"), 1,
+                List.of(new Layer("resilience4j", retry, Val.unknown("overallTimeout absent"))));
+        ServiceGraph graph = new ServiceGraph(Map.of("a", a, "b", b), List.of(edge));
+        return findings(Analyzer.analyze(graph, AnalysisOptions.defaults()), "PLM-A2a");
+    }
+
+    @Test
+    void unknownMultiplierGivesALowerBound() {
+        // multiplier taken as 1: W_4 >= 4 x 1s + 3 x 100ms = 4.3s; W_3 >= 3.2s
+        List<Finding> f = a2aUnknownMultiplier("3.2S", 4);
+        assertThat(f).hasSize(1);
+        assertThat(f.get(0).severity()).isEqualTo(Severity.WARN);
+        assertThat(f.get(0).detail()).isEqualTo("budget at least 4.3 s > deadline 3.2 s, at most 3 of 4 tries fit");
+        assertThat(f.get(0).unknowns()).containsExactly("a→b layer 1 (resilience4j) multiplier");
+    }
+
+    @Test
+    void unknownMultiplierCannotConfirmThatTheBudgetFits() {
+        List<Finding> f = a2aUnknownMultiplier("5S", 4);
+        assertThat(f).hasSize(1);
+        assertThat(f.get(0).severity()).isEqualTo(Severity.INFO);
+        assertThat(f.get(0).detail())
+                .isEqualTo("budget at least 4.3 s <= deadline 5 s; multiplier UNKNOWN, cannot confirm that 4 tries fit");
+    }
+
+    @Test
+    void unknownMultiplierDoesNotMatterWithASingleBackoff() {
+        // two tries: one backoff, the initial one; W_2 = 2.1s exactly
+        assertThat(a2aUnknownMultiplier("3S", 2)).isEmpty();
     }
 }

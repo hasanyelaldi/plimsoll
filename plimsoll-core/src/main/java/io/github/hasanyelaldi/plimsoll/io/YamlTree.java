@@ -9,35 +9,50 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/** A YAML document that remembers the line of every node, so values can cite {@code file:line}. */
-final class YamlTree {
+/**
+ * A YAML document that remembers the line of every node, so values can cite {@code file:line}.
+ * Shared by the spec loader and the collectors.
+ */
+public final class YamlTree {
 
-    sealed interface Node permits MapNode, ListNode, Scalar {
+    public sealed interface Node permits MapNode, ListNode, Scalar {
         int line();
     }
 
-    record Entry(int keyLine, Node value) {}
+    public record Entry(int keyLine, Node value) {}
 
-    record MapNode(Map<String, Entry> entries, int line) implements Node {}
+    public record MapNode(Map<String, Entry> entries, int line) implements Node {}
 
-    record ListNode(List<Node> items, int line) implements Node {}
+    public record ListNode(List<Node> items, int line) implements Node {}
 
     /** {@code token} is VALUE_STRING, VALUE_NUMBER_INT, VALUE_NUMBER_FLOAT, VALUE_TRUE, VALUE_FALSE or VALUE_NULL. */
-    record Scalar(String text, JsonToken token, int line) implements Node {}
+    public record Scalar(String text, JsonToken token, int line) implements Node {}
 
     private YamlTree() {}
 
-    static Node parse(String yaml, String fileName) {
+    /** Parses exactly one document. */
+    public static Node parse(String yaml, String fileName) {
+        List<Node> docs = parseAll(yaml, fileName);
+        if (docs.isEmpty()) {
+            throw new InvalidSpecException(fileName + ": empty document");
+        }
+        if (docs.size() > 1) {
+            throw new InvalidSpecException(fileName + ":" + docs.get(1).line() + ": only one YAML document is allowed");
+        }
+        return docs.get(0);
+    }
+
+    /** Parses every document of a {@code ---} separated stream, in order. Empty documents are skipped. */
+    public static List<Node> parseAll(String yaml, String fileName) {
         try (JsonParser p = new YAMLFactory().createParser(yaml)) {
-            if (p.nextToken() == null) {
-                throw new InvalidSpecException(fileName + ": empty document");
+            List<Node> docs = new ArrayList<>();
+            while (p.nextToken() != null) {
+                Node doc = read(p, fileName);
+                if (!(doc instanceof Scalar s && s.token() == JsonToken.VALUE_NULL)) {
+                    docs.add(doc);
+                }
             }
-            Node root = read(p, fileName);
-            if (p.nextToken() != null) {
-                throw new InvalidSpecException(fileName + ":" + p.currentTokenLocation().getLineNr()
-                        + ": only one YAML document is allowed");
-            }
-            return root;
+            return docs;
         } catch (IOException e) {
             throw new InvalidSpecException(fileName + ": invalid YAML: " + firstLine(e.getMessage()), e);
         }
