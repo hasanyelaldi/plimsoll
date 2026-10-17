@@ -17,8 +17,9 @@ import java.util.List;
  * If {@code W_n > deadline(caller)}: WARN, "k of n tries fit" with k the largest such that {@code W_k ≤ deadline}.
  *
  * <p>Unknown inputs are never guessed. A missing perTryTimeout, totalAttempts or caller deadline means the
- * rule cannot run (INFO). A missing initial backoff is taken as zero, which makes W a lower bound; a missing
- * maxBackoff with a growing backoff is taken as no cap, which makes W an upper bound. The wording says which.
+ * rule cannot run (INFO). A missing initial backoff is taken as zero and a missing multiplier as 1 (it is
+ * never below 1), which makes W a lower bound; a missing maxBackoff with a growing backoff is taken as no cap,
+ * which makes W an upper bound. The wording says which.
  */
 final class RetryBudgetRule {
 
@@ -66,10 +67,12 @@ final class RetryBudgetRule {
         int n = p.totalAttempts().value();
         double perTry = p.perTryTimeout().value().toNanos();
         double deadline = caller.deadline().value().toNanos();
-        double multiplier = p.multiplier().value();
+        boolean multiplierUnknown = !p.multiplier().isKnown();
+        double multiplier = multiplierUnknown ? 1 : p.multiplier().value();
         boolean initialUnknown = !p.initialBackoff().isKnown();
         double initial = initialUnknown ? 0 : p.initialBackoff().value().toNanos();
-        boolean capUnknown = !initialUnknown && !p.maxBackoff().isKnown() && multiplier > 1 && n > 2;
+        boolean lowerBound = initialUnknown || (multiplierUnknown && initial > 0 && n > 2);
+        boolean capUnknown = !lowerBound && !p.maxBackoff().isKnown() && multiplier > 1 && n > 2;
         Double cap = p.maxBackoff().isKnown() ? (double) p.maxBackoff().value().toNanos() : null;
 
         // W_n, and the largest k with W_k <= deadline, in one pass.
@@ -92,8 +95,13 @@ final class RetryBudgetRule {
         String budgetText = Durations.format(toDuration(budget));
         String deadlineText = Durations.format(caller.deadline().value());
         List<String> unknowns = new ArrayList<>();
-        if (initialUnknown) {
-            unknowns.add(name + " backoff");
+        if (lowerBound) {
+            if (initialUnknown) {
+                unknowns.add(name + " backoff");
+            }
+            if (multiplierUnknown && !initialUnknown) {
+                unknowns.add(name + " multiplier");
+            }
             if (budget > deadline) {
                 out.add(new Finding(ID, Severity.WARN, edge.location(),
                         prefix + "budget at least " + budgetText + " > deadline " + deadlineText
@@ -102,7 +110,8 @@ final class RetryBudgetRule {
             } else {
                 out.add(new Finding(ID, Severity.INFO, edge.location(),
                         prefix + "budget at least " + budgetText + " <= deadline " + deadlineText
-                                + "; backoff UNKNOWN, cannot confirm that " + n + " tries fit",
+                                + "; " + (initialUnknown ? "backoff" : "multiplier") + " UNKNOWN, cannot confirm that "
+                                + n + " tries fit",
                         values, unknowns));
             }
         } else if (capUnknown) {
