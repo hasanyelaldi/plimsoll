@@ -39,6 +39,8 @@
     <assertj.version>3.27.7</assertj.version>
     <jqwik.version>1.10.2</jqwik.version>
     <resilience4j.version>2.4.0</resilience4j.version>
+    <spring-boot.version>4.1.1</spring-boot.version>
+    <spring-framework.version>7.0.9</spring-framework.version>
 
     <!-- plugins -->
     <maven-compiler-plugin.version>3.16.0</maven-compiler-plugin.version>
@@ -87,6 +89,46 @@
         <groupId>io.github.resilience4j</groupId>
         <artifactId>resilience4j-retry</artifactId>
         <version>${resilience4j.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.github.resilience4j</groupId>
+        <artifactId>resilience4j-circuitbreaker</artifactId>
+        <version>${resilience4j.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.github.resilience4j</groupId>
+        <artifactId>resilience4j-spring-boot4</artifactId>
+        <version>${resilience4j.version}</version>
+      </dependency>
+      <!-- resilience4j-spring-boot4 pulls older Spring jars; align them with spring-boot.version -->
+      <dependency>
+        <groupId>org.springframework</groupId>
+        <artifactId>spring-framework-bom</artifactId>
+        <version>${spring-framework.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot</artifactId>
+        <version>${spring-boot.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-autoconfigure</artifactId>
+        <version>${spring-boot.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-aspectj</artifactId>
+        <version>${spring-boot.version}</version>
+        <exclusions>
+          <!-- Logback clashes with the slf4j 1.7 API that Resilience4j brings; oracle tests need no logging -->
+          <exclusion>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-logging</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>io.github.hasanyelaldi</groupId>
