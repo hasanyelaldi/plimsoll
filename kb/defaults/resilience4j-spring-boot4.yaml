@@ -16,3 +16,37 @@
   unit: aspect-order
   source: https://resilience4j.readme.io/docs/getting-started-3
   verified_by: oracle
+
+- library: resilience4j-spring-boot4
+  versions: "2.4.0"
+  parameter: resilience4j.timelimiter.time-limiter-aspect-order
+  value: 2147483645           # Ordered.LOWEST_PRECEDENCE - 2: @Retry wraps @TimeLimiter, so the timeout is per try
+  unit: aspect-order
+  source: https://resilience4j.readme.io/docs/getting-started-3
+  verified_by: oracle         # plimsoll-collectors/src/test/java/io/github/hasanyelaldi/plimsoll/collect/oracle/TimeLimiterOrderOracleTest.java
+
+# Retry properties that are off unless set. They only take effect on a block that sets waitDuration.
+# verified_by: oracle -> plimsoll-collectors/src/test/java/io/github/hasanyelaldi/plimsoll/collect/oracle/Resilience4jConfigOracleTest.java
+- library: resilience4j-spring-boot4
+  versions: "2.4.0"
+  parameter: resilience4j.retry.enable-exponential-backoff
+  value: false
+  unit: boolean
+  source: https://resilience4j.readme.io/docs/getting-started-3
+  verified_by: oracle
+
+- library: resilience4j-spring-boot4
+  versions: "2.4.0"
+  parameter: resilience4j.retry.enable-randomized-wait
+  value: false
+  unit: boolean
+  source: https://resilience4j.readme.io/docs/getting-started-3
+  verified_by: oracle
+
+- library: resilience4j-spring-boot4
+  versions: "2.4.0"
+  parameter: resilience4j.retry.exponential-backoff-multiplier
+  value: 1.5                  # used when enableExponentialBackoff is true and no multiplier is set
+  unit: multiplier
+  source: https://resilience4j.readme.io/docs/retry
+  verified_by: oracle
