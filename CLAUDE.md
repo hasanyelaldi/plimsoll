@@ -44,13 +44,14 @@ CI (GitHub Actions): `./mvnw -B verify` on every push and pull request, on Java 
 ```
 pom.xml           parent POM: modules, versions, plugin management
 plimsoll-core/    model, normalization, engine (effective policy), analysis (rules), io (spec loading)
+plimsoll-collectors/  read real config into the model: Spring Boot properties, Resilience4j (application.yml + annotations, edges-hint.yaml)
 plimsoll-cli/     picocli entry point: `plimsoll analyze <spec-or-dir>`
 examples/         hand-written specs; checkout.yaml is the canonical demo and acceptance test
 docs/adr/         decisions in MADR format (0001–0007 below)
 kb/defaults/      library defaults knowledge base, one YAML file per library
 ```
 
-Base package: `io.github.hasanyelaldi.plimsoll`. Collectors get their own module (`plimsoll-collectors`) when the first one lands. Maven coordinates: `io.github.hasanyelaldi:plimsoll-core`, `plimsoll-cli`.
+Base package: `io.github.hasanyelaldi.plimsoll`. Collectors live in `plimsoll-collectors` (package `…plimsoll.collect`); its differential oracles bind the same fixture with real Spring Boot. Maven coordinates: `io.github.hasanyelaldi:plimsoll-core`, `plimsoll-collectors`, `plimsoll-cli`.
 
 ## Domain model
 
