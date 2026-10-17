@@ -1,0 +1,10 @@
+service: api-gateway
+methods:
+  - method: com.example.gateway.CustomersClient#getOwner
+    to: customers-service
+    operation: GET /owners/{id}
+    idempotent: true
+  - { method: com.example.gateway.CustomersClient#getVisits, to: visits-service }
+  - { method: com.example.gateway.VisitsClient#list, to: visits-service, idempotent: true, fanout: 2 }
+  - { method: com.example.gateway.CustomersClient#syncLookup, to: customers-service }
+  - { method: com.example.gateway.CustomersClient#plain, to: customers-service }

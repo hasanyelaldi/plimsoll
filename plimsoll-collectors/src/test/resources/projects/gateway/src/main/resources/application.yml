@@ -1,0 +1,22 @@
+resilience4j:
+  retry:
+    instances:
+      customers:
+        max-attempts: 3
+        wait-duration: 100ms
+      visits:
+        max-attempts: 2
+        wait-duration: 50ms
+        enable-exponential-backoff: true
+        exponential-backoff-multiplier: 2
+  timelimiter:
+    instances:
+      customers:
+        timeout-duration: 800ms
+  circuitbreaker:
+    instances:
+      customers:
+        sliding-window-size: 10
+---
+spring.config.activate.on-profile: docker
+resilience4j.retry.instances.customers.max-attempts: 5
