@@ -1,0 +1,17 @@
+# Resilience4j Retry defaults.
+# verified_by: oracle -> plimsoll-core/src/test/java/io/github/hasanyelaldi/plimsoll/oracle/RetryAttemptCountingOracleTest.java
+- library: resilience4j-retry
+  versions: "2.4.0"
+  parameter: maxAttempts
+  value: 3
+  unit: attempts-total        # includes the initial call
+  source: https://resilience4j.readme.io/docs/retry
+  verified_by: oracle
+
+- library: resilience4j-retry
+  versions: "2.4.0"
+  parameter: waitDuration
+  value: 500ms
+  unit: duration-fixed        # same wait before every retry
+  source: https://resilience4j.readme.io/docs/retry
+  verified_by: oracle

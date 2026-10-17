@@ -38,5 +38,61 @@
       <artifactId>jqwik</artifactId>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>io.github.resilience4j</groupId>
+      <artifactId>resilience4j-retry</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>io.github.resilience4j</groupId>
+      <artifactId>resilience4j-circuitbreaker</artifactId>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
+
+  <profiles>
+    <!-- Spring Boot annotation oracle; resilience4j-spring-boot4 exists from 2.4.0 on.
+         Older versions: ./mvnw test -Dresilience4j.version=<x.y.z> -DnoSpringOracle -->
+    <profile>
+      <id>spring-oracle</id>
+      <activation>
+        <property>
+          <name>!noSpringOracle</name>
+        </property>
+      </activation>
+      <dependencies>
+        <dependency>
+          <groupId>io.github.resilience4j</groupId>
+          <artifactId>resilience4j-spring-boot4</artifactId>
+          <scope>test</scope>
+        </dependency>
+        <dependency>
+          <groupId>org.springframework.boot</groupId>
+          <artifactId>spring-boot-starter-aspectj</artifactId>
+          <scope>test</scope>
+        </dependency>
+      </dependencies>
+    </profile>
+    <profile>
+      <id>no-spring-oracle</id>
+      <activation>
+        <property>
+          <name>noSpringOracle</name>
+        </property>
+      </activation>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.apache.maven.plugins</groupId>
+            <artifactId>maven-compiler-plugin</artifactId>
+            <configuration>
+              <testExcludes>
+                <testExclude>**/oracle/SpringAnnotationOrderOracleTest.java</testExclude>
+              </testExcludes>
+            </configuration>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+  </profiles>
 </project>

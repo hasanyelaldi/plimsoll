@@ -1,0 +1,32 @@
+# Istio VirtualService HTTPRetry, checked against the primary reference page.
+- library: istio
+  versions: "1.31"
+  parameter: retries.attempts
+  value: 2                    # default cluster-wide policy when `retries` is not specified
+  unit: attempts-retries-only # totalAttempts = attempts + 1; 0 disables retries
+  source: https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry
+  verified_by: doc
+
+- library: istio
+  versions: "1.31"
+  parameter: retries.retryOn
+  value: connect-failure,refused-stream,unavailable,cancelled
+  unit: conditions
+  source: https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry
+  verified_by: doc
+
+- library: istio
+  versions: "1.31"
+  parameter: retries.backoff
+  value: 25ms                 # base interval of exponential backoff
+  unit: duration-base
+  source: https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry
+  verified_by: doc
+
+- library: istio
+  versions: "1.31"
+  parameter: retries.perTryTimeout
+  value: route timeout        # route `timeout` default is none, so no per-try timeout
+  unit: duration
+  source: https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry
+  verified_by: doc
