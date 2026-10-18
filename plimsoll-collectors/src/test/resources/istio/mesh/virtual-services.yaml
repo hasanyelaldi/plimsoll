@@ -1,0 +1,46 @@
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: orders
+  namespace: shop
+spec:
+  hosts:
+    - orders
+  http:
+    - name: default
+      timeout: 2s
+      retries:
+        attempts: 2
+        perTryTimeout: 800ms
+        retryOn: "5xx, reset,503"
+        backoff: 50ms
+      route:
+        - destination:
+            host: orders
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: orders
+spec:
+  ports:
+    - port: 8080
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: payments
+  namespace: shop
+spec:
+  hosts:
+    - payments.shop.svc.cluster.local
+  http:
+    - match:
+        - uri:
+            prefix: /refunds
+      retries:
+        attempts: 0
+    - timeout: 1500ms
+      route:
+        - destination:
+            host: payments

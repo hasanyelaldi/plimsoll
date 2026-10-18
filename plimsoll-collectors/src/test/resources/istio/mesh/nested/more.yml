@@ -1,0 +1,48 @@
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: ledger
+spec:
+  hosts:
+    - ledger
+    - "*.example.com"
+  http:
+    - retries:
+        perTryTimeout: 1m30s
+      route:
+        - destination:
+            host: ledger
+---
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: edge
+  namespace: shop
+spec:
+  hosts:
+    - api.example.com
+  gateways:
+    - ingress
+  http:
+    - retries:
+        attempts: 5
+---
+apiVersion: networking.istio.io/v1
+kind: DestinationRule
+metadata:
+  name: payments
+  namespace: shop
+spec:
+  host: payments
+  trafficPolicy:
+    connectionPool:
+      http:
+        maxRetries: 3
+    outlierDetection:
+      consecutive5xxErrors: 3
+      interval: 5s
+  subsets:
+    - name: v2
+      trafficPolicy:
+        outlierDetection:
+          baseEjectionTime: 1m
