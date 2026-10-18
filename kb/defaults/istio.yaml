@@ -30,3 +30,53 @@
   unit: duration
   source: https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry
   verified_by: doc
+
+# Istio has no jitter setting; the sidecar's Envoy router always jitters its retry back-off.
+- library: istio
+  versions: "1.31"
+  parameter: retries.jitter
+  value: true                 # "fully jittered exponential back-off algorithm", base 25ms, cap 10x base
+  unit: boolean
+  source: https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/router_filter
+  verified_by: doc
+
+# DestinationRule OutlierDetection, checked against the primary reference page.
+- library: istio
+  versions: "1.31"
+  parameter: outlierDetection.consecutive5xxErrors
+  value: 5                    # 0 disables
+  unit: errors
+  source: https://istio.io/v1.31/docs/reference/config/networking/destination-rule/#OutlierDetection
+  verified_by: doc
+
+- library: istio
+  versions: "1.31"
+  parameter: outlierDetection.consecutiveGatewayErrors
+  value: 0                    # disabled by default
+  unit: errors
+  source: https://istio.io/v1.31/docs/reference/config/networking/destination-rule/#OutlierDetection
+  verified_by: doc
+
+- library: istio
+  versions: "1.31"
+  parameter: outlierDetection.interval
+  value: 10s
+  unit: duration
+  source: https://istio.io/v1.31/docs/reference/config/networking/destination-rule/#OutlierDetection
+  verified_by: doc
+
+- library: istio
+  versions: "1.31"
+  parameter: outlierDetection.baseEjectionTime
+  value: 30s
+  unit: duration
+  source: https://istio.io/v1.31/docs/reference/config/networking/destination-rule/#OutlierDetection
+  verified_by: doc
+
+- library: istio
+  versions: "1.31"
+  parameter: outlierDetection.maxEjectionPercent
+  value: 10
+  unit: percent
+  source: https://istio.io/v1.31/docs/reference/config/networking/destination-rule/#OutlierDetection
+  verified_by: doc

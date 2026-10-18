@@ -44,7 +44,7 @@ CI (GitHub Actions): `./mvnw -B verify` on every push and pull request, on Java 
 ```
 pom.xml           parent POM: modules, versions, plugin management
 plimsoll-core/    model, normalization, engine (effective policy), analysis (rules), io (spec loading)
-plimsoll-collectors/  read real config into the model: Spring Boot properties, Resilience4j (application.yml + annotations, edges-hint.yaml)
+plimsoll-collectors/  read real config into the model: Spring Boot properties, Resilience4j (application.yml + annotations, edges-hint.yaml), Istio (VirtualService, DestinationRule manifests)
 plimsoll-cli/     picocli entry point: `plimsoll analyze <spec-or-dir>`
 examples/         hand-written specs; checkout.yaml is the canonical demo and acceptance test
 docs/adr/         decisions in MADR format (0001–0007 below)
@@ -78,7 +78,7 @@ Normalize attempt counts at the boundary. This mismatch is the first thing the t
 | Istio VirtualService | `retries.attempts` | retries only | `attempts + 1` |
 | Hand-written `generic` layer | `totalAttempts` | as named | value |
 
-Both rows still need an oracle test (Resilience4j) or a primary-doc check (Istio) before v0.1.
+The Resilience4j row is checked by `RetryAttemptCountingOracleTest`; the Istio row against the v1.31 reference (`kb/defaults/istio.yaml`).
 
 ## Analyzer rules (v0.1)
 
@@ -163,7 +163,7 @@ Out of scope until the maintainer says otherwise: the LLM layer, OpenTelemetry i
 Seed entries, all `verified_by: none` until checked against primary sources:
 
 - Resilience4j Retry: `maxAttempts` 3 (includes the first call), `waitDuration` 500 ms.
-- Istio: default policy of 2 retries on `connect-failure,refused-stream,unavailable,cancelled,retriable-status-codes`, 25 ms base interval.
+- Istio: default policy of 2 retries on `connect-failure,refused-stream,unavailable,cancelled`, 25 ms base interval (checked against the v1.31 reference).
 - Spring AI: `spring.ai.retry.max-attempts` 10, initial backoff 2 s, multiplier 5, max backoff 3 min.
 
 ## Decisions (docs/adr, MADR)
