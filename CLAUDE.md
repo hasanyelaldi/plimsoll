@@ -44,7 +44,7 @@ CI (GitHub Actions): `./mvnw -B verify` on every push and pull request, on Java 
 ```
 pom.xml           parent POM: modules, versions, plugin management
 plimsoll-core/    model, normalization, engine (effective policy), analysis (rules), io (spec loading)
-plimsoll-collectors/  read real config into the model: Spring Boot properties, Resilience4j (application.yml + annotations, edges-hint.yaml), Istio (VirtualService, DestinationRule manifests); `GraphAssembler` merges them onto edges, layers outermost first
+plimsoll-collectors/  read real config into the model: Spring Boot properties, Resilience4j (application.yml + annotations, edges-hint.yaml), HTTP clients (`client:` in edges-hint.yaml, Spring Cloud LoadBalancer retries), Istio (VirtualService, DestinationRule manifests); `GraphAssembler` merges them onto edges, layers outermost first (resilience4j, http-client, istio)
 plimsoll-cli/     picocli entry point: `plimsoll analyze <spec-or-dir>`
 examples/         hand-written specs; checkout.yaml is the canonical demo and acceptance test
 docs/adr/         decisions in MADR format (0001–0007 below)
@@ -76,9 +76,10 @@ Normalize attempt counts at the boundary. This mismatch is the first thing the t
 | --- | --- | --- | --- |
 | Resilience4j Retry | `maxAttempts` | includes the initial call (default 3, `waitDuration` 500 ms) | `maxAttempts` |
 | Istio VirtualService | `retries.attempts` | retries only | `attempts + 1` |
+| Spring Cloud LoadBalancer (`@LoadBalanced` WebClient) | `max-retries-on-same-service-instance`, `max-retries-on-next-service-instance` | retries only; off unless `retry.enabled: true` is set | `(same + 1) × (next + 1)` |
 | Hand-written `generic` layer | `totalAttempts` | as named | value |
 
-The Resilience4j row is checked by `RetryAttemptCountingOracleTest`; the Istio row against the v1.31 reference (`kb/defaults/istio.yaml`).
+The Resilience4j row is checked by `RetryAttemptCountingOracleTest`; the Istio row against the v1.31 reference (`kb/defaults/istio.yaml`); the LoadBalancer row by `LoadBalancerRetryOracleTest` (exceptions are retried for every HTTP method, status codes for GET only).
 
 ## Analyzer rules (v0.1)
 
