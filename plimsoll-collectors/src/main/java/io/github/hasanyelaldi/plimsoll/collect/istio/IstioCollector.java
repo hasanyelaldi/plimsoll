@@ -38,8 +38,8 @@ import java.util.stream.Stream;
  * DestinationRule outlier detection.
  *
  * <p>A VirtualService applies to every caller of its host inside the mesh, so a route is keyed by the callee only;
- * merging it onto edges is the engine's job. {@code attempts} counts retries only and becomes {@code attempts + 1}.
- * Absent fields take Istio's default only through a verified knowledge-base entry, else they are UNKNOWN. The
+ * {@link io.github.hasanyelaldi.plimsoll.collect.GraphAssembler} merges it onto edges. {@code attempts} counts
+ * retries only and becomes {@code attempts + 1}. Absent fields take Istio's default only through a verified knowledge-base entry, else they are UNKNOWN. The
  * defaults assume no MeshConfig {@code defaultHttpRetryPolicy} override, which manifests do not show.
  *
  * <p>Envoy's retry back-off is fully jittered exponential, which no fixed multiplier describes: {@code multiplier}
@@ -74,9 +74,11 @@ public final class IstioCollector {
     /**
      * @param routes            in file order, then document order, then host and route order
      * @param outlierDetections in the same order
+     * @param meshDefault       the policy sidecars apply to a host that no VirtualService names
      * @param notes             configuration that was found but not applied, in discovery order
      */
-    public record Result(List<Route> routes, List<OutlierDetection> outlierDetections, List<String> notes) {
+    public record Result(List<Route> routes, List<OutlierDetection> outlierDetections, Layer meshDefault,
+            List<String> notes) {
         public Result {
             routes = List.copyOf(routes);
             outlierDetections = List.copyOf(outlierDetections);
@@ -115,7 +117,9 @@ public final class IstioCollector {
                 c.document(doc);
             }
         }
-        return new Result(c.routes, c.outliers, c.notes);
+        Layer meshDefault = c.layer(Val.unknown("no VirtualService (Istio default: no timeout)"), null, null,
+                "no VirtualService for the host");
+        return new Result(c.routes, c.outliers, meshDefault, c.notes);
     }
 
     private static List<Path> files(Path manifests) {
@@ -212,17 +216,17 @@ public final class IstioCollector {
                 : Val.explicit(duration(timeoutEntry), at(timeoutEntry.keyLine()));
 
         Entry retriesEntry = route.entries().get("retries");
-        MapNode retries = null;
-        String absent;
         if (retriesEntry == null) {
-            absent = "no retries at " + at(route.line());
-        } else if (retriesEntry.value() instanceof MapNode r) {
-            retries = r;
-            absent = "not set in retries at " + at(retriesEntry.keyLine());
-        } else {
+            return layer(routeTimeout, null, null, "no retries at " + at(route.line()));
+        }
+        if (!(retriesEntry.value() instanceof MapNode retries)) {
             throw new InvalidSpecException(at(retriesEntry.keyLine()) + ": 'retries' must be a mapping");
         }
+        return layer(routeTimeout, retriesEntry, retries, "not set in retries at " + at(retriesEntry.keyLine()));
+    }
 
+    /** {@code retries} null: no retry block, every field from the knowledge base; {@code absent} says why. */
+    private Layer layer(Val<Duration> routeTimeout, Entry retriesEntry, MapNode retries, String absent) {
         Val<Integer> totalAttempts;
         Entry attempts = retries == null ? null : retries.entries().get("attempts");
         if (retries == null) {

@@ -1,0 +1,28 @@
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: customers
+  namespace: petclinic
+spec:
+  hosts:
+    - customers-service
+  http:
+    - retries:
+        attempts: 3
+        perTryTimeout: 500ms
+      route:
+        - destination:
+            host: customers-service
+---
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: vets
+  namespace: petclinic
+spec:
+  hosts:
+    - vets-service
+  http:
+    - route:
+        - destination:
+            host: vets-service
