@@ -1,0 +1,61 @@
+# Spring Cloud LoadBalancer retries on a @LoadBalanced WebClient.Builder (spring-cloud-commons, which ships
+# LoadBalancerProperties and the WebClient filters). The blocking RestTemplate path has different conditions and is
+# not covered here.
+# verified_by: oracle -> plimsoll-collectors/src/test/java/io/github/hasanyelaldi/plimsoll/collect/oracle/LoadBalancerRetryOracleTest.java
+#   run against spring-cloud-commons 5.0.0 (Spring Cloud 2025.1.0, the spring-petclinic-microservices version) and 5.0.3
+- library: spring-cloud-loadbalancer
+  versions: "5.0.0, 5.0.3"
+  parameter: spring.cloud.loadbalancer.retry.enabled
+  value: false                # the property metadata says true, but the retrying WebClient filter is only
+                              # installed when the property is set to true explicitly (havingValue = "true")
+  unit: boolean
+  source: https://github.com/spring-cloud/spring-cloud-commons/blob/v5.0.3/spring-cloud-commons/src/main/java/org/springframework/cloud/client/loadbalancer/reactive/ReactorLoadBalancerClientAutoConfiguration.java
+  verified_by: oracle
+
+- library: spring-cloud-loadbalancer
+  versions: "5.0.0, 5.0.3"
+  parameter: spring.cloud.loadbalancer.retry.max-retries-on-same-service-instance
+  value: 0
+  unit: attempts-retries-only # totalAttempts = (same + 1) x (next + 1)
+  source: https://github.com/spring-cloud/spring-cloud-commons/blob/v5.0.3/spring-cloud-commons/src/main/java/org/springframework/cloud/client/loadbalancer/LoadBalancerProperties.java
+  verified_by: oracle
+
+- library: spring-cloud-loadbalancer
+  versions: "5.0.0, 5.0.3"
+  parameter: spring.cloud.loadbalancer.retry.max-retries-on-next-service-instance
+  value: 1
+  unit: attempts-retries-only # totalAttempts = (same + 1) x (next + 1)
+  source: https://github.com/spring-cloud/spring-cloud-commons/blob/v5.0.3/spring-cloud-commons/src/main/java/org/springframework/cloud/client/loadbalancer/LoadBalancerProperties.java
+  verified_by: oracle
+
+- library: spring-cloud-loadbalancer
+  versions: "5.0.0, 5.0.3"
+  parameter: spring.cloud.loadbalancer.retry.retryable-exceptions
+  value: java.io.IOException,java.util.concurrent.TimeoutException,org.springframework.cloud.client.loadbalancer.RetryableStatusCodeException,org.springframework.cloud.client.loadbalancer.reactive.RetryableStatusCodeException
+  unit: exceptions            # retried for every HTTP method; the oracle checks IOException only
+  source: https://github.com/spring-cloud/spring-cloud-commons/blob/v5.0.3/spring-cloud-commons/src/main/java/org/springframework/cloud/client/loadbalancer/LoadBalancerProperties.java
+  verified_by: source
+
+- library: spring-cloud-loadbalancer
+  versions: "5.0.0, 5.0.3"
+  parameter: spring.cloud.loadbalancer.retry.retryable-status-codes
+  value: none                 # empty set: no status code is retried
+  unit: status-codes          # when set, retried for GET only unless retry-on-all-operations is true
+  source: https://github.com/spring-cloud/spring-cloud-commons/blob/v5.0.3/spring-cloud-commons/src/main/java/org/springframework/cloud/client/loadbalancer/LoadBalancerProperties.java
+  verified_by: oracle
+
+- library: spring-cloud-loadbalancer
+  versions: "5.0.0, 5.0.3"
+  parameter: spring.cloud.loadbalancer.retry.retry-on-all-operations
+  value: false                # only affects status-code retries; exceptions are retried for every method
+  unit: boolean
+  source: https://github.com/spring-cloud/spring-cloud-commons/blob/v5.0.3/spring-cloud-commons/src/main/java/org/springframework/cloud/client/loadbalancer/reactive/RetryableExchangeFilterFunctionLoadBalancerRetryPolicy.java
+  verified_by: oracle
+
+- library: spring-cloud-loadbalancer
+  versions: "5.0.0, 5.0.3"
+  parameter: spring.cloud.loadbalancer.retry.backoff.enabled
+  value: false                # retries follow each other without waiting (Reactor RetrySpec.max)
+  unit: boolean
+  source: https://github.com/spring-cloud/spring-cloud-commons/blob/v5.0.3/spring-cloud-commons/src/main/java/org/springframework/cloud/client/loadbalancer/LoadBalancerProperties.java
+  verified_by: source
