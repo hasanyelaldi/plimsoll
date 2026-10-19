@@ -16,6 +16,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.TreeSet;
 
 /**
  * {@code edges-hint.yaml}: which service the code belongs to and which annotated method calls which service.
@@ -29,7 +30,12 @@ import java.util.Set;
  *     operation: GET /owners/{id}                     # optional, defaults to Class#method
  *     idempotent: true                                # optional, UNKNOWN when absent
  *     fanout: 1                                       # optional, default 1
+ *     client: webclient-loadbalanced                  # optional: the HTTP client the method calls through
  * </pre>
+ *
+ * <p>{@code client} is {@code webclient-loadbalanced} (a {@code @LoadBalanced WebClient.Builder} made with
+ * {@code WebClient.builder()}) or {@code restclient} (made with {@code RestClient.builder()}, no load balancer).
+ * Without it the edge has no HTTP client layer.
  */
 public record EdgesHint(String service, List<Hint> methods) {
 
@@ -37,9 +43,12 @@ public record EdgesHint(String service, List<Hint> methods) {
         methods = List.copyOf(methods);
     }
 
-    /** @param evidence {@code file:line} of the entry */
+    /**
+     * @param client   one of {@link #CLIENTS} with the line it is on, or null when absent
+     * @param evidence {@code file:line} of the entry
+     */
     public record Hint(String className, String method, String to, String operation, Val<Boolean> idempotent,
-            int fanout, String evidence) {
+            int fanout, Val<String> client, String evidence) {
 
         public String qualifiedMethod() {
             return className + "#" + method;
@@ -47,7 +56,10 @@ public record EdgesHint(String service, List<Hint> methods) {
     }
 
     private static final Set<String> TOP_KEYS = Set.of("service", "methods");
-    private static final Set<String> METHOD_KEYS = Set.of("method", "to", "operation", "idempotent", "fanout");
+    public static final Set<String> CLIENTS = Set.of("webclient-loadbalanced", "restclient");
+
+    private static final Set<String> METHOD_KEYS =
+            Set.of("method", "to", "operation", "idempotent", "fanout", "client");
 
     /** @param displayName used in {@code file:line} evidence */
     public static EdgesHint load(Path file, String displayName) {
@@ -92,8 +104,18 @@ public record EdgesHint(String service, List<Hint> methods) {
                 : Val.explicit(bool(idem, file), file + ":" + idem.keyLine());
         Entry fan = m.entries().get("fanout");
         int fanout = fan == null ? 1 : fanout(fan, file);
+        Entry cl = m.entries().get("client");
+        Val<String> client = null;
+        if (cl != null) {
+            String name = string(cl, "client", file);
+            if (!CLIENTS.contains(name)) {
+                throw new InvalidSpecException(file + ":" + cl.keyLine() + ": 'client' must be one of "
+                        + new TreeSet<>(CLIENTS) + ", got '" + name + "'");
+            }
+            client = Val.explicit(name, file + ":" + cl.keyLine());
+        }
         return new Hint(method.substring(0, hash), method.substring(hash + 1), to,
-                op == null ? null : string(op, "operation", file), idempotent, fanout, file + ":" + m.line());
+                op == null ? null : string(op, "operation", file), idempotent, fanout, client, file + ":" + m.line());
     }
 
     private static MapNode map(Node n, String what, String file) {

@@ -34,9 +34,6 @@ import java.util.stream.Stream;
  */
 public final class Resilience4jCollector {
 
-    /** Spring Boot reads {@code config/} after the classpath root, so it overrides it. */
-    private static final List<String> CONFIG_FILES = List.of(
-            "application.yml", "application.yaml", "config/application.yml", "config/application.yaml");
     private static final Set<String> COMPLETION_STAGES = Set.of("CompletableFuture", "CompletionStage");
     private static final Set<String> REACTIVE = Set.of("Mono", "Flux", "Single", "Maybe", "Completable",
             "Observable", "Flowable");
@@ -68,8 +65,7 @@ public final class Resilience4jCollector {
 
     public static Result collect(Path serviceRoot, Path edgesHint, DefaultsKb kb) {
         Path resources = serviceRoot.resolve("src/main/resources");
-        List<Path> files = CONFIG_FILES.stream().map(resources::resolve).filter(Files::isRegularFile).toList();
-        SpringProperties props = SpringProperties.load(serviceRoot, files);
+        SpringProperties props = SpringProperties.forService(serviceRoot);
 
         Resilience4jCollector c = new Resilience4jCollector(Resilience4jConfig.of(props, kb));
         c.noteUnreadConfig(serviceRoot, resources);
@@ -93,7 +89,7 @@ public final class Resilience4jCollector {
         }
         try (Stream<Path> list = Files.list(resources)) {
             list.map(p -> p.getFileName().toString())
-                    .filter(n -> n.matches("application.*\\.(properties|ya?ml)") && !CONFIG_FILES.contains(n))
+                    .filter(n -> n.matches("application.*\\.(properties|ya?ml)") && !SpringProperties.SERVICE_CONFIG_FILES.contains(n))
                     .sorted()
                     .forEach(n -> notes.add(root.relativize(resources.resolve(n)).toString().replace('\\', '/')
                             + ": not read (only application.yml / application.yaml of the default profile)"));

@@ -8,6 +8,7 @@ import io.github.hasanyelaldi.plimsoll.analysis.Analyzer;
 import io.github.hasanyelaldi.plimsoll.analysis.Finding;
 import io.github.hasanyelaldi.plimsoll.analysis.ServiceAmplification;
 import io.github.hasanyelaldi.plimsoll.analysis.Severity;
+import io.github.hasanyelaldi.plimsoll.collect.http.HttpClientCollector;
 import io.github.hasanyelaldi.plimsoll.collect.istio.IstioCollector;
 import io.github.hasanyelaldi.plimsoll.collect.resilience4j.Resilience4jCollector;
 import io.github.hasanyelaldi.plimsoll.model.Edge;
@@ -89,6 +90,27 @@ class GraphAssemblerTest {
                 .extracting(Finding::severity, Finding::detail)
                 .containsExactly(org.assertj.core.groups.Tuple.tuple(Severity.WARN,
                         "retries in 2 layers of one edge (resilience4j ×3, istio ×4), ×12 per call"));
+    }
+
+    @Test
+    void httpClientLayerGoesBetweenResilience4jAndIstio() throws URISyntaxException {
+        Path project = Path.of(GraphAssemblerTest.class.getResource("/projects/gateway").toURI());
+        Path mesh = Path.of(GraphAssemblerTest.class.getResource("/istio/petclinic").toURI());
+        GraphAssembler.Result r = GraphAssembler.assemble(codeEdges,
+                HttpClientCollector.collect(project, project.resolve("edges-hint.yaml")), IstioCollector.collect(mesh));
+        Edge getOwner = r.edges().get(0);
+        assertThat(getOwner.layers()).extracting(Layer::kind).containsExactly("resilience4j", "http-client", "istio");
+        assertThat(getOwner.layers().get(1).retry().totalAttempts().value()).isEqualTo(2);
+        assertThat(r.edges().get(4).layers()).extracting(Layer::kind).containsExactly("http-client", "istio");
+        assertThat(r.edges().get(1).layers()).extracting(Layer::kind).containsExactly("resilience4j", "istio");
+
+        AnalysisResult a = analyze(r.edges());
+        // getOwner 3 x 2 x 4 + syncLookup 1 x 4 + plain 1 x 4
+        assertThat(load(a, "customers-service")).isEqualTo(BigInteger.valueOf(32));
+        assertThat(a.findings()).filteredOn(f -> f.ruleId().equals("PLM-A5")
+                        && f.location().equals("api-gateway→customers-service"))
+                .extracting(Finding::detail)
+                .containsExactly("retries in 3 layers of one edge (resilience4j ×3, http-client ×2, istio ×4), ×24 per call");
     }
 
     @Test

@@ -58,12 +58,23 @@ public final class SpringProperties {
         }
     }
 
+    /** Under {@code src/main/resources}. Spring Boot reads {@code config/} after the root, so it overrides it. */
+    public static final List<String> SERVICE_CONFIG_FILES = List.of(
+            "application.yml", "application.yaml", "config/application.yml", "config/application.yaml");
+
     private final List<Property> properties;
     private final List<String> notes;
 
     private SpringProperties(List<Property> properties, List<String> notes) {
         this.properties = List.copyOf(properties);
         this.notes = List.copyOf(notes);
+    }
+
+    /** The {@link #SERVICE_CONFIG_FILES} of a service module that exist; evidence paths relative to the module. */
+    public static SpringProperties forService(Path serviceRoot) {
+        Path resources = serviceRoot.resolve("src/main/resources");
+        return load(serviceRoot, SERVICE_CONFIG_FILES.stream().map(resources::resolve).filter(Files::isRegularFile)
+                .toList());
     }
 
     /**

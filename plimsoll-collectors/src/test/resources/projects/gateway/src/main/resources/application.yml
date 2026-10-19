@@ -17,6 +17,7 @@ resilience4j:
     instances:
       customers:
         sliding-window-size: 10
+spring.cloud.loadbalancer.retry.enabled: true
 ---
 spring.config.activate.on-profile: docker
 resilience4j.retry.instances.customers.max-attempts: 5
