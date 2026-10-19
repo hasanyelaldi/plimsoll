@@ -1,0 +1,27 @@
+# Response timeouts of the HTTP clients an application builds itself with WebClient.builder() / RestClient.builder(),
+# outside Spring Boot's client auto-configuration, when Reactor Netty is the HTTP library picked.
+# verified_by: oracle -> plimsoll-collectors/src/test/java/io/github/hasanyelaldi/plimsoll/collect/oracle/HttpClientTimeoutOracleTest.java
+#   run against spring-web 7.0.2 (the spring-petclinic-microservices version) and 7.0.9
+- library: spring-web
+  versions: "7.0.2, 7.0.9"
+  parameter: webclient-builder.reactor-netty.response-timeout
+  value: none                 # ReactorClientHttpConnector() sets no response timeout
+  unit: duration
+  source: https://github.com/spring-projects/spring-framework/blob/v7.0.9/spring-web/src/main/java/org/springframework/http/client/reactive/ReactorClientHttpConnector.java
+  verified_by: oracle
+
+- library: spring-web
+  versions: "7.0.2, 7.0.9"
+  parameter: restclient-builder.request-factory
+  value: httpcomponents,jetty,reactor-netty,jdk,simple   # the first one present on the classpath
+  unit: precedence
+  source: https://github.com/spring-projects/spring-framework/blob/v7.0.9/spring-web/src/main/java/org/springframework/web/client/DefaultRestClientBuilder.java
+  verified_by: source
+
+- library: spring-web
+  versions: "7.0.2, 7.0.9"
+  parameter: restclient-builder.reactor-netty.response-timeout
+  value: 10s                  # ReactorClientHttpRequestFactory() default
+  unit: duration
+  source: https://github.com/spring-projects/spring-framework/blob/v7.0.9/spring-web/src/main/java/org/springframework/http/client/ReactorClientHttpRequestFactory.java
+  verified_by: oracle

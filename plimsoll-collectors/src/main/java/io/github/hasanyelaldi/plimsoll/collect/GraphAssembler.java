@@ -1,5 +1,6 @@
 package io.github.hasanyelaldi.plimsoll.collect;
 
+import io.github.hasanyelaldi.plimsoll.collect.http.HttpClientCollector;
 import io.github.hasanyelaldi.plimsoll.collect.istio.IstioCollector;
 import io.github.hasanyelaldi.plimsoll.collect.istio.IstioCollector.Route;
 import io.github.hasanyelaldi.plimsoll.model.Durations;
@@ -21,8 +22,7 @@ import java.util.stream.Collectors;
 
 /**
  * Merges collector outputs onto the edges they apply to, so that one edge carries every layer a call passes
- * through, outermost first: the caller's Resilience4j decorators, then (from #8) its HTTP client, then the Istio
- * sidecar.
+ * through, outermost first: the caller's Resilience4j decorators, then its HTTP client, then the Istio sidecar.
  *
  * <p>Edges come from code (the Resilience4j collector and its edges hint). A VirtualService names only the
  * callee, so its routes are matched by {@link Edge#to()} and apply to every caller. When Istio manifests are
@@ -52,6 +52,17 @@ public final class GraphAssembler {
 
     /** @param istio the Istio collector's output, or {@code null} when the graph has no mesh */
     public static Result assemble(List<Edge> edges, IstioCollector.Result istio) {
+        return assemble(edges, null, istio);
+    }
+
+    /**
+     * @param http  the HTTP client collector's output, or {@code null} when no client is known
+     * @param istio the Istio collector's output, or {@code null} when the graph has no mesh
+     */
+    public static Result assemble(List<Edge> edges, HttpClientCollector.Result http, IstioCollector.Result istio) {
+        if (http != null) {
+            edges = edges.stream().map(e -> http.layerFor(e).map(l -> withLayer(e, l)).orElse(e)).toList();
+        }
         if (istio == null) {
             return new Result(edges, List.of());
         }
@@ -72,9 +83,7 @@ public final class GraphAssembler {
                 meshDefault.add(e.to());
             }
             called.add(e.to());
-            List<Layer> layers = new ArrayList<>(e.layers());
-            layers.add(istioLayer);
-            out.add(new Edge(e.from(), e.to(), e.operation(), e.idempotent(), e.fanout(), layers));
+            out.add(withLayer(e, istioLayer));
         }
 
         List<String> notes = new ArrayList<>();
@@ -88,6 +97,13 @@ public final class GraphAssembler {
             }
         });
         return new Result(out, notes);
+    }
+
+    /** {@code e} with {@code inner} as its new innermost layer. */
+    private static Edge withLayer(Edge e, Layer inner) {
+        List<Layer> layers = new ArrayList<>(e.layers());
+        layers.add(inner);
+        return new Edge(e.from(), e.to(), e.operation(), e.idempotent(), e.fanout(), layers);
     }
 
     private static Layer merged(String to, List<Route> routes) {

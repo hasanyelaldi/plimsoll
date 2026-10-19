@@ -21,6 +21,7 @@ class EdgesHintTest {
                     operation: GET /orders
                     idempotent: true
                     fanout: 2
+                    client: webclient-loadbalanced
                   - { method: p.Client#post, to: payments }
                 """, "edges-hint.yaml");
 
@@ -32,10 +33,23 @@ class EdgesHintTest {
         assertThat(get.operation()).isEqualTo("GET /orders");
         assertThat(get.idempotent()).isEqualTo(Val.explicit(true, "edges-hint.yaml:6"));
         assertThat(get.fanout()).isEqualTo(2);
+        assertThat(get.client()).isEqualTo(Val.explicit("webclient-loadbalanced", "edges-hint.yaml:8"));
         Hint post = hint.methods().get(1);
         assertThat(post.idempotent().source()).isEqualTo(Source.UNKNOWN);
         assertThat(post.fanout()).isEqualTo(1);
         assertThat(post.operation()).isNull();
+        assertThat(post.client()).isNull();
+    }
+
+    @Test
+    void clientMustBeAKnownOne() {
+        assertThatThrownBy(() -> EdgesHint.parse("""
+                service: gateway
+                methods:
+                  - { method: p.C#m, to: orders, client: feign }
+                """, "edges-hint.yaml"))
+                .isInstanceOf(InvalidSpecException.class)
+                .hasMessage("edges-hint.yaml:3: 'client' must be one of [restclient, webclient-loadbalanced], got 'feign'");
     }
 
     @Test

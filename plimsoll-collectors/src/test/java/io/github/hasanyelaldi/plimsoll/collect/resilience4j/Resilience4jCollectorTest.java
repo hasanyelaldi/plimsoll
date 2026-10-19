@@ -107,7 +107,7 @@ class Resilience4jCollectorTest {
         assertThat(result.notes()).startsWith(
                 "src/main/resources/application-docker.yml: not read (only application.yml / application.yaml of the "
                         + "default profile)",
-                "src/main/resources/application.yml:21: document skipped, it is activated by "
+                "src/main/resources/application.yml:22: document skipped, it is activated by "
                         + "spring.config.activate.on-profile (only the default profile is read)");
     }
 
