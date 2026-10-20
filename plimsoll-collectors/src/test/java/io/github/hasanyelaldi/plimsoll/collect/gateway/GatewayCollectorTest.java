@@ -3,21 +3,60 @@ package io.github.hasanyelaldi.plimsoll.collect.gateway;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import io.github.hasanyelaldi.plimsoll.analysis.AnalysisOptions;
+import io.github.hasanyelaldi.plimsoll.analysis.AnalysisResult;
+import io.github.hasanyelaldi.plimsoll.analysis.Analyzer;
+import io.github.hasanyelaldi.plimsoll.analysis.Finding;
+import io.github.hasanyelaldi.plimsoll.analysis.Severity;
 import io.github.hasanyelaldi.plimsoll.collect.kb.DefaultsKb;
+import io.github.hasanyelaldi.plimsoll.collect.spring.RequestMappingScanner;
+import io.github.hasanyelaldi.plimsoll.collect.spring.RequestMappingScanner.Mapping;
 import io.github.hasanyelaldi.plimsoll.collect.spring.SpringProperties;
 import io.github.hasanyelaldi.plimsoll.io.InvalidSpecException;
 import io.github.hasanyelaldi.plimsoll.model.Edge;
 import io.github.hasanyelaldi.plimsoll.model.Layer;
 import io.github.hasanyelaldi.plimsoll.model.RetryPolicy;
+import io.github.hasanyelaldi.plimsoll.model.Service;
+import io.github.hasanyelaldi.plimsoll.model.ServiceGraph;
 import io.github.hasanyelaldi.plimsoll.model.Source;
+import io.github.hasanyelaldi.plimsoll.model.Val;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class GatewayCollectorTest {
 
     private static final Path PETCLINIC = Path.of("src/test/resources/projects/petclinic-gateway");
+    private static final String OWNERS =
+            "src/main/java/org/springframework/samples/petclinic/customers/web/OwnerResource.java";
+
+    /** The request mappings of the petclinic fixture services, by service name. */
+    private static Map<String, List<Mapping>> petclinicServed() {
+        Map<String, List<Mapping>> served = new LinkedHashMap<>();
+        for (String s : List.of("customers-service", "vets-service", "visits-service")) {
+            served.put(s, RequestMappingScanner.scan(Path.of("src/test/resources/projects/petclinic-" + s)).mappings());
+        }
+        return served;
+    }
+
+    private static Edge petclinicEdge(String to) {
+        return GatewayCollector.collect(PETCLINIC, petclinicServed(), DefaultsKb.classpath()).edges().stream()
+                .filter(e -> e.to().equals(to)).findFirst().orElseThrow();
+    }
+
+    private static GatewayCollector.Result serving(String yaml, String... operations) {
+        List<Mapping> mappings = new java.util.ArrayList<>();
+        for (int i = 0; i < operations.length; i++) {
+            String[] op = operations[i].split(" ", 2);
+            Val<String> method = op[0].equals("*") ? Val.unknown("any method") : Val.explicit(op[0], "A.java:" + i);
+            mappings.add(new Mapping(method, op[1], "A.java:" + i));
+        }
+        return GatewayCollector.collect(SpringProperties.parse(yaml, "application.yml"), "gw",
+                Map.of("a-service", mappings), DefaultsKb.classpath());
+    }
 
     private static GatewayCollector.Result collect(String applicationYml) {
         return collect(applicationYml, DefaultsKb.classpath());
@@ -93,6 +132,123 @@ class GatewayCollectorTest {
                 .anyMatch(n -> n.contains("route genai-service: CircuitBreaker and Retry both apply")
                         && n.contains("UNKNOWN"))
                 .anyMatch(n -> n.contains("document skipped"));
+    }
+
+    // ---- operations and idempotency --------------------------------------
+
+    @Test
+    void petclinicCreateOwnerPostIsRetriedThroughTheGateway() {
+        Edge e = petclinicEdge("customers-service");
+        assertThat(e.operation()).isEqualTo("/api/customer/**");
+        assertThat(e.idempotent().value()).isFalse();
+        assertThat(e.idempotent().source()).isEqualTo(Source.LIBRARY_DEFAULT);
+        assertThat(e.idempotent().evidence()).startsWith("POST (customers-service /owners, " + OWNERS + ":58); "
+                + "http RFC 9110 default (verified by doc)");
+        assertThat(e.layers().get(0).retry().totalAttempts().value()).isEqualTo(2);
+    }
+
+    @Test
+    void petclinicGetOnlyRouteBehindMethodsPostHasNoGatewayRetry() {
+        Edge e = petclinicEdge("vets-service");
+        RetryPolicy retry = e.layers().get(0).retry();
+        assertThat(retry.totalAttempts().value()).isEqualTo(1);
+        assertThat(retry.totalAttempts().source()).isEqualTo(Source.EXPLICIT);
+        assertThat(retry.totalAttempts().evidence()).contains("Retry (default-filters[1]", "repeats only POST",
+                "(methods)", "route vets-service serves vets-service GET /vets at src/main/java/org/springframework/"
+                        + "samples/petclinic/vets/web/VetResource.java:45");
+        assertThat(e.idempotent().value()).isTrue();
+    }
+
+    @Test
+    void petclinicCreateVisitPostIsRetriedAndCalleesWithoutCodeStayUnknown() {
+        assertThat(petclinicEdge("visits-service").idempotent().value()).isFalse();
+        Edge genai = petclinicEdge("genai-service");
+        assertThat(genai.idempotent().source()).isEqualTo(Source.UNKNOWN);
+        assertThat(genai.idempotent().evidence()).contains("request mappings of genai-service are not known");
+        assertThat(genai.layers().get(0).retry().totalAttempts().value()).isEqualTo(2);
+    }
+
+    @Test
+    void petclinicA3FiresOnTheCreatePostRoutes() {
+        GatewayCollector.Result r = GatewayCollector.collect(PETCLINIC, petclinicServed(), DefaultsKb.classpath());
+        Map<String, Service> services = new LinkedHashMap<>();
+        services.put("api-gateway", new Service("api-gateway", Val.unknown("deadline not collected"), true));
+        for (Edge e : r.edges()) {
+            services.put(e.to(), new Service(e.to(), Val.unknown("deadline not collected"), false));
+        }
+        AnalysisResult a = Analyzer.analyze(new ServiceGraph(services, r.edges()), AnalysisOptions.defaults());
+        assertThat(a.findings()).filteredOn(f -> f.ruleId().equals("PLM-A3"))
+                .extracting(Finding::severity, Finding::location, Finding::detail).containsExactly(
+                        org.assertj.core.groups.Tuple.tuple(Severity.ERROR, "api-gateway→customers-service",
+                                "non-idempotent call retried, 2 tries"),
+                        org.assertj.core.groups.Tuple.tuple(Severity.ERROR, "api-gateway→visits-service",
+                                "non-idempotent call retried, 2 tries"));
+    }
+
+    @Test
+    void retryOnGetOnlyJudgesTheRepeatedOperations() {
+        GatewayCollector.Result r = serving(route("- StripPrefix=1\n- Retry=1"), "GET /a/x", "POST /a/y");
+        Edge e = r.edges().get(0);
+        assertThat(e.layers().get(0).retry().totalAttempts().value()).isEqualTo(2);
+        assertThat(e.idempotent().value()).isTrue();
+        assertThat(e.idempotent().source()).isEqualTo(Source.LIBRARY_DEFAULT);
+        assertThat(e.idempotent().evidence()).startsWith("GET (a-service /a/x, A.java:0)");
+    }
+
+    @Test
+    void withoutRetryEveryOperationIsJudged() {
+        Edge e = serving(route("- StripPrefix=1"), "GET /a/x", "POST /a/y").edges().get(0);
+        assertThat(e.idempotent().value()).isFalse();
+        assertThat(e.idempotent().evidence()).startsWith("POST (a-service /a/y, A.java:1)");
+    }
+
+    @Test
+    void stripPrefixAndPathDecideWhatIsReached() {
+        // /api/a/** with StripPrefix=1 reaches /a/..., not /b
+        Edge e = serving(route("- StripPrefix=1\n- Retry=1,SERVICE_UNAVAILABLE,POST"), "POST /b", "GET /a/{id}")
+                .edges().get(0);
+        assertThat(e.layers().get(0).retry().totalAttempts().value()).isEqualTo(1);
+        assertThat(e.idempotent().value()).isTrue();
+
+        assertThat(GatewayCollector.reaches("/api/a/**", 2, "/anything/{x}")).isTrue();
+        assertThat(GatewayCollector.reaches("/api/a/**", 3, "/anything")).isTrue();
+        assertThat(GatewayCollector.reaches("/api/a", 1, "/a")).isTrue();
+        assertThat(GatewayCollector.reaches("/api/a", 1, "/a/b")).isFalse();
+        assertThat(GatewayCollector.reaches("/api/a", 3, "/a")).isFalse();
+        assertThat(GatewayCollector.reaches("/api/a/**", 0, "/api/*/pets")).isTrue();
+        assertThat(GatewayCollector.reaches("/api/a/**", 0, "/api")).isFalse();
+    }
+
+    @Test
+    void methodOfAnyMappingIsRepeatedAndUnknown() {
+        Edge e = serving(route("- StripPrefix=1\n- Retry=1,SERVICE_UNAVAILABLE,POST"), "* /a/x").edges().get(0);
+        assertThat(e.layers().get(0).retry().totalAttempts().value()).isEqualTo(2);
+        assertThat(e.idempotent().source()).isEqualTo(Source.UNKNOWN);
+        assertThat(e.idempotent().evidence()).contains("any method");
+    }
+
+    @Test
+    void methodPredicateNarrowsTheOperations() {
+        GatewayCollector.Result r = serving("""
+                spring.cloud.gateway.server.webflux.routes:
+                  - id: a
+                    uri: lb://a-service
+                    predicates: [ "Path=/a/**", "Method=GET" ]
+                    filters: [ { name: Retry, args: { retries: 1, methods: [ GET, POST ] } } ]
+                """, "GET /a/x", "POST /a/y");
+        assertThat(r.edges().get(0).idempotent().value()).isTrue();
+    }
+
+    @Test
+    void unmodelledPathsLeaveIdempotencyUnknown() {
+        assertThat(serving(route("- RewritePath=/api/(?<p>.*), /${p}"), "GET /a").edges().get(0).idempotent()
+                .evidence()).contains("RewritePath", "rewrites the path");
+        assertThat(serving(route("- name: StripPrefix"), "GET /a").edges().get(0).idempotent().evidence())
+                .contains("without a literal parts count");
+        assertThat(serving(route("- StripPrefix=1"), "GET /zzz").edges().get(0).idempotent().evidence())
+                .contains("reaches none of the 1 request mappings of a-service");
+        assertThat(serving(route("- StripPrefix=1").replace("/api/a/**", "/api/{v}/**"), "GET /a").edges().get(0)
+                .idempotent().evidence()).contains("Path /api/{v}/** is not modelled");
     }
 
     // ---- normalization and arguments -------------------------------------
