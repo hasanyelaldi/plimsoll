@@ -9,6 +9,7 @@ import io.github.hasanyelaldi.plimsoll.analysis.Analyzer;
 import io.github.hasanyelaldi.plimsoll.analysis.Finding;
 import io.github.hasanyelaldi.plimsoll.analysis.Severity;
 import io.github.hasanyelaldi.plimsoll.collect.kb.DefaultsKb;
+import io.github.hasanyelaldi.plimsoll.collect.resilience4j.EdgesHint;
 import io.github.hasanyelaldi.plimsoll.collect.spring.RequestMappingScanner;
 import io.github.hasanyelaldi.plimsoll.collect.spring.RequestMappingScanner.Mapping;
 import io.github.hasanyelaldi.plimsoll.collect.spring.SpringProperties;
@@ -47,7 +48,14 @@ class GatewayCollectorTest {
                 .filter(e -> e.to().equals(to)).findFirst().orElseThrow();
     }
 
+    private static final String RETRY_GET_POST =
+            "- StripPrefix=1\n- { name: Retry, args: { retries: 1, methods: [ GET, POST, PUT ] } }";
+
     private static GatewayCollector.Result serving(String yaml, String... operations) {
+        return servingWith(null, yaml, operations);
+    }
+
+    private static GatewayCollector.Result servingWith(EdgesHint hint, String yaml, String... operations) {
         List<Mapping> mappings = new java.util.ArrayList<>();
         for (int i = 0; i < operations.length; i++) {
             String[] op = operations[i].split(" ", 2);
@@ -55,7 +63,7 @@ class GatewayCollectorTest {
             mappings.add(new Mapping(method, op[1], "A.java:" + i));
         }
         return GatewayCollector.collect(SpringProperties.parse(yaml, "application.yml"), "gw",
-                Map.of("a-service", mappings), DefaultsKb.classpath());
+                Map.of("a-service", mappings), hint, DefaultsKb.classpath());
     }
 
     private static GatewayCollector.Result collect(String applicationYml) {
@@ -183,6 +191,69 @@ class GatewayCollectorTest {
                                 "non-idempotent call retried, 2 tries"),
                         org.assertj.core.groups.Tuple.tuple(Severity.ERROR, "api-gateway→visits-service",
                                 "non-idempotent call retried, 2 tries"));
+    }
+
+    @Test
+    void petclinicHintOverrideMakesTheCreateOwnerPostIdempotent() {
+        EdgesHint hint = EdgesHint.parse("""
+                service: api-gateway
+                operations:
+                  - { to: customers-service, operation: POST /owners, idempotent: true }
+                """, "edges-hint.yaml");
+        GatewayCollector.Result r = GatewayCollector.collect(PETCLINIC, petclinicServed(), hint,
+                DefaultsKb.classpath());
+        Edge e = r.edges().stream().filter(x -> x.to().equals("customers-service")).findFirst().orElseThrow();
+        // the pets POSTs of customers-service still repeat a non-idempotent operation
+        assertThat(e.idempotent().value()).isFalse();
+        assertThat(e.idempotent().evidence()).doesNotContain(OWNERS + ":58");
+    }
+
+    @Test
+    void hintOverrideIsExplicitAndWinsOverTheMethod() {
+        EdgesHint hint = EdgesHint.parse("""
+                service: gw
+                operations:
+                  - { to: a-service, operation: POST /a/y, idempotent: true }
+                """, "edges-hint.yaml");
+        GatewayCollector.Result r = servingWith(hint, route(RETRY_GET_POST), "GET /a/x", "POST /a/y");
+        Edge e = r.edges().get(0);
+        assertThat(e.idempotent().value()).isTrue();
+        assertThat(e.idempotent().source()).isEqualTo(Source.LIBRARY_DEFAULT);
+        assertThat(e.idempotent().evidence())
+                .contains("a-service POST /a/y (A.java:1) idempotent: true, edges-hint.yaml:3");
+        assertThat(r.notes()).noneMatch(n -> n.contains("not reached"));
+
+        Edge onlyPost = servingWith(hint, route(RETRY_GET_POST), "POST /a/y").edges().get(0);
+        assertThat(onlyPost.idempotent().value()).isTrue();
+        assertThat(onlyPost.idempotent().source()).isEqualTo(Source.EXPLICIT);
+    }
+
+    @Test
+    void hintOverrideCanMarkAnOperationNonIdempotent() {
+        EdgesHint hint = EdgesHint.parse("""
+                service: gw
+                operations:
+                  - { to: a-service, operation: PUT /a/x, idempotent: false }
+                """, "edges-hint.yaml");
+        Edge e = servingWith(hint, route(RETRY_GET_POST), "PUT /a/x").edges().get(0);
+        assertThat(e.idempotent()).isEqualTo(Val.explicit(false,
+                "a-service PUT /a/x (A.java:0) idempotent: false, edges-hint.yaml:3"));
+    }
+
+    @Test
+    void unreachedHintOperationsAreNotedAndWrongServiceIsRejected() {
+        EdgesHint hint = EdgesHint.parse("""
+                service: gw
+                operations:
+                  - { to: a-service, operation: POST /b, idempotent: true }
+                """, "edges-hint.yaml");
+        assertThat(servingWith(hint, route("- StripPrefix=1"), "POST /a/y").notes())
+                .contains("edges-hint.yaml:3: operation a-service POST /b is not reached by any route; not applied");
+
+        EdgesHint other = EdgesHint.parse("service: orders\noperations: []\n", "edges-hint.yaml");
+        assertThatThrownBy(() -> servingWith(other, route("- Retry=1"), "GET /a/x"))
+                .isInstanceOf(InvalidSpecException.class)
+                .hasMessage("edges hint is for service orders, the gateway is gw");
     }
 
     @Test

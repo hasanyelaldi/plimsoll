@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.github.hasanyelaldi.plimsoll.collect.resilience4j.EdgesHint.Hint;
+import io.github.hasanyelaldi.plimsoll.collect.resilience4j.EdgesHint.OperationHint;
 import io.github.hasanyelaldi.plimsoll.io.InvalidSpecException;
 import io.github.hasanyelaldi.plimsoll.model.Source;
 import io.github.hasanyelaldi.plimsoll.model.Val;
@@ -72,5 +73,44 @@ class EdgesHintTest {
                 """, "edges-hint.yaml"))
                 .isInstanceOf(InvalidSpecException.class)
                 .hasMessage("edges-hint.yaml:3: unknown key 'retries'");
+    }
+
+    @Test
+    void readsOperationsWithExplicitIdempotency() {
+        EdgesHint hint = EdgesHint.parse("""
+                service: gateway
+                operations:
+                  - to: customers-service
+                    operation: POST /owners
+                    idempotent: true
+                """, "edges-hint.yaml");
+
+        assertThat(hint.methods()).isEmpty();
+        assertThat(hint.operations()).containsExactly(new OperationHint("customers-service", "POST /owners",
+                Val.explicit(true, "edges-hint.yaml:5"), "edges-hint.yaml:3"));
+    }
+
+    @Test
+    void operationNeedsIdempotentAndKnownKeys() {
+        assertThatThrownBy(() -> EdgesHint.parse("""
+                service: gateway
+                operations:
+                  - { to: orders, operation: POST /orders }
+                """, "edges-hint.yaml"))
+                .isInstanceOf(InvalidSpecException.class)
+                .hasMessageContaining("idempotent");
+        assertThatThrownBy(() -> EdgesHint.parse("""
+                service: gateway
+                operations:
+                  - { to: orders, operation: POST /orders, idempotent: true, fanout: 2 }
+                """, "edges-hint.yaml"))
+                .isInstanceOf(InvalidSpecException.class)
+                .hasMessage("edges-hint.yaml:3: unknown key 'fanout'");
+        assertThatThrownBy(() -> EdgesHint.parse("""
+                service: gateway
+                operations: { to: orders }
+                """, "edges-hint.yaml"))
+                .isInstanceOf(InvalidSpecException.class)
+                .hasMessage("edges-hint.yaml:2: operations must be a list");
     }
 }

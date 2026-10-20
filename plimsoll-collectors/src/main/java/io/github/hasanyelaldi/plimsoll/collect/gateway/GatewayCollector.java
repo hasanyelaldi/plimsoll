@@ -2,6 +2,8 @@ package io.github.hasanyelaldi.plimsoll.collect.gateway;
 
 import io.github.hasanyelaldi.plimsoll.collect.http.HttpMethods;
 import io.github.hasanyelaldi.plimsoll.collect.kb.DefaultsKb;
+import io.github.hasanyelaldi.plimsoll.collect.resilience4j.EdgesHint;
+import io.github.hasanyelaldi.plimsoll.collect.resilience4j.EdgesHint.OperationHint;
 import io.github.hasanyelaldi.plimsoll.collect.spring.SpringDurations;
 import io.github.hasanyelaldi.plimsoll.collect.spring.SpringProperties;
 import io.github.hasanyelaldi.plimsoll.collect.spring.SpringProperties.Property;
@@ -46,7 +48,7 @@ import java.util.function.Function;
  * ({@link HttpMethods}). A request takes one route and one operation, so the route stays one edge, carrying the worst
  * operation. Paths that other filters rewrite ({@code RewritePath}, {@code PrefixPath}, {@code SetPath}) or patterns
  * other than literal segments with an optional trailing {@code /**} leave the operations, and so idempotency,
- * UNKNOWN.
+ * UNKNOWN. An {@code operations} entry of the gateway's {@code edges-hint.yaml} overrides an operation's idempotency.
  *
  * <p>CircuitBreaker filters are noted, not modelled. Whether a CircuitBreaker listed before Retry wraps all tries
  * or each try is not checked against the real gateway yet, so it is stated as UNKNOWN in the notes.
@@ -100,6 +102,8 @@ public final class GatewayCollector {
     private final DefaultsKb kb;
     private final String[] prefix;
     private final Map<String, List<Mapping>> served;
+    private final Map<String, OperationHint> overrides = new LinkedHashMap<>();
+    private final Set<String> overridden = new LinkedHashSet<>();
     private final List<String> notes = new ArrayList<>();
 
     private GatewayCollector(SpringProperties props, DefaultsKb kb, String[] prefix, Map<String, List<Mapping>> served) {
@@ -107,6 +111,10 @@ public final class GatewayCollector {
         this.kb = kb;
         this.prefix = prefix;
         this.served = served;
+    }
+
+    private static String operationKey(String to, String operation) {
+        return to + " " + operation;
     }
 
     /** @param serviceRoot the gateway's module directory, with {@code src/main/resources} */
@@ -128,11 +136,22 @@ public final class GatewayCollector {
      *               ({@link io.github.hasanyelaldi.plimsoll.collect.spring.RequestMappingScanner})
      */
     public static Result collect(Path serviceRoot, Map<String, List<Mapping>> served, DefaultsKb kb) {
-        return collect(SpringProperties.forService(serviceRoot), serviceRoot.getFileName().toString(), served, kb);
+        return collect(serviceRoot, served, null, kb);
+    }
+
+    /** @param hint the gateway's {@code edges-hint.yaml}, whose {@code operations} apply; or {@code null} */
+    public static Result collect(Path serviceRoot, Map<String, List<Mapping>> served, EdgesHint hint, DefaultsKb kb) {
+        return collect(SpringProperties.forService(serviceRoot), serviceRoot.getFileName().toString(), served, hint,
+                kb);
     }
 
     public static Result collect(SpringProperties props, String fallbackName, Map<String, List<Mapping>> served,
             DefaultsKb kb) {
+        return collect(props, fallbackName, served, null, kb);
+    }
+
+    public static Result collect(SpringProperties props, String fallbackName, Map<String, List<Mapping>> served,
+            EdgesHint hint, DefaultsKb kb) {
         String[] prefix = PREFIX;
         if (!configures(props, PREFIX) && configures(props, LEGACY_PREFIX)) {
             prefix = LEGACY_PREFIX;
@@ -155,7 +174,22 @@ public final class GatewayCollector {
             c.notes.add("spring.application.name not set; the gateway is named after its directory, " + fallbackName);
         }
         c.notes.addAll(props.notes());
-        return new Result(service, c.edges(service), c.notes);
+        if (hint != null) {
+            if (!hint.service().equals(service)) {
+                throw new InvalidSpecException("edges hint is for service " + hint.service() + ", the gateway is "
+                        + service);
+            }
+            for (OperationHint o : hint.operations()) {
+                c.overrides.put(operationKey(o.to(), o.operation()), o);
+            }
+        }
+        List<Edge> edges = c.edges(service);
+        c.overrides.forEach((k, o) -> {
+            if (!c.overridden.contains(k)) {
+                c.notes.add(o.evidence() + ": operation " + k + " is not reached by any route; not applied");
+            }
+        });
+        return new Result(service, edges, c.notes);
     }
 
     private static boolean configures(SpringProperties props, String[] prefix) {
@@ -298,6 +332,12 @@ public final class GatewayCollector {
     }
 
     private Operation operation(Mapping m, String to) {
+        OperationHint o = overrides.get(operationKey(to, m.operation()));
+        if (o != null) {
+            overridden.add(operationKey(to, m.operation()));
+            return new Operation(m, to, Val.explicit(o.idempotent().value(), to + " " + m.operation() + " ("
+                    + m.evidence() + ") idempotent: " + o.idempotent().value() + ", " + o.idempotent().evidence()));
+        }
         String where = to + " " + m.path() + ", " + m.evidence();
         Val<Boolean> idempotent = m.method().isKnown() ? HttpMethods.idempotent(m.method().value(), where, kb)
                 : Val.unknown(to + " " + m.operation() + ": " + m.method().evidence());
