@@ -1,6 +1,8 @@
 package io.github.hasanyelaldi.plimsoll.collect.resilience4j;
 
+import io.github.hasanyelaldi.plimsoll.collect.http.HttpMethods;
 import io.github.hasanyelaldi.plimsoll.collect.kb.DefaultsKb;
+import io.github.hasanyelaldi.plimsoll.collect.resilience4j.AnnotationScanner.HttpCall;
 import io.github.hasanyelaldi.plimsoll.collect.resilience4j.AnnotationScanner.Kind;
 import io.github.hasanyelaldi.plimsoll.collect.resilience4j.AnnotationScanner.ScannedClass;
 import io.github.hasanyelaldi.plimsoll.collect.resilience4j.AnnotationScanner.ScannedMethod;
@@ -20,6 +22,7 @@ import java.util.EnumMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Stream;
 
@@ -31,6 +34,11 @@ import java.util.stream.Stream;
  * the per-try timeout when its aspect runs inside Retry (the default order), else the overall timeout; it applies
  * only to methods returning {@code CompletionStage}. {@code @CircuitBreaker} is detected and reported in the notes
  * but not modelled yet.
+ *
+ * <p>The edge is idempotent as the hint says; without {@code idempotent} in the hint, as its HTTP method is per
+ * RFC 9110 ({@link HttpMethods}). The method is the one the hint's {@code operation} starts with
+ * ({@code GET /owners/{id}}) or the one of the {@code WebClient} / {@code RestClient} calls in the method body.
+ * When the two disagree, or a call's method is not a constant, idempotency is UNKNOWN.
  */
 public final class Resilience4jCollector {
 
@@ -52,10 +60,12 @@ public final class Resilience4jCollector {
     }
 
     private final Resilience4jConfig config;
+    private final DefaultsKb kb;
     private final List<String> notes = new ArrayList<>();
 
-    private Resilience4jCollector(Resilience4jConfig config) {
+    private Resilience4jCollector(Resilience4jConfig config, DefaultsKb kb) {
         this.config = config;
+        this.kb = kb;
     }
 
     /** @param serviceRoot the service's module directory, with {@code src/main/java} and {@code src/main/resources} */
@@ -67,7 +77,7 @@ public final class Resilience4jCollector {
         Path resources = serviceRoot.resolve("src/main/resources");
         SpringProperties props = SpringProperties.forService(serviceRoot);
 
-        Resilience4jCollector c = new Resilience4jCollector(Resilience4jConfig.of(props, kb));
+        Resilience4jCollector c = new Resilience4jCollector(Resilience4jConfig.of(props, kb), kb);
         c.noteUnreadConfig(serviceRoot, resources);
         c.notes.addAll(props.notes());
 
@@ -116,7 +126,34 @@ public final class Resilience4jCollector {
         String site = cls.file() + ":" + method.line();
         String operation = h.operation() != null ? h.operation() : h.qualifiedMethod();
         List<Layer> layers = effective.isEmpty() ? List.of() : List.of(layer(h, method, effective, site));
-        return new Edge(from, h.to(), operation, h.idempotent(), h.fanout(), layers);
+        Val<Boolean> idempotent = h.idempotent().isKnown() ? h.idempotent() : idempotency(h, overloads);
+        return new Edge(from, h.to(), operation, idempotent, h.fanout(), layers);
+    }
+
+    /** From the HTTP method of the hint's operation or of the calls in the method body. */
+    private Val<Boolean> idempotency(Hint h, List<ScannedMethod> overloads) {
+        List<HttpCall> calls = overloads.stream().flatMap(m -> m.httpCalls().stream()).toList();
+        for (HttpCall c : calls) {
+            if (!c.method().isKnown()) {
+                return Val.unknown(h.idempotent().evidence() + "; " + c.method().evidence());
+            }
+        }
+        Optional<String> declared = HttpMethods.ofOperation(h.operation());
+        if (declared.isPresent()) {
+            String where = h.evidence() + " operation";
+            for (HttpCall c : calls) {
+                if (!c.method().value().equals(declared.get())) {
+                    notes.add(c.evidence() + ": " + h.qualifiedMethod() + " calls " + c.method().value()
+                            + " but its hint operation (" + h.evidence() + ") says " + declared.get());
+                    return Val.unknown(h.idempotent().evidence() + "; HTTP method differs: " + declared.get()
+                            + " at " + where + ", " + c.method().value() + " at " + c.evidence());
+                }
+            }
+            return HttpMethods.idempotent(declared.get(), where, kb);
+        }
+        return HttpMethods.all(calls.stream().map(c -> HttpMethods.idempotent(c.method().value(), c.evidence(), kb))
+                .toList(), h.idempotent().evidence() + "; no HTTP method: the operation does not start with one and "
+                        + h.qualifiedMethod() + " makes no WebClient / RestClient call");
     }
 
     /** Method annotations win over class annotations, per kind, as in the Resilience4j aspects. */
