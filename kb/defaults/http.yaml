@@ -1,0 +1,68 @@
+# Idempotency of the HTTP request methods, as RFC 9110 defines them. Not a library default: a standard that every
+# server is expected to follow, recorded as LIBRARY_DEFAULT so that explicit configuration (edges-hint.yaml
+# `idempotent`) overrides it. See docs/adr/0008-http-method-idempotency-as-library-default.md.
+# verified_by: doc -> RFC 9110 section 9.2.2 lists PUT, DELETE and the safe methods (GET, HEAD, OPTIONS, TRACE,
+#   section 9.2.1) as idempotent; POST and PATCH (RFC 5789 section 2) are not.
+- library: http
+  versions: "RFC 9110"
+  parameter: idempotent.GET
+  value: true
+  unit: boolean
+  source: https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2
+  verified_by: doc
+
+- library: http
+  versions: "RFC 9110"
+  parameter: idempotent.HEAD
+  value: true
+  unit: boolean
+  source: https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2
+  verified_by: doc
+
+- library: http
+  versions: "RFC 9110"
+  parameter: idempotent.OPTIONS
+  value: true
+  unit: boolean
+  source: https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2
+  verified_by: doc
+
+- library: http
+  versions: "RFC 9110"
+  parameter: idempotent.TRACE
+  value: true
+  unit: boolean
+  source: https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2
+  verified_by: doc
+
+- library: http
+  versions: "RFC 9110"
+  parameter: idempotent.PUT
+  value: true
+  unit: boolean
+  source: https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2
+  verified_by: doc
+
+- library: http
+  versions: "RFC 9110"
+  parameter: idempotent.DELETE
+  value: true
+  unit: boolean
+  source: https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2
+  verified_by: doc
+
+- library: http
+  versions: "RFC 9110"
+  parameter: idempotent.POST
+  value: false
+  unit: boolean
+  source: https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2
+  verified_by: doc
+
+- library: http
+  versions: "RFC 5789"
+  parameter: idempotent.PATCH
+  value: false
+  unit: boolean
+  source: https://www.rfc-editor.org/rfc/rfc5789#section-2
+  verified_by: doc
