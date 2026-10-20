@@ -44,7 +44,7 @@ CI (GitHub Actions): `./mvnw -B verify` on every push and pull request, on Java 
 ```
 pom.xml           parent POM: modules, versions, plugin management
 plimsoll-core/    model, normalization, engine (effective policy), analysis (rules), io (spec loading)
-plimsoll-collectors/  read real config into the model: Spring Boot properties, Resilience4j (application.yml + annotations, edges-hint.yaml), HTTP clients (`client:` in edges-hint.yaml, Spring Cloud LoadBalancer retries), Istio (VirtualService, DestinationRule manifests); `GraphAssembler` merges them onto edges, layers outermost first (resilience4j, http-client, istio)
+plimsoll-collectors/  read real config into the model: Spring Boot properties, Resilience4j (application.yml + annotations, edges-hint.yaml), HTTP clients (`client:` in edges-hint.yaml, Spring Cloud LoadBalancer retries), Istio (VirtualService, DestinationRule manifests), Spring Cloud Gateway (routes to `lb://` services and their `Retry` filters become edges); `GraphAssembler` merges them onto edges, layers outermost first (resilience4j, http-client, istio)
 plimsoll-cli/     picocli entry point: `plimsoll analyze <spec-or-dir>`
 examples/         hand-written specs; checkout.yaml is the canonical demo and acceptance test
 docs/adr/         decisions in MADR format (0001–0007 below)
@@ -63,7 +63,7 @@ record RetryPolicy(Val<Integer> totalAttempts,              // always counts the
                    Val<Duration> perTryTimeout,
                    Val<Duration> initialBackoff, Val<Double> multiplier, Val<Duration> maxBackoff,
                    Val<Boolean> jitter, Val<Set<String>> retryOn) {}
-record Layer(String kind, RetryPolicy retry, Val<Duration> overallTimeout) {}  // resilience4j | istio | http-client | generic
+record Layer(String kind, RetryPolicy retry, Val<Duration> overallTimeout) {}  // resilience4j | spring-cloud-gateway | istio | http-client | generic
 record Edge(String from, String to, String operation, Val<Boolean> idempotent,
             int fanout, List<Layer> layers) {}                                 // layers: outermost first
 record Service(String name, Val<Duration> deadline, boolean entry) {}
@@ -76,10 +76,11 @@ Normalize attempt counts at the boundary. This mismatch is the first thing the t
 | --- | --- | --- | --- |
 | Resilience4j Retry | `maxAttempts` | includes the initial call (default 3, `waitDuration` 500 ms) | `maxAttempts` |
 | Istio VirtualService | `retries.attempts` | retries only | `attempts + 1` |
+| Spring Cloud Gateway `Retry` filter | `retries` | retries only (default 3, GET, 5XX, no backoff) | `retries + 1` |
 | Spring Cloud LoadBalancer (`@LoadBalanced` WebClient) | `max-retries-on-same-service-instance`, `max-retries-on-next-service-instance` | retries only; off unless `retry.enabled: true` is set | `(same + 1) × (next + 1)` |
 | Hand-written `generic` layer | `totalAttempts` | as named | value |
 
-The Resilience4j row is checked by `RetryAttemptCountingOracleTest`; the Istio row against the v1.31 reference (`kb/defaults/istio.yaml`); the LoadBalancer row by `LoadBalancerRetryOracleTest` (exceptions are retried for every HTTP method, status codes for GET only).
+The Resilience4j row is checked by `RetryAttemptCountingOracleTest`; the Istio row against the v1.31 reference (`kb/defaults/istio.yaml`); the LoadBalancer row by `LoadBalancerRetryOracleTest` (exceptions are retried for every HTTP method, status codes for GET only). The Gateway row is read from the docs and the `RetryGatewayFilterFactory` source (5.0.0), with no oracle yet; whether a `CircuitBreaker` filter listed before `Retry` wraps all tries or each try stays `UNKNOWN` until one exists.
 
 ## Analyzer rules (v0.1)
 
@@ -164,6 +165,7 @@ Out of scope until the maintainer says otherwise: the LLM layer, OpenTelemetry i
 Seed entries, all `verified_by: none` until checked against primary sources:
 
 - Resilience4j Retry: `maxAttempts` 3 (includes the first call), `waitDuration` 500 ms.
+- Spring Cloud Gateway Retry: `retries` 3 (retries only), series 5XX, methods GET, `IOException` and `TimeoutException`, backoff and jitter disabled, timeout unlimited.
 - Istio: default policy of 2 retries on `connect-failure,refused-stream,unavailable,cancelled`, 25 ms base interval (checked against the v1.31 reference).
 - Spring AI: `spring.ai.retry.max-attempts` 10, initial backoff 2 s, multiplier 5, max backoff 3 min.
 
