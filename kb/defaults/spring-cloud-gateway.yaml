@@ -1,0 +1,84 @@
+# Spring Cloud Gateway (WebFlux) Retry GatewayFilter.
+# verified_by: doc    -> the reference page below (5.0.3, the current stable docs; same defaults in the 5.0.0 source)
+# verified_by: source -> RetryGatewayFilterFactory at v5.0.0, the version of Spring Cloud 2025.1.0 that
+#   spring-petclinic-microservices uses. No oracle yet: whether the first call is counted is read from the source
+#   (the iteration counter starts at -1 and a retry happens while it is below `retries`), not run.
+- library: spring-cloud-gateway
+  versions: "5.0.0, 5.0.3"
+  parameter: retry.retries
+  value: 3
+  unit: attempts-retries-only # totalAttempts = retries + 1
+  source: https://docs.spring.io/spring-cloud-gateway/reference/spring-cloud-gateway-server-webflux/gatewayfilter-factories/retry-factory.html
+  verified_by: doc
+
+- library: spring-cloud-gateway
+  versions: "5.0.0, 5.0.3"
+  parameter: retry.series
+  value: SERVER_ERROR         # 5XX; kept when `statuses` is set, the two are combined with OR
+  unit: status-series
+  source: https://docs.spring.io/spring-cloud-gateway/reference/spring-cloud-gateway-server-webflux/gatewayfilter-factories/retry-factory.html
+  verified_by: doc
+
+- library: spring-cloud-gateway
+  versions: "5.0.0"
+  parameter: retry.statuses
+  value: none                 # empty list
+  unit: status-codes
+  source: https://github.com/spring-cloud/spring-cloud-gateway/blob/v5.0.0/spring-cloud-gateway-server-webflux/src/main/java/org/springframework/cloud/gateway/filter/factory/RetryGatewayFilterFactory.java
+  verified_by: source
+
+- library: spring-cloud-gateway
+  versions: "5.0.0, 5.0.3"
+  parameter: retry.methods
+  value: GET                  # both status and exception retries apply only to these methods
+  unit: http-methods
+  source: https://docs.spring.io/spring-cloud-gateway/reference/spring-cloud-gateway-server-webflux/gatewayfilter-factories/retry-factory.html
+  verified_by: doc
+
+- library: spring-cloud-gateway
+  versions: "5.0.0, 5.0.3"
+  parameter: retry.exceptions
+  value: java.io.IOException,java.util.concurrent.TimeoutException
+  unit: exceptions
+  source: https://docs.spring.io/spring-cloud-gateway/reference/spring-cloud-gateway-server-webflux/gatewayfilter-factories/retry-factory.html
+  verified_by: doc
+
+- library: spring-cloud-gateway
+  versions: "5.0.0, 5.0.3"
+  parameter: retry.backoff
+  value: disabled             # retries follow each other without waiting
+  unit: backoff
+  source: https://docs.spring.io/spring-cloud-gateway/reference/spring-cloud-gateway-server-webflux/gatewayfilter-factories/retry-factory.html
+  verified_by: doc
+
+- library: spring-cloud-gateway
+  versions: "5.0.0"
+  parameter: retry.backoff.firstBackoff
+  value: 5ms                  # when `backoff` is given without it
+  unit: duration
+  source: https://github.com/spring-cloud/spring-cloud-gateway/blob/v5.0.0/spring-cloud-gateway-server-webflux/src/main/java/org/springframework/cloud/gateway/filter/factory/RetryGatewayFilterFactory.java
+  verified_by: source
+
+- library: spring-cloud-gateway
+  versions: "5.0.0"
+  parameter: retry.backoff.factor
+  value: 2                    # when `backoff` is given without it
+  unit: multiplier
+  source: https://github.com/spring-cloud/spring-cloud-gateway/blob/v5.0.0/spring-cloud-gateway-server-webflux/src/main/java/org/springframework/cloud/gateway/filter/factory/RetryGatewayFilterFactory.java
+  verified_by: source
+
+- library: spring-cloud-gateway
+  versions: "5.0.0, 5.0.3"
+  parameter: retry.jitter
+  value: disabled
+  unit: jitter
+  source: https://docs.spring.io/spring-cloud-gateway/reference/spring-cloud-gateway-server-webflux/gatewayfilter-factories/retry-factory.html
+  verified_by: doc
+
+- library: spring-cloud-gateway
+  versions: "5.0.0, 5.0.3"
+  parameter: retry.timeout
+  value: unlimited            # a limit on the whole retry sequence, not on each try
+  unit: duration
+  source: https://docs.spring.io/spring-cloud-gateway/reference/spring-cloud-gateway-server-webflux/gatewayfilter-factories/retry-factory.html
+  verified_by: doc

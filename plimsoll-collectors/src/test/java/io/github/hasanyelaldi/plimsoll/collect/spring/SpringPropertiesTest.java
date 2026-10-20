@@ -92,4 +92,20 @@ class SpringPropertiesTest {
         assertThat(p.get("a").orElseThrow().isPlaceholder()).isTrue();
         assertThat(p.get("b").orElseThrow().isPlaceholder()).isFalse();
     }
+
+    @Test
+    void listItemsAreAlsoBoundUnderTheirIndex() {
+        SpringProperties p = SpringProperties.parse("""
+                routes:
+                  - id: a
+                    filters: [ StripPrefix=2, { name: Retry, args: { retries: 1 } } ]
+                  - id: b
+                """, "application.yml");
+
+        assertThat(p.indices("routes")).containsExactly(0, 1);
+        assertThat(p.get("routes", "[1]", "id")).map(Property::evidence).contains("application.yml:4");
+        assertThat(p.get("routes", "[0]", "filters", "[0]")).map(Property::text).contains("StripPrefix=2");
+        assertThat(p.under("routes", "[0]", "filters", "[1]", "args")).extracting(Property::text).containsExactly("1");
+        assertThat(p.get("routes", "[0]", "filters")).isEmpty();
+    }
 }
