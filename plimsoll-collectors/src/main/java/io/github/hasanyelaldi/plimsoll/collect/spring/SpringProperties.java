@@ -13,8 +13,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.SortedSet;
 import java.util.TreeSet;
@@ -26,6 +28,9 @@ import java.util.function.Predicate;
  *
  * <p>Relaxed binding: property names match regardless of case, {@code -} and {@code _} ({@code max-attempts},
  * {@code maxAttempts}, {@code max_attempts}). Map keys such as instance names are compared exactly.
+ *
+ * <p>A list is available both as one property ({@link Property#items()}, when every item is a scalar) and item by
+ * item under its index, {@code routes[0].id}, as Spring Boot binds it; see {@link #indices(String...)}.
  *
  * <p>Only the default profile is read. Documents activated by {@code spring.config.activate.*} are skipped and
  * reported in {@link #notes()}, never merged silently.
@@ -137,6 +142,7 @@ public final class SpringProperties {
             switch (e.getValue().value()) {
                 case MapNode child -> flatten(child, path, file, out);
                 case ListNode list -> {
+                    indexed(list, path, file, out);
                     List<String> items = new ArrayList<>();
                     for (Node item : list.items()) {
                         if (!(item instanceof Scalar s) || s.token() == JsonToken.VALUE_NULL) {
@@ -152,6 +158,24 @@ public final class SpringProperties {
                 case Scalar s -> {
                     if (s.token() != JsonToken.VALUE_NULL) {
                         out.add(new Property(path, s.text(), null, evidence));
+                    }
+                }
+            }
+        }
+    }
+
+    /** Each list item under its index, as Spring Boot binds {@code routes[0].id}: {@code path + "[0]" + ...}. */
+    private static void indexed(ListNode list, List<String> path, String file, List<Property> out) {
+        for (int i = 0; i < list.items().size(); i++) {
+            Node item = list.items().get(i);
+            List<String> itemPath = new ArrayList<>(path);
+            itemPath.add("[" + i + "]");
+            switch (item) {
+                case MapNode child -> flatten(child, itemPath, file, out);
+                case ListNode nested -> indexed(nested, itemPath, file, out);
+                case Scalar s -> {
+                    if (s.token() != JsonToken.VALUE_NULL) {
+                        out.add(new Property(itemPath, s.text(), null, file + ":" + s.line()));
                     }
                 }
             }
@@ -206,6 +230,28 @@ public final class SpringProperties {
             }
         }
         return names;
+    }
+
+    /** The effective properties below {@code prefix}, matched with relaxed binding, in the order last set. */
+    public List<Property> under(String... prefix) {
+        Map<List<String>, Property> effective = new LinkedHashMap<>();
+        for (Property p : properties) {
+            if (p.path().size() > prefix.length && startsWith(p.path(), prefix)) {
+                List<String> key = p.path().stream().map(SpringProperties::canonical).toList();
+                effective.remove(key);
+                effective.put(key, p);
+            }
+        }
+        return List.copyOf(effective.values());
+    }
+
+    /** The list indices directly under {@code prefix}, in ascending order. */
+    public List<Integer> indices(String... prefix) {
+        return names(prefix).stream()
+                .filter(n -> n.matches("\\[\\d+]"))
+                .map(n -> Integer.valueOf(n.substring(1, n.length() - 1)))
+                .sorted()
+                .toList();
     }
 
     /** Skipped documents and other parts of the configuration that were not applied. */
