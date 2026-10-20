@@ -31,17 +31,31 @@ import java.util.TreeSet;
  *     idempotent: true                                # optional, UNKNOWN when absent
  *     fanout: 1                                       # optional, default 1
  *     client: webclient-loadbalanced                  # optional: the HTTP client the method calls through
+ * operations:                                         # optional: facts about operations the service calls
+ *   - to: customers-service
+ *     operation: POST /owners                         # method and path as the callee maps it
+ *     idempotent: true                                # e.g. a POST protected by an idempotency key
  * </pre>
  *
  * <p>{@code client} is {@code webclient-loadbalanced} (a {@code @LoadBalanced WebClient.Builder} made with
  * {@code WebClient.builder()}) or {@code restclient} (made with {@code RestClient.builder()}, no load balancer).
  * Without it the edge has no HTTP client layer.
+ *
+ * <p>{@code operations} overrides what the code gives for an operation reached without an annotated client method,
+ * such as a gateway route: its {@code idempotent} is EXPLICIT and wins over the HTTP method's.
  */
-public record EdgesHint(String service, List<Hint> methods) {
+public record EdgesHint(String service, List<Hint> methods, List<OperationHint> operations) {
 
     public EdgesHint {
         methods = List.copyOf(methods);
+        operations = List.copyOf(operations);
     }
+
+    /**
+     * @param operation e.g. {@code POST /owners}
+     * @param evidence  {@code file:line} of the entry
+     */
+    public record OperationHint(String to, String operation, Val<Boolean> idempotent, String evidence) {}
 
     /**
      * @param client   one of {@link #CLIENTS} with the line it is on, or null when absent
@@ -55,7 +69,8 @@ public record EdgesHint(String service, List<Hint> methods) {
         }
     }
 
-    private static final Set<String> TOP_KEYS = Set.of("service", "methods");
+    private static final Set<String> TOP_KEYS = Set.of("service", "methods", "operations");
+    private static final Set<String> OPERATION_KEYS = Set.of("to", "operation", "idempotent");
     public static final Set<String> CLIENTS = Set.of("webclient-loadbalanced", "restclient");
 
     private static final Set<String> METHOD_KEYS =
@@ -84,7 +99,26 @@ public record EdgesHint(String service, List<Hint> methods) {
                 hints.add(hint(map(n, "method entry", fileName), fileName));
             }
         }
-        return new EdgesHint(service, hints);
+        List<OperationHint> operations = new ArrayList<>();
+        Entry ops = top.entries().get("operations");
+        if (ops != null) {
+            if (!(ops.value() instanceof ListNode list)) {
+                throw new InvalidSpecException(fileName + ":" + ops.keyLine() + ": operations must be a list");
+            }
+            for (Node n : list.items()) {
+                operations.add(operationHint(map(n, "operation entry", fileName), fileName));
+            }
+        }
+        return new EdgesHint(service, hints, operations);
+    }
+
+    private static OperationHint operationHint(MapNode m, String file) {
+        checkKeys(m, OPERATION_KEYS, file);
+        String to = string(required(m, "to", file), "to", file);
+        String operation = string(required(m, "operation", file), "operation", file);
+        Entry idem = required(m, "idempotent", file);
+        return new OperationHint(to, operation, Val.explicit(bool(idem, file), file + ":" + idem.keyLine()),
+                file + ":" + m.line());
     }
 
     private static Hint hint(MapNode m, String file) {

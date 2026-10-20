@@ -1,9 +1,13 @@
 package io.github.hasanyelaldi.plimsoll.collect.gateway;
 
+import io.github.hasanyelaldi.plimsoll.collect.http.HttpMethods;
 import io.github.hasanyelaldi.plimsoll.collect.kb.DefaultsKb;
+import io.github.hasanyelaldi.plimsoll.collect.resilience4j.EdgesHint;
+import io.github.hasanyelaldi.plimsoll.collect.resilience4j.EdgesHint.OperationHint;
 import io.github.hasanyelaldi.plimsoll.collect.spring.SpringDurations;
 import io.github.hasanyelaldi.plimsoll.collect.spring.SpringProperties;
 import io.github.hasanyelaldi.plimsoll.collect.spring.SpringProperties.Property;
+import io.github.hasanyelaldi.plimsoll.collect.spring.RequestMappingScanner.Mapping;
 import io.github.hasanyelaldi.plimsoll.io.InvalidSpecException;
 import io.github.hasanyelaldi.plimsoll.model.Edge;
 import io.github.hasanyelaldi.plimsoll.model.Layer;
@@ -14,6 +18,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -33,9 +38,17 @@ import java.util.function.Function;
  *
  * <p>Retry counts retries only: {@code totalAttempts = retries + 1}. Its {@code methods}, {@code statuses},
  * {@code series} and {@code exceptions} go into {@code retryOn} as {@code method POST}, {@code status ...},
- * {@code series ...} and exception class names; the layer is not yet restricted to the methods an operation uses.
- * The per-try timeout is the gateway HTTP client's {@code response-timeout}; the Retry {@code timeout} bounds the
+ * {@code series ...} and exception class names. The per-try timeout is the gateway HTTP client's {@code response-timeout}; the Retry {@code timeout} bounds the
  * whole retry sequence, so it is the layer's overall timeout.
+ *
+ * <p>When the callee's request mappings are given, the route's operations are the mappings its {@code Path}
+ * predicates reach after {@code StripPrefix} (and its {@code Method} predicate, if any, allows). A Retry filter then
+ * applies only if one of them uses a method in its {@code methods}: otherwise it is a layer with one try. The edge is
+ * idempotent if every operation that a Retry filter repeats is (every operation, if none is repeated), per RFC 9110
+ * ({@link HttpMethods}). A request takes one route and one operation, so the route stays one edge, carrying the worst
+ * operation. Paths that other filters rewrite ({@code RewritePath}, {@code PrefixPath}, {@code SetPath}) or patterns
+ * other than literal segments with an optional trailing {@code /**} leave the operations, and so idempotency,
+ * UNKNOWN. An {@code operations} entry of the gateway's {@code edges-hint.yaml} overrides an operation's idempotency.
  *
  * <p>CircuitBreaker filters are noted, not modelled. Whether a CircuitBreaker listed before Retry wraps all tries
  * or each try is not checked against the real gateway yet, so it is stated as UNKNOWN in the notes.
@@ -47,6 +60,7 @@ public final class GatewayCollector {
     private static final String[] PREFIX = {"spring", "cloud", "gateway", "server", "webflux"};
     private static final String[] LEGACY_PREFIX = {"spring", "cloud", "gateway"};
     private static final String LB = "lb://";
+    private static final Set<String> PATH_REWRITES = Set.of("RewritePath", "PrefixPath", "SetPath");
 
     /** Positional arguments of the Retry shortcut form (RetryGatewayFilterFactory#shortcutFieldOrder). */
     private static final List<String> RETRY_SHORTCUT = List.of("retries", "statuses", "methods",
@@ -77,15 +91,30 @@ public final class GatewayCollector {
      */
     private record Filter(String name, Map<String, Property> args, String where, String evidence) {}
 
+    /** A mapping of the callee that a route reaches; {@code idempotent} is the mapping's own. */
+    private record Operation(Mapping mapping, String to, Val<Boolean> idempotent) {
+        String describe() {
+            return to + " " + mapping.operation() + " at " + mapping.evidence();
+        }
+    }
+
     private final SpringProperties props;
     private final DefaultsKb kb;
     private final String[] prefix;
+    private final Map<String, List<Mapping>> served;
+    private final Map<String, OperationHint> overrides = new LinkedHashMap<>();
+    private final Set<String> overridden = new LinkedHashSet<>();
     private final List<String> notes = new ArrayList<>();
 
-    private GatewayCollector(SpringProperties props, DefaultsKb kb, String[] prefix) {
+    private GatewayCollector(SpringProperties props, DefaultsKb kb, String[] prefix, Map<String, List<Mapping>> served) {
         this.props = props;
         this.kb = kb;
         this.prefix = prefix;
+        this.served = served;
+    }
+
+    private static String operationKey(String to, String operation) {
+        return to + " " + operation;
     }
 
     /** @param serviceRoot the gateway's module directory, with {@code src/main/resources} */
@@ -99,11 +128,35 @@ public final class GatewayCollector {
 
     /** @param fallbackName the gateway's name when {@code spring.application.name} is not set */
     public static Result collect(SpringProperties props, String fallbackName, DefaultsKb kb) {
+        return collect(props, fallbackName, Map.of(), kb);
+    }
+
+    /**
+     * @param served the request mappings of each callee whose code is known, by service name
+     *               ({@link io.github.hasanyelaldi.plimsoll.collect.spring.RequestMappingScanner})
+     */
+    public static Result collect(Path serviceRoot, Map<String, List<Mapping>> served, DefaultsKb kb) {
+        return collect(serviceRoot, served, null, kb);
+    }
+
+    /** @param hint the gateway's {@code edges-hint.yaml}, whose {@code operations} apply; or {@code null} */
+    public static Result collect(Path serviceRoot, Map<String, List<Mapping>> served, EdgesHint hint, DefaultsKb kb) {
+        return collect(SpringProperties.forService(serviceRoot), serviceRoot.getFileName().toString(), served, hint,
+                kb);
+    }
+
+    public static Result collect(SpringProperties props, String fallbackName, Map<String, List<Mapping>> served,
+            DefaultsKb kb) {
+        return collect(props, fallbackName, served, null, kb);
+    }
+
+    public static Result collect(SpringProperties props, String fallbackName, Map<String, List<Mapping>> served,
+            EdgesHint hint, DefaultsKb kb) {
         String[] prefix = PREFIX;
         if (!configures(props, PREFIX) && configures(props, LEGACY_PREFIX)) {
             prefix = LEGACY_PREFIX;
         }
-        GatewayCollector c = new GatewayCollector(props, kb, prefix);
+        GatewayCollector c = new GatewayCollector(props, kb, prefix, Map.copyOf(served));
         if (prefix == LEGACY_PREFIX) {
             c.notes.add("routes read from the legacy prefix spring.cloud.gateway.*; Spring Cloud Gateway 5 reads "
                     + "spring.cloud.gateway.server.webflux.*");
@@ -121,7 +174,22 @@ public final class GatewayCollector {
             c.notes.add("spring.application.name not set; the gateway is named after its directory, " + fallbackName);
         }
         c.notes.addAll(props.notes());
-        return new Result(service, c.edges(service), c.notes);
+        if (hint != null) {
+            if (!hint.service().equals(service)) {
+                throw new InvalidSpecException("edges hint is for service " + hint.service() + ", the gateway is "
+                        + service);
+            }
+            for (OperationHint o : hint.operations()) {
+                c.overrides.put(operationKey(o.to(), o.operation()), o);
+            }
+        }
+        List<Edge> edges = c.edges(service);
+        c.overrides.forEach((k, o) -> {
+            if (!c.overridden.contains(k)) {
+                c.notes.add(o.evidence() + ": operation " + k + " is not reached by any route; not applied");
+            }
+        });
+        return new Result(service, edges, c.notes);
     }
 
     private static boolean configures(SpringProperties props, String[] prefix) {
@@ -147,12 +215,12 @@ public final class GatewayCollector {
             String to = uri.get().substring(LB.length());
             List<Filter> filters = new ArrayList<>(defaults);
             filters.addAll(filters(path(route, "filters"), "route " + id + " filters"));
-            edges.add(edge(service, to, id, route, operation(route, id), filters));
+            edges.add(edge(service, to, id, route, filters));
         }
         return edges;
     }
 
-    private Edge edge(String service, String to, String id, String[] route, String operation, List<Filter> filters) {
+    private Edge edge(String service, String to, String id, String[] route, List<Filter> filters) {
         Val<Duration> perTry = responseTimeout(id, route);
         List<Filter> retries = filters.stream().filter(f -> f.name().equals("Retry")).toList();
         List<Filter> breakers = filters.stream().filter(f -> f.name().equals("CircuitBreaker")).toList();
@@ -170,21 +238,165 @@ public final class GatewayCollector {
                     + "their order in the gateway's filter chain is not checked");
         }
 
+        Val<List<Operation>> operations = operations(to, id, route, filters);
         List<Layer> layers = new ArrayList<>();
+        Set<Operation> retried = new LinkedHashSet<>();
         for (Filter r : retries) {
-            layers.add(retryLayer(r, perTry));
+            Layer layer = retryLayer(r, perTry);
+            if (operations.isKnown()) {
+                Val<Set<String>> methods = retryMethods(r);
+                if (methods.isKnown()) {
+                    List<Operation> repeated = operations.value().stream()
+                            .filter(o -> !o.mapping().method().isKnown()
+                                    || methods.value().contains(o.mapping().method().value()))
+                            .toList();
+                    if (repeated.isEmpty()) {
+                        String why = "Retry (" + r.where() + ", " + r.evidence() + ") repeats only "
+                                + String.join(",", new TreeSet<>(methods.value())) + " (" + methods.evidence()
+                                + "); route " + id + " serves " + String.join(", ",
+                                        operations.value().stream().map(Operation::describe).toList());
+                        layer = new Layer(KIND, noRetry(new Val<>(1, methods.source(), why), perTry),
+                                Val.unknown("no retry"));
+                    }
+                    retried.addAll(repeated);
+                } else {
+                    retried.addAll(operations.value());
+                }
+            }
+            layers.add(layer);
         }
         if (layers.isEmpty()) {
             String why = "no Retry filter on route " + id + " (" + evidenceOf(route) + ") or in default-filters";
             layers.add(new Layer(KIND, noRetry(Val.explicit(1, why), perTry), Val.unknown("no Retry filter")));
         }
-        Val<Boolean> idempotent = Val.unknown("route " + id + " (" + evidenceOf(route)
-                + ") does not say which HTTP methods it serves");
+        Val<Boolean> idempotent;
+        if (!operations.isKnown()) {
+            idempotent = Val.unknown(operations.evidence());
+        } else {
+            List<Operation> judged = retried.isEmpty() ? operations.value() : List.copyOf(retried);
+            idempotent = HttpMethods.all(judged.stream().map(Operation::idempotent).toList(), "no operation");
+        }
+        List<String> patterns = patterns(route);
+        String operation = patterns.isEmpty() ? "route " + id : String.join(",", patterns);
         return new Edge(service, to, operation, idempotent, 1, layers);
     }
 
-    /** The {@code Path} patterns of the route, or {@code route <id>} when it has none. */
-    private String operation(String[] route, String id) {
+    /** The callee's mappings that the route reaches, or UNKNOWN saying why they cannot be told. */
+    private Val<List<Operation>> operations(String to, String id, String[] route, List<Filter> filters) {
+        String here = "route " + id + " (" + evidenceOf(route) + ")";
+        List<Mapping> mappings = served.get(to);
+        if (mappings == null) {
+            return Val.unknown(here + " does not say which HTTP methods it serves; the request mappings of " + to
+                    + " are not known");
+        }
+        int strip = 0;
+        for (Filter f : filters) {
+            if (PATH_REWRITES.contains(f.name())) {
+                return Val.unknown(here + ": " + f.name() + " (" + f.evidence() + ") rewrites the path, which is not "
+                        + "modelled; the operations of " + to + " it reaches are not known");
+            }
+            if (f.name().equals("StripPrefix")) {
+                // StripPrefix=2 is stored under its positional key, _genkey_0 in relaxed form
+                Property parts = f.args().containsKey("parts") ? f.args().get("parts") : f.args().get("genkey0");
+                if (parts == null || parts.isPlaceholder() || parts.text() == null
+                        || !parts.text().strip().matches("\\d+")) {
+                    return Val.unknown(here + ": StripPrefix (" + f.evidence() + ") without a literal parts count");
+                }
+                strip += Integer.parseInt(parts.text().strip());
+            }
+        }
+        List<String> patterns = patterns(route);
+        if (patterns.isEmpty()) {
+            return Val.unknown(here + " has no Path predicate");
+        }
+        for (String p : patterns) {
+            if (!p.matches("(/[^/{}*?]+)*(/\\*\\*)?")) {
+                return Val.unknown(here + ": Path " + p + " is not modelled (only literal segments with an optional "
+                        + "trailing /**)");
+            }
+        }
+        Optional<Set<String>> allowed = methodPredicate(route);
+        int stripped = strip;
+        List<Operation> out = new ArrayList<>();
+        for (Mapping m : mappings) {
+            boolean reached = patterns.stream().anyMatch(p -> reaches(p, stripped, m.path()));
+            boolean method = allowed.isEmpty() || !m.method().isKnown() || allowed.get().contains(m.method().value());
+            if (reached && method) {
+                out.add(operation(m, to));
+            }
+        }
+        if (out.isEmpty()) {
+            return Val.unknown(here + " reaches none of the " + mappings.size() + " request mappings of " + to);
+        }
+        return Val.explicit(out, here);
+    }
+
+    private Operation operation(Mapping m, String to) {
+        OperationHint o = overrides.get(operationKey(to, m.operation()));
+        if (o != null) {
+            overridden.add(operationKey(to, m.operation()));
+            return new Operation(m, to, Val.explicit(o.idempotent().value(), to + " " + m.operation() + " ("
+                    + m.evidence() + ") idempotent: " + o.idempotent().value() + ", " + o.idempotent().evidence()));
+        }
+        String where = to + " " + m.path() + ", " + m.evidence();
+        Val<Boolean> idempotent = m.method().isKnown() ? HttpMethods.idempotent(m.method().value(), where, kb)
+                : Val.unknown(to + " " + m.operation() + ": " + m.method().evidence());
+        return new Operation(m, to, idempotent);
+    }
+
+    /**
+     * Whether a request matching {@code pattern} (literal segments, optionally ending in {@code /**}) can reach
+     * {@code path} once its first {@code strip} segments are removed. A {@code {variable}} or {@code *} segment of the
+     * mapping matches any one segment.
+     */
+    static boolean reaches(String pattern, int strip, String path) {
+        boolean rest = pattern.endsWith("/**");
+        List<String> literal = segments(rest ? pattern.substring(0, pattern.length() - 3) : pattern);
+        List<String> target = segments(path);
+        if (strip > literal.size()) {
+            return rest;
+        }
+        List<String> left = literal.subList(strip, literal.size());
+        if (target.size() < left.size() || (!rest && target.size() != left.size())) {
+            return false;
+        }
+        for (int i = 0; i < left.size(); i++) {
+            String t = target.get(i);
+            if (!t.equals(left.get(i)) && !t.equals("*") && !(t.startsWith("{") && t.endsWith("}"))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static List<String> segments(String path) {
+        return List.of(path.split("/")).stream().filter(s -> !s.isEmpty()).toList();
+    }
+
+    /** The methods of a {@code Method} predicate, if the route has one. */
+    private Optional<Set<String>> methodPredicate(String[] route) {
+        for (int i : props.indices(path(route, "predicates"))) {
+            String[] p = path(route, "predicates", "[" + i + "]");
+            Optional<Property> shortcut = props.get(p);
+            List<String> methods = new ArrayList<>();
+            if (shortcut.isPresent() && shortcut.get().text() != null) {
+                String text = shortcut.get().text();
+                int eq = text.indexOf('=');
+                if (eq > 0 && text.substring(0, eq).strip().equals("Method")) {
+                    methods.addAll(split(text.substring(eq + 1)));
+                }
+            } else if (text(path(p, "name")).filter("Method"::equals).isPresent()) {
+                props.under(path(p, "args")).forEach(a -> methods.addAll(a.values()));
+            }
+            if (!methods.isEmpty()) {
+                return Optional.of(new TreeSet<>(methods.stream().map(m -> m.toUpperCase(Locale.ROOT)).toList()));
+            }
+        }
+        return Optional.empty();
+    }
+
+    /** The {@code Path} patterns of the route. */
+    private List<String> patterns(String[] route) {
         List<String> patterns = new ArrayList<>();
         for (int i : props.indices(path(route, "predicates"))) {
             String[] p = path(route, "predicates", "[" + i + "]");
@@ -204,7 +416,7 @@ public final class GatewayCollector {
                 }
             }
         }
-        return patterns.isEmpty() ? "route " + id : String.join(",", patterns);
+        return patterns;
     }
 
     // ---- filters ---------------------------------------------------------
@@ -364,6 +576,17 @@ public final class GatewayCollector {
             source = Source.LIBRARY_DEFAULT;
         }
         return new Val<>(Set.copyOf(on), source, filter + ": " + String.join("; ", evidence));
+    }
+
+    /** The methods a Retry filter repeats: its {@code methods}, or the default. */
+    private Val<Set<String>> retryMethods(Filter f) {
+        Property p = f.args().get("methods");
+        if (p != null) {
+            return p.isPlaceholder() ? placeholder(p)
+                    : Val.explicit(Set.copyOf(p.values().stream().map(v -> v.toUpperCase(Locale.ROOT)).toList()),
+                            p.evidence() + " (methods)");
+        }
+        return kb.defaultOr(KB, "retry.methods", v -> Set.copyOf(split(v)), "methods not set");
     }
 
     /** The gateway HTTP client's response timeout, which bounds each try. */

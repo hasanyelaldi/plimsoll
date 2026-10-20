@@ -1,0 +1,11 @@
+service: owners-ui
+methods:
+  - { method: com.example.owners.OwnersClient#create, to: customers-service }
+  - { method: com.example.owners.OwnersClient#find, to: customers-service }
+  - { method: com.example.owners.OwnersClient#dynamic, to: customers-service }
+  - { method: com.example.owners.OwnersClient#mismatch, to: customers-service, operation: POST /owners }
+  - { method: com.example.owners.OwnersClient#create, to: customers-service, operation: create with key,
+      idempotent: true }
+  - { method: com.example.owners.OwnersClient#noCall, to: customers-service, operation: "DELETE /owners/{id}" }
+  - { method: com.example.owners.OwnersClient#noCall, to: customers-service }
+  - { method: com.example.owners.OwnersClient#readThenWrite, to: customers-service }

@@ -10,9 +10,14 @@ import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.body.MethodDeclaration;
 import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.expr.AnnotationExpr;
+import com.github.javaparser.ast.expr.Expression;
+import com.github.javaparser.ast.expr.FieldAccessExpr;
 import com.github.javaparser.ast.expr.MemberValuePair;
+import com.github.javaparser.ast.expr.MethodCallExpr;
+import com.github.javaparser.ast.expr.NameExpr;
 import com.github.javaparser.ast.expr.NormalAnnotationExpr;
 import com.github.javaparser.ast.type.ClassOrInterfaceType;
+import io.github.hasanyelaldi.plimsoll.collect.http.HttpMethods;
 import io.github.hasanyelaldi.plimsoll.io.InvalidSpecException;
 import io.github.hasanyelaldi.plimsoll.model.Val;
 import java.io.IOException;
@@ -23,6 +28,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Stream;
@@ -34,6 +40,9 @@ import java.util.stream.Stream;
  *
  * <p>The instance {@code name} is EXPLICIT when it is a string literal and UNKNOWN otherwise (a constant or an
  * expression): it is not resolved.
+ *
+ * <p>In each method body it also finds the HTTP calls of a {@code WebClient} or {@code RestClient} chain: a
+ * {@code .get()}, {@code .post()}, ... or {@code .method(HttpMethod.X)} directly followed by {@code .uri(...)}.
  */
 public final class AnnotationScanner {
 
@@ -55,12 +64,25 @@ public final class AnnotationScanner {
         }
     }
 
-    /** @param annotations instance name per annotation found; evidence is the annotation's {@code file:line} */
-    public record ScannedMethod(String name, String returnType, int line, Map<Kind, Val<String>> annotations) {
+    /**
+     * @param annotations instance name per annotation found; evidence is the annotation's {@code file:line}
+     * @param httpCalls   HTTP calls in the body, in source order
+     */
+    public record ScannedMethod(String name, String returnType, int line, Map<Kind, Val<String>> annotations,
+            List<HttpCall> httpCalls) {
         public ScannedMethod {
             annotations = annotations.isEmpty() ? Map.of() : new EnumMap<>(annotations);
+            httpCalls = List.copyOf(httpCalls);
         }
     }
+
+    /**
+     * One {@code WebClient} / {@code RestClient} request in a method body.
+     *
+     * @param method   e.g. {@code POST}; UNKNOWN when {@code .method(...)} is given an expression
+     * @param evidence {@code file:line} of the call
+     */
+    public record HttpCall(Val<String> method, String evidence) {}
 
     /** @param name fully qualified, nested types joined with {@code .} */
     public record ScannedClass(String name, String file, int line, Map<Kind, Val<String>> annotations,
@@ -111,7 +133,7 @@ public final class AnnotationScanner {
             List<ScannedMethod> methods = new ArrayList<>();
             for (MethodDeclaration m : type.getMethods()) {
                 methods.add(new ScannedMethod(m.getNameAsString(), returnType(m), line(m.getName()),
-                        annotations(m.getAnnotations(), cu, fileName)));
+                        annotations(m.getAnnotations(), cu, fileName), httpCalls(m, fileName)));
             }
             classes.add(new ScannedClass(typeName, fileName, line(type.getName()),
                     annotations(type.getAnnotations(), cu, fileName), methods));
@@ -164,6 +186,44 @@ public final class AnnotationScanner {
             }
         }
         return Val.unknown(evidence + ": no name attribute");
+    }
+
+    private static List<HttpCall> httpCalls(MethodDeclaration m, String file) {
+        List<HttpCall> calls = new ArrayList<>();
+        for (MethodCallExpr call : m.findAll(MethodCallExpr.class)) {
+            boolean beforeUri = call.getParentNode()
+                    .filter(p -> p instanceof MethodCallExpr uri && uri.getNameAsString().equals("uri")
+                            && uri.getScope().filter(call::equals).isPresent())
+                    .isPresent();
+            if (!beforeUri) {
+                continue;
+            }
+            String evidence = file + ":" + line(call.getName());
+            String name = call.getNameAsString();
+            if (call.getArguments().isEmpty() && name.equals(name.toLowerCase(Locale.ROOT))) {
+                HttpMethods.normalize(name).ifPresent(v -> calls.add(new HttpCall(Val.explicit(v, evidence), evidence)));
+            } else if (name.equals("method") && call.getArguments().size() == 1) {
+                calls.add(new HttpCall(methodArgument(call.getArgument(0), evidence), evidence));
+            }
+        }
+        calls.sort(Comparator.comparingInt(c -> lineOf(c.evidence())));
+        return calls;
+    }
+
+    /** {@code HttpMethod.POST} or a statically imported {@code POST}; anything else is not resolved. */
+    private static Val<String> methodArgument(Expression arg, String evidence) {
+        Optional<String> name = Optional.empty();
+        if (arg instanceof FieldAccessExpr f && f.getScope().toString().endsWith("HttpMethod")) {
+            name = HttpMethods.normalize(f.getNameAsString());
+        } else if (arg instanceof NameExpr n) {
+            name = HttpMethods.normalize(n.getNameAsString()).filter(v -> v.equals(n.getNameAsString()));
+        }
+        return name.<Val<String>>map(v -> Val.explicit(v, evidence))
+                .orElseGet(() -> Val.unknown(evidence + ": HTTP method is not a constant: " + arg));
+    }
+
+    private static int lineOf(String evidence) {
+        return Integer.parseInt(evidence.substring(evidence.lastIndexOf(':') + 1));
     }
 
     /** Simple name of the return type without type arguments, e.g. {@code CompletableFuture}. */
