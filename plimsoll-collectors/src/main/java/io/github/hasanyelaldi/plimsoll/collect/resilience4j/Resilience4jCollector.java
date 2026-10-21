@@ -74,15 +74,19 @@ public final class Resilience4jCollector {
     }
 
     public static Result collect(Path serviceRoot, Path edgesHint, DefaultsKb kb) {
+        return collect(serviceRoot, serviceRoot, EdgesHint.load(edgesHint, edgesHint.getFileName().toString()), kb);
+    }
+
+    /** @param base file names in evidence and notes are relative to it */
+    public static Result collect(Path base, Path serviceRoot, EdgesHint hint, DefaultsKb kb) {
         Path resources = serviceRoot.resolve("src/main/resources");
-        SpringProperties props = SpringProperties.forService(serviceRoot);
+        SpringProperties props = SpringProperties.forService(base, serviceRoot);
 
         Resilience4jCollector c = new Resilience4jCollector(Resilience4jConfig.of(props, kb), kb);
-        c.noteUnreadConfig(serviceRoot, resources);
+        c.noteUnreadConfig(base, resources);
         c.notes.addAll(props.notes());
 
-        List<ScannedClass> classes = AnnotationScanner.scan(serviceRoot, serviceRoot.resolve("src/main/java"));
-        EdgesHint hint = EdgesHint.load(edgesHint, edgesHint.getFileName().toString());
+        List<ScannedClass> classes = AnnotationScanner.scan(base, serviceRoot.resolve("src/main/java"));
         List<Edge> edges = new ArrayList<>();
         Set<String> mapped = new HashSet<>();
         for (Hint h : hint.methods()) {

@@ -80,6 +80,11 @@ public final class RequestMappingScanner {
 
     /** Every {@code .java} file under {@code serviceRoot/src/main/java}; file names relative to {@code serviceRoot}. */
     public static Result scan(Path serviceRoot) {
+        return scan(serviceRoot, serviceRoot);
+    }
+
+    /** As {@link #scan(Path)}, with file names relative to {@code base}. */
+    public static Result scan(Path base, Path serviceRoot) {
         Path sourceDir = serviceRoot.resolve("src/main/java");
         if (!Files.isDirectory(sourceDir)) {
             return new Result(List.of(), List.of());
@@ -93,7 +98,7 @@ public final class RequestMappingScanner {
         List<Mapping> mappings = new ArrayList<>();
         List<String> notes = new ArrayList<>();
         for (Path file : files) {
-            String name = serviceRoot.relativize(file).toString().replace('\\', '/');
+            String name = base.relativize(file).toString().replace('\\', '/');
             try {
                 Result r = parse(Files.readString(file, StandardCharsets.UTF_8), name);
                 mappings.addAll(r.mappings());

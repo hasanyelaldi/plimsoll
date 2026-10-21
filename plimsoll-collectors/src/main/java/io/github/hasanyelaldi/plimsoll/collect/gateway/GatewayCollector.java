@@ -192,6 +192,11 @@ public final class GatewayCollector {
         return new Result(service, edges, c.notes);
     }
 
+    /** Whether {@code props} configure gateway routes or default filters, under either prefix. */
+    public static boolean configuresGateway(SpringProperties props) {
+        return configures(props, PREFIX) || configures(props, LEGACY_PREFIX);
+    }
+
     private static boolean configures(SpringProperties props, String[] prefix) {
         return !props.indices(path(prefix, "routes")).isEmpty()
                 || !props.indices(path(prefix, "default-filters")).isEmpty();
