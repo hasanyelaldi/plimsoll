@@ -65,7 +65,7 @@ class Resilience4jCollectorTest {
     void classLevelRetryAppliesToTheMethodAndKeepsFanout() {
         Edge e = edge("com.example.gateway.VisitsClient#list");
         RetryPolicy p = e.layers().get(0).retry();
-        assertThat(e.fanout()).isEqualTo(2);
+        assertThat(e.fanout()).isEqualTo(Val.explicit(2, "edges-hint.yaml:9"));
         assertThat(p.totalAttempts().value()).isEqualTo(2);
         assertThat(p.multiplier()).isEqualTo(Val.explicit(2.0, "src/main/resources/application.yml:11"));
         assertThat(p.perTryTimeout().evidence()).startsWith("no @TimeLimiter on com.example.gateway.VisitsClient#list");

@@ -8,9 +8,33 @@ import io.github.hasanyelaldi.plimsoll.collect.resilience4j.EdgesHint.OperationH
 import io.github.hasanyelaldi.plimsoll.io.InvalidSpecException;
 import io.github.hasanyelaldi.plimsoll.model.Source;
 import io.github.hasanyelaldi.plimsoll.model.Val;
+import java.time.Duration;
 import org.junit.jupiter.api.Test;
 
 class EdgesHintTest {
+
+    @Test
+    void readsDeadlineAndEntryOfItsOwnService() {
+        EdgesHint hint = EdgesHint.parse("""
+                service: orders
+                deadline: 2s
+                entry: false
+                """, "edges-hint.yaml");
+        assertThat(hint.deadline()).isEqualTo(Val.explicit(Duration.ofSeconds(2), "edges-hint.yaml:2"));
+        assertThat(hint.entry()).isEqualTo(Val.explicit(false, "edges-hint.yaml:3"));
+    }
+
+    @Test
+    void rejectsAnInvalidDeadlineOrEntry() {
+        assertThatThrownBy(() -> EdgesHint.parse("service: a\ndeadline: soon\n", "h.yaml"))
+                .isInstanceOf(InvalidSpecException.class)
+                .hasMessage("h.yaml:2: 'deadline' must be a positive duration such as 2s or 500ms, got 'soon'");
+        assertThatThrownBy(() -> EdgesHint.parse("service: a\ndeadline: 0ms\n", "h.yaml"))
+                .isInstanceOf(InvalidSpecException.class);
+        assertThatThrownBy(() -> EdgesHint.parse("service: a\nentry: yes please\n", "h.yaml"))
+                .isInstanceOf(InvalidSpecException.class)
+                .hasMessage("h.yaml:2: 'entry' must be true or false");
+    }
 
     @Test
     void readsServiceAndMethodsWithProvenance() {
@@ -33,11 +57,13 @@ class EdgesHintTest {
         assertThat(get.to()).isEqualTo("orders");
         assertThat(get.operation()).isEqualTo("GET /orders");
         assertThat(get.idempotent()).isEqualTo(Val.explicit(true, "edges-hint.yaml:6"));
-        assertThat(get.fanout()).isEqualTo(2);
+        assertThat(get.fanout()).isEqualTo(Val.explicit(2, "edges-hint.yaml:7"));
         assertThat(get.client()).isEqualTo(Val.explicit("webclient-loadbalanced", "edges-hint.yaml:8"));
         Hint post = hint.methods().get(1);
         assertThat(post.idempotent().source()).isEqualTo(Source.UNKNOWN);
-        assertThat(post.fanout()).isEqualTo(1);
+        assertThat(post.fanout()).isEqualTo(Val.unknown("'fanout' absent (edges-hint.yaml:9)"));
+        assertThat(hint.deadline()).isEqualTo(Val.unknown("'deadline' absent (edges-hint.yaml:1)"));
+        assertThat(hint.entry()).isEqualTo(Val.unknown("'entry' absent (edges-hint.yaml:1)"));
         assertThat(post.operation()).isNull();
         assertThat(post.client()).isNull();
     }

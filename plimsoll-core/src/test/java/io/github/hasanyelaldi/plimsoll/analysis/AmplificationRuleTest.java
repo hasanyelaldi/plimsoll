@@ -5,7 +5,17 @@ import static io.github.hasanyelaldi.plimsoll.analysis.Specs.findings;
 import static io.github.hasanyelaldi.plimsoll.analysis.Specs.load;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import static org.assertj.core.api.Assertions.tuple;
+
+import io.github.hasanyelaldi.plimsoll.model.Edge;
+import io.github.hasanyelaldi.plimsoll.model.Layer;
+import io.github.hasanyelaldi.plimsoll.model.RetryPolicy;
+import io.github.hasanyelaldi.plimsoll.model.Service;
+import io.github.hasanyelaldi.plimsoll.model.ServiceGraph;
+import io.github.hasanyelaldi.plimsoll.model.Val;
 import java.math.BigInteger;
+import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class AmplificationRuleTest {
@@ -104,6 +114,32 @@ class AmplificationRuleTest {
                 """);
         assertThat(load(r, "b")).isEqualTo(n(8 + 3));
         assertThat(load(r, "c")).isEqualTo(n(22));
+        Finding f = findings(r, "PLM-A1").stream().filter(x -> x.location().equals("c")).findFirst().orElseThrow();
+        assertThat(f.values()).filteredOn(v -> v.name().endsWith("fanout"))
+                .extracting(UsedValue::name, UsedValue::display, UsedValue::evidence)
+                .containsExactly(tuple("a→b fanout", "4", "spec.yaml:3"), tuple("b→c fanout", "2", "spec.yaml:5"));
+    }
+
+    @Test
+    void unknownFanoutCountsAsOneAndIsTagged() {
+        RetryPolicy retry = new RetryPolicy(Val.explicit(3, "t:1"), Val.unknown("absent"), Val.unknown("absent"),
+                Val.unknown("absent"), Val.unknown("absent"), Val.unknown("absent"), Val.unknown("absent"));
+        Layer three = new Layer("generic", retry, Val.unknown("absent"));
+        ServiceGraph graph = new ServiceGraph(
+                Map.of("a", new Service("a", Val.unknown("absent"), true),
+                        "b", new Service("b", Val.unknown("absent"), false),
+                        "c", new Service("c", Val.unknown("absent"), false)),
+                List.of(new Edge("a", "b", "op", Val.unknown("absent"), Val.unknown("'fanout' absent (hint:3)"), List.of(three)),
+                        new Edge("b", "c", "op", Val.unknown("absent"), Val.explicit(1, "hint:5"), List.of(three))));
+        AnalysisResult r = Analyzer.analyze(graph, AnalysisOptions.defaults());
+        assertThat(load(r, "c")).isEqualTo(n(9));
+        assertThat(r.amplification().get(2).unknowns()).containsExactly("a→b fanout");
+        Finding f = findings(r, "PLM-A1").stream().filter(x -> x.location().equals("c")).findFirst().orElseThrow();
+        assertThat(f.severity()).isEqualTo(Severity.INFO);
+        assertThat(f.detail()).startsWith("at least ×9");
+        assertThat(f.unknowns()).containsExactly("a→b fanout");
+        assertThat(f.values()).extracting(UsedValue::name, UsedValue::display)
+                .contains(tuple("a→b fanout", "UNKNOWN"));
     }
 
     @Test

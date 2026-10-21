@@ -30,7 +30,8 @@ import java.util.TreeSet;
  * Resilience4j {@code maxAttempts} and generic {@code totalAttempts} already include the first call,
  * Istio {@code attempts} counts retries only and becomes {@code attempts + 1}.
  *
- * <p>An absent {@code multiplier} means fixed backoff (1.0); any other absent field is UNKNOWN.
+ * <p>An absent {@code multiplier} means fixed backoff (1.0) and an absent {@code fanout} means one call;
+ * any other absent field is UNKNOWN.
  */
 public final class SpecLoader {
 
@@ -109,7 +110,9 @@ public final class SpecLoader {
         String to = string(required(m, "to"), "to");
         Entry op = m.entries().get("operation");
         Entry fan = m.entries().get("fanout");
-        int fanout = fan == null ? 1 : integer(fan, "fanout", 1);
+        Val<Integer> fanout = fan == null
+                ? Val.explicit(1, absent("fanout", m) + ", spec default 1")
+                : Val.explicit(integer(fan, "fanout", 1), at(fan.keyLine()));
         List<Layer> layers = new ArrayList<>();
         Entry layersEntry = m.entries().get("layers");
         if (layersEntry != null) {

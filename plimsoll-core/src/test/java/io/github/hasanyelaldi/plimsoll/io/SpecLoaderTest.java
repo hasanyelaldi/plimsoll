@@ -96,7 +96,10 @@ class SpecLoaderTest {
     @Test
     void fanoutDefaultsToOne() {
         ServiceGraph g = SpecLoader.parse(HEAD + "edges:\n  - { from: a, to: b, fanout: 4 }\n  - { from: a, to: b }\n", "t");
-        assertThat(g.edges()).extracting(Edge::fanout).containsExactly(4, 1);
+        assertThat(g.edges()).extracting(e -> e.fanout().value()).containsExactly(4, 1);
+        assertThat(g.edges()).extracting(e -> e.fanout().source()).containsOnly(Source.EXPLICIT);
+        assertThat(g.edges().get(0).fanout().evidence()).isEqualTo("t:5");
+        assertThat(g.edges().get(1).fanout().evidence()).isEqualTo("'fanout' absent (t:6), spec default 1");
     }
 
     @Test

@@ -156,7 +156,7 @@ class GraphAssemblerTest {
                     - name: rest
                       retries: { attempts: 2, perTryTimeout: 1s, retryOn: "reset,5xx" }
                 """);
-        Edge ab = new Edge("a", "b", "op", Val.explicit(true, "hint"), 1, List.of());
+        Edge ab = new Edge("a", "b", "op", Val.explicit(true, "hint"), Val.explicit(1, "hint"), List.of());
         Layer layer = GraphAssembler.assemble(List.of(ab), IstioCollector.collect(dir)).edges().get(0).layers().get(0);
         RetryPolicy p = layer.retry();
 
@@ -180,7 +180,7 @@ class GraphAssemblerTest {
                     - retries: { attempts: 1, retryOn: "reset,5xx,gateway-error" }
                     - retries: { attempts: 1, perTryTimeout: 250ms }
                 """);
-        Edge ab = new Edge("a", "b", "op", Val.explicit(true, "hint"), 1, List.of());
+        Edge ab = new Edge("a", "b", "op", Val.explicit(true, "hint"), Val.explicit(1, "hint"), List.of());
         RetryPolicy p = GraphAssembler.assemble(List.of(ab), IstioCollector.collect(dir)).edges().get(0)
                 .layers().get(0).retry();
 
