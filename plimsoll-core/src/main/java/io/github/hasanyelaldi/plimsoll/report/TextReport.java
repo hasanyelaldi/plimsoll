@@ -5,12 +5,13 @@ import io.github.hasanyelaldi.plimsoll.analysis.AnalysisResult;
 import io.github.hasanyelaldi.plimsoll.analysis.Finding;
 import io.github.hasanyelaldi.plimsoll.analysis.ServiceAmplification;
 import io.github.hasanyelaldi.plimsoll.analysis.UsedValue;
+import java.util.List;
 
 final class TextReport {
 
     private TextReport() {}
 
-    static String render(AnalysisResult r, String specName, AnalysisOptions options) {
+    static String render(AnalysisResult r, String specName, AnalysisOptions options, List<String> notes) {
         StringBuilder out = new StringBuilder();
         out.append("Plimsoll analysis of ").append(specName).append('\n');
 
@@ -32,6 +33,13 @@ final class TextReport {
             }
             if (f.dependsOnUnknown()) {
                 out.append("          ").append(Reports.unknowns(f)).append('\n');
+            }
+        }
+
+        if (!notes.isEmpty()) {
+            out.append("\nNotes\n");
+            for (String n : notes) {
+                out.append("  ").append(n).append('\n');
             }
         }
 

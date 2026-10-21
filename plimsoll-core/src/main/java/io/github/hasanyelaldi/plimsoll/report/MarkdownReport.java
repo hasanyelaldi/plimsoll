@@ -5,12 +5,13 @@ import io.github.hasanyelaldi.plimsoll.analysis.AnalysisResult;
 import io.github.hasanyelaldi.plimsoll.analysis.Finding;
 import io.github.hasanyelaldi.plimsoll.analysis.ServiceAmplification;
 import io.github.hasanyelaldi.plimsoll.analysis.UsedValue;
+import java.util.List;
 
 final class MarkdownReport {
 
     private MarkdownReport() {}
 
-    static String render(AnalysisResult r, String specName, AnalysisOptions options) {
+    static String render(AnalysisResult r, String specName, AnalysisOptions options, List<String> notes) {
         StringBuilder out = new StringBuilder();
         out.append("# Plimsoll analysis of `").append(specName).append("`\n\n");
         out.append("**").append(Reports.summary(r)).append("**\n\n");
@@ -25,7 +26,7 @@ final class MarkdownReport {
         out.append("\n## Findings\n\n");
         if (r.findings().isEmpty()) {
             out.append("None.\n");
-            return out.toString();
+            return notes(out, notes);
         }
         out.append("| Severity | Rule | Location | Detail |\n| --- | --- | --- | --- |\n");
         for (Finding f : r.findings()) {
@@ -42,6 +43,16 @@ final class MarkdownReport {
             }
             if (f.dependsOnUnknown()) {
                 out.append("- **").append(cell(Reports.unknowns(f))).append("**\n");
+            }
+        }
+        return notes(out, notes);
+    }
+
+    private static String notes(StringBuilder out, List<String> notes) {
+        if (!notes.isEmpty()) {
+            out.append("\n## Notes\n\n");
+            for (String n : notes) {
+                out.append("- ").append(n).append('\n');
             }
         }
         return out.toString();
