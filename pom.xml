@@ -164,6 +164,11 @@
         <artifactId>plimsoll-core</artifactId>
         <version>${project.version}</version>
       </dependency>
+      <dependency>
+        <groupId>io.github.hasanyelaldi</groupId>
+        <artifactId>plimsoll-collectors</artifactId>
+        <version>${project.version}</version>
+      </dependency>
     </dependencies>
   </dependencyManagement>
 
