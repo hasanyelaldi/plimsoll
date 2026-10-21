@@ -278,7 +278,8 @@ public final class GatewayCollector {
         }
         List<String> patterns = patterns(route);
         String operation = patterns.isEmpty() ? "route " + id : String.join(",", patterns);
-        return new Edge(service, to, operation, idempotent, 1, layers);
+        Val<Integer> fanout = Val.explicit(1, "route " + id + " (" + evidenceOf(route) + ") forwards each request it matches once");
+        return new Edge(service, to, operation, idempotent, fanout, layers);
     }
 
     /** The callee's mappings that the route reaches, or UNKNOWN saying why they cannot be told. */

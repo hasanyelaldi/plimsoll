@@ -8,11 +8,13 @@ import io.github.hasanyelaldi.plimsoll.io.YamlTree.ListNode;
 import io.github.hasanyelaldi.plimsoll.io.YamlTree.MapNode;
 import io.github.hasanyelaldi.plimsoll.io.YamlTree.Node;
 import io.github.hasanyelaldi.plimsoll.io.YamlTree.Scalar;
+import io.github.hasanyelaldi.plimsoll.model.Durations;
 import io.github.hasanyelaldi.plimsoll.model.Val;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -24,12 +26,14 @@ import java.util.TreeSet;
  *
  * <pre>
  * service: api-gateway
+ * deadline: 10s                                       # optional: how long the service works on one request
+ * entry: true                                         # optional: overrides the entry rule (ADR 0009)
  * methods:
  *   - method: com.example.CustomersClient#getOwner   # fully qualified class # method name
  *     to: customers-service
  *     operation: GET /owners/{id}                     # optional, defaults to Class#method
  *     idempotent: true                                # optional, UNKNOWN when absent
- *     fanout: 1                                       # optional, default 1
+ *     fanout: 1                                       # optional: calls per request, UNKNOWN when absent
  *     client: webclient-loadbalanced                  # optional: the HTTP client the method calls through
  * operations:                                         # optional: facts about operations the service calls
  *   - to: customers-service
@@ -44,7 +48,8 @@ import java.util.TreeSet;
  * <p>{@code operations} overrides what the code gives for an operation reached without an annotated client method,
  * such as a gateway route: its {@code idempotent} is EXPLICIT and wins over the HTTP method's.
  */
-public record EdgesHint(String service, List<Hint> methods, List<OperationHint> operations) {
+public record EdgesHint(String service, Val<Duration> deadline, Val<Boolean> entry, List<Hint> methods,
+        List<OperationHint> operations) {
 
     public EdgesHint {
         methods = List.copyOf(methods);
@@ -62,14 +67,14 @@ public record EdgesHint(String service, List<Hint> methods, List<OperationHint> 
      * @param evidence {@code file:line} of the entry
      */
     public record Hint(String className, String method, String to, String operation, Val<Boolean> idempotent,
-            int fanout, Val<String> client, String evidence) {
+            Val<Integer> fanout, Val<String> client, String evidence) {
 
         public String qualifiedMethod() {
             return className + "#" + method;
         }
     }
 
-    private static final Set<String> TOP_KEYS = Set.of("service", "methods", "operations");
+    private static final Set<String> TOP_KEYS = Set.of("service", "deadline", "entry", "methods", "operations");
     private static final Set<String> OPERATION_KEYS = Set.of("to", "operation", "idempotent");
     public static final Set<String> CLIENTS = Set.of("webclient-loadbalanced", "restclient");
 
@@ -109,7 +114,7 @@ public record EdgesHint(String service, List<Hint> methods, List<OperationHint> 
                 operations.add(operationHint(map(n, "operation entry", fileName), fileName));
             }
         }
-        return new EdgesHint(service, hints, operations);
+        return new EdgesHint(service, deadline(top, fileName), entry(top, fileName), hints, operations);
     }
 
     private static OperationHint operationHint(MapNode m, String file) {
@@ -137,7 +142,9 @@ public record EdgesHint(String service, List<Hint> methods, List<OperationHint> 
                 ? Val.unknown("'idempotent' absent (" + file + ":" + m.line() + ")")
                 : Val.explicit(bool(idem, file), file + ":" + idem.keyLine());
         Entry fan = m.entries().get("fanout");
-        int fanout = fan == null ? 1 : fanout(fan, file);
+        Val<Integer> fanout = fan == null
+                ? Val.unknown("'fanout' absent (" + file + ":" + m.line() + ")")
+                : Val.explicit(fanout(fan, file), file + ":" + fan.keyLine());
         Entry cl = m.entries().get("client");
         Val<String> client = null;
         if (cl != null) {
@@ -150,6 +157,24 @@ public record EdgesHint(String service, List<Hint> methods, List<OperationHint> 
         }
         return new Hint(method.substring(0, hash), method.substring(hash + 1), to,
                 op == null ? null : string(op, "operation", file), idempotent, fanout, client, file + ":" + m.line());
+    }
+
+    private static Val<Duration> deadline(MapNode top, String file) {
+        Entry e = top.entries().get("deadline");
+        if (e == null) {
+            return Val.unknown("'deadline' absent (" + file + ":" + top.line() + ")");
+        }
+        String text = string(e, "deadline", file);
+        Duration d = Durations.parse(text).filter(Duration::isPositive).orElseThrow(() -> new InvalidSpecException(
+                file + ":" + e.keyLine() + ": 'deadline' must be a positive duration such as 2s or 500ms, got '" + text + "'"));
+        return Val.explicit(d, file + ":" + e.keyLine());
+    }
+
+    private static Val<Boolean> entry(MapNode top, String file) {
+        Entry e = top.entries().get("entry");
+        return e == null
+                ? Val.unknown("'entry' absent (" + file + ":" + top.line() + ")")
+                : Val.explicit(bool(e, "entry", file), file + ":" + e.keyLine());
     }
 
     private static MapNode map(Node n, String what, String file) {
@@ -183,11 +208,15 @@ public record EdgesHint(String service, List<Hint> methods, List<OperationHint> 
     }
 
     private static boolean bool(Entry e, String file) {
+        return bool(e, "idempotent", file);
+    }
+
+    private static boolean bool(Entry e, String key, String file) {
         if (e.value() instanceof Scalar s
                 && (s.token() == JsonToken.VALUE_TRUE || s.token() == JsonToken.VALUE_FALSE)) {
             return s.token() == JsonToken.VALUE_TRUE;
         }
-        throw new InvalidSpecException(file + ":" + e.keyLine() + ": 'idempotent' must be true or false");
+        throw new InvalidSpecException(file + ":" + e.keyLine() + ": '" + key + "' must be true or false");
     }
 
     private static int fanout(Entry e, String file) {

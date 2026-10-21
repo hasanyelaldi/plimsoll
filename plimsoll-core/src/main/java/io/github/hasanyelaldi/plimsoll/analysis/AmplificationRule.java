@@ -4,7 +4,6 @@ import io.github.hasanyelaldi.plimsoll.model.Edge;
 import io.github.hasanyelaldi.plimsoll.model.Layer;
 import io.github.hasanyelaldi.plimsoll.model.Service;
 import io.github.hasanyelaldi.plimsoll.model.ServiceGraph;
-import io.github.hasanyelaldi.plimsoll.model.Source;
 import java.math.BigInteger;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -30,7 +29,7 @@ import org.jgrapht.traverse.TopologicalOrderIterator;
  * <p>A cycle reachable from an entry makes the bound infinite: {@code ERROR UNBOUNDED}. Every service
  * reachable from such a cycle is unbounded too; the rest is still computed exactly.
  *
- * <p>An UNKNOWN attempt count is counted as 1, so the result is a lower bound and is tagged.
+ * <p>An UNKNOWN attempt count or fanout is counted as 1, so the result is a lower bound and is tagged.
  */
 final class AmplificationRule {
 
@@ -195,9 +194,12 @@ final class AmplificationRule {
             for (int i : new TreeSet<>(dag.outgoingEdgesOf(u))) {
                 Edge e = edges.get(i);
                 String v = dag.getEdgeTarget(i);
-                load.merge(v, load.get(u).multiply(attempts(e)).multiply(BigInteger.valueOf(e.fanout())), BigInteger::add);
+                load.merge(v, load.get(u).multiply(attempts(e)).multiply(fanout(e)), BigInteger::add);
                 unknowns.get(v).addAll(unknowns.get(u));
                 unknowns.get(v).addAll(Attempts.unknownAttempts(e));
+                if (!e.fanout().isKnown()) {
+                    unknowns.get(v).add(fanoutName(e));
+                }
             }
         }
         return new Run(entry, dag, topo, load, unknowns);
@@ -212,6 +214,15 @@ final class AmplificationRule {
             }
         }
         return product;
+    }
+
+    /** UNKNOWN counts as 1. */
+    private static BigInteger fanout(Edge e) {
+        return e.fanout().isKnown() ? BigInteger.valueOf(e.fanout().value()) : BigInteger.ONE;
+    }
+
+    private static String fanoutName(Edge e) {
+        return e.location() + " fanout";
     }
 
     // ---- findings -------------------------------------------------------------
@@ -275,9 +286,8 @@ final class AmplificationRule {
         for (int i = 0; i < e.layers().size(); i++) {
             values.add(UsedValue.of(Attempts.layerName(e, i) + " totalAttempts", e.layers().get(i).retry().totalAttempts()));
         }
-        if (e.fanout() > 1) {
-            values.add(new UsedValue(e.location() + " fanout", String.valueOf(e.fanout()),
-                    Source.EXPLICIT, "edge " + e.location()));
+        if (!e.fanout().isKnown() || e.fanout().value() > 1) {
+            values.add(UsedValue.of(fanoutName(e), e.fanout()));
         }
         return values;
     }

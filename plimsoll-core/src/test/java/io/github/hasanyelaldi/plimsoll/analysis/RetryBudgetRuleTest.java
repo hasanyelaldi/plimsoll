@@ -149,7 +149,7 @@ class RetryBudgetRuleTest {
                 Val.unknown("retryExceptions absent"));
         Service a = new Service("a", Val.explicit(Duration.parse("PT" + callerDeadline), "spec:1"), true);
         Service b = new Service("b", Val.unknown("deadline absent"), false);
-        Edge edge = new Edge("a", "b", null, Val.unknown("idempotent absent"), 1,
+        Edge edge = new Edge("a", "b", null, Val.unknown("idempotent absent"), Val.explicit(1, "spec:2"),
                 List.of(new Layer("resilience4j", retry, Val.unknown("overallTimeout absent"))));
         ServiceGraph graph = new ServiceGraph(Map.of("a", a, "b", b), List.of(edge));
         return findings(Analyzer.analyze(graph, AnalysisOptions.defaults()), "PLM-A2a");
