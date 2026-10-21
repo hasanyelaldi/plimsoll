@@ -45,7 +45,7 @@ class ReportTest {
                           a→b layer 1 (resilience4j) maxBackoff = UNKNOWN [UNKNOWN: 'maxBackoff' absent (demo.yaml:6)]
                           a deadline = 1 s [EXPLICIT: demo.yaml:2]
                 """;
-        assertThat(TextReport.render(result(), "demo.yaml", AnalysisOptions.defaults())).startsWith(expected.stripTrailing());
+        assertThat(TextReport.render(result(), "demo.yaml", AnalysisOptions.defaults(), List.of())).startsWith(expected.stripTrailing());
     }
 
     @Test
@@ -89,5 +89,25 @@ class ReportTest {
         AnalysisResult r = Analyzer.analyze(SpecLoader.parse("services: { a: { entry: true } }\n", "x.yaml"), AnalysisOptions.defaults());
         assertThat(ReportFormat.TEXT.render(r, "x.yaml", AnalysisOptions.defaults()))
                 .contains("Findings\n  none\n").endsWith("Summary: 0 error, 0 warn, 0 info\n");
+    }
+
+    @Test
+    void notesArePrintedAsGivenAndOnlyWhenThereAreAny() {
+        List<String> notes = List.of("a: first | note", "b: second note");
+        String text = ReportFormat.TEXT.render(result(), "demo", AnalysisOptions.defaults(), notes);
+        assertThat(text).contains("\nNotes\n  a: first | note\n  b: second note\n\nSummary: ");
+        String md = ReportFormat.MARKDOWN.render(result(), "demo", AnalysisOptions.defaults(), notes);
+        assertThat(md).endsWith("\n## Notes\n\n- a: first | note\n- b: second note\n");
+
+        AnalysisResult none = Analyzer.analyze(SpecLoader.parse("services: { a: { entry: true } }\n", "x.yaml"),
+                AnalysisOptions.defaults());
+        assertThat(ReportFormat.MARKDOWN.render(none, "x", AnalysisOptions.defaults(), notes))
+                .endsWith("None.\n\n## Notes\n\n- a: first | note\n- b: second note\n");
+
+        for (ReportFormat format : ReportFormat.values()) {
+            assertThat(format.render(result(), "demo", AnalysisOptions.defaults(), List.of()))
+                    .isEqualTo(format.render(result(), "demo", AnalysisOptions.defaults()))
+                    .doesNotContain("Notes");
+        }
     }
 }

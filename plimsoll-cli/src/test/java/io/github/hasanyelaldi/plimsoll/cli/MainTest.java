@@ -135,9 +135,9 @@ class MainTest {
     }
 
     @Test
-    void missingFileDirectoryAndUsageErrorsExitWithTwo() {
+    void missingFileEmptyDirectoryAndUsageErrorsExitWithTwo() {
         assertThat(run("analyze", dir.resolve("nope.yaml").toString()).exit()).isEqualTo(2);
-        assertThat(run("analyze", dir.toString()).err()).contains("is a directory");
+        assertThat(run("analyze", dir.toString()).err()).contains("no service module found");
         assertThat(run("analyze", dir.toString()).exit()).isEqualTo(2);
         assertThat(run("analyze").exit()).isEqualTo(2);
         assertThat(run("analyze", "x.yaml", "--bogus").exit()).isEqualTo(2);

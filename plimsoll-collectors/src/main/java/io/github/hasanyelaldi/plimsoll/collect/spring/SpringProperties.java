@@ -77,8 +77,13 @@ public final class SpringProperties {
 
     /** The {@link #SERVICE_CONFIG_FILES} of a service module that exist; evidence paths relative to the module. */
     public static SpringProperties forService(Path serviceRoot) {
+        return forService(serviceRoot, serviceRoot);
+    }
+
+    /** As {@link #forService(Path)}, with evidence paths relative to {@code base}. */
+    public static SpringProperties forService(Path base, Path serviceRoot) {
         Path resources = serviceRoot.resolve("src/main/resources");
-        return load(serviceRoot, SERVICE_CONFIG_FILES.stream().map(resources::resolve).filter(Files::isRegularFile)
+        return load(base, SERVICE_CONFIG_FILES.stream().map(resources::resolve).filter(Files::isRegularFile)
                 .toList());
     }
 

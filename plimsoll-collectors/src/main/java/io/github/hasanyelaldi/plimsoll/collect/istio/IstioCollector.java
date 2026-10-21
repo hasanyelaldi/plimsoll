@@ -103,9 +103,18 @@ public final class IstioCollector {
     }
 
     public static Result collect(Path manifests, DefaultsKb kb) {
-        IstioCollector c = new IstioCollector(kb);
         Path base = Files.isDirectory(manifests) ? manifests : manifests.toAbsolutePath().getParent();
-        for (Path p : files(manifests)) {
+        return collect(base, files(manifests), kb);
+    }
+
+    /**
+     * @param base  evidence paths are relative to it
+     * @param files manifest files, read in this order
+     */
+    public static Result collect(Path base, List<Path> files, DefaultsKb kb) {
+        IstioCollector c = new IstioCollector(kb);
+        base = base.toAbsolutePath();
+        for (Path p : files) {
             c.file = base.relativize(p.toAbsolutePath()).toString().replace('\\', '/');
             String text;
             try {
