@@ -44,10 +44,10 @@ CI (GitHub Actions): `./mvnw -B verify` on every push and pull request, on Java 
 ```
 pom.xml           parent POM: modules, versions, plugin management
 plimsoll-core/    model, normalization, engine (effective policy), analysis (rules), io (spec loading)
-plimsoll-collectors/  read real config into the model: Spring Boot properties, Resilience4j (application.yml + annotations, edges-hint.yaml), HTTP clients (`client:` in edges-hint.yaml, Spring Cloud LoadBalancer retries), Istio (VirtualService, DestinationRule manifests), Spring Cloud Gateway (routes to `lb://` services and their `Retry` filters become edges); `GraphAssembler` merges them onto edges, layers outermost first (resilience4j, http-client, istio)
+plimsoll-collectors/  read real config into the model: Spring Boot properties, Resilience4j (application.yml + annotations, edges-hint.yaml), HTTP clients (`client:` in edges-hint.yaml, Spring Cloud LoadBalancer retries), Istio (VirtualService, DestinationRule manifests), Spring Cloud Gateway (routes to `lb://` services and their `Retry` filters become edges); `GraphAssembler` merges them onto edges, layers outermost first (resilience4j, http-client, istio); `ServiceAssembler` builds the services (deadline, entry) per ADR 0009
 plimsoll-cli/     picocli entry point: `plimsoll analyze <spec-or-dir>`
 examples/         hand-written specs; checkout.yaml is the canonical demo and acceptance test
-docs/adr/         decisions in MADR format (0001–0007 below)
+docs/adr/         decisions in MADR format (0001–0009 below)
 kb/defaults/      library defaults knowledge base, one YAML file per library
 ```
 
@@ -65,7 +65,7 @@ record RetryPolicy(Val<Integer> totalAttempts,              // always counts the
                    Val<Boolean> jitter, Val<Set<String>> retryOn) {}
 record Layer(String kind, RetryPolicy retry, Val<Duration> overallTimeout) {}  // resilience4j | spring-cloud-gateway | istio | http-client | generic
 record Edge(String from, String to, String operation, Val<Boolean> idempotent,
-            int fanout, List<Layer> layers) {}                                 // layers: outermost first
+            Val<Integer> fanout, List<Layer> layers) {}                        // layers: outermost first
 record Service(String name, Val<Duration> deadline, boolean entry) {}
 record ServiceGraph(Map<String, Service> services, List<Edge> edges) {}
 ```
@@ -99,7 +99,9 @@ Exit codes: `0` no finding at or above `--fail-on` (default `ERROR`), `1` otherw
 
 ## Spec format and acceptance test
 
-Durations are strings (`300ms`, `1s`). In a hand-written spec an absent `multiplier` means fixed backoff (1.0); any other absent field is `UNKNOWN`.
+Durations are strings (`300ms`, `1s`). In a hand-written spec an absent `multiplier` means fixed backoff (1.0) and an absent `fanout` means 1; any other absent field is `UNKNOWN`.
+
+In a collected graph (ADR 0009): `deadline` comes only from `deadline:` in the service's own `edges-hint.yaml`, never from its callers' or its own outbound timeouts, else `UNKNOWN`; a Spring Cloud Gateway with routes is an entry unless its hint says `entry: false`; `fanout` comes from the hint method entry, else `UNKNOWN` (A1 counts it as 1 and tags `depends-on-unknown`), and a gateway route has fanout 1.
 
 ```yaml
 # examples/checkout.yaml
@@ -178,6 +180,8 @@ Seed entries, all `verified_by: none` until checked against primary sources:
 - 0005 Testbeds: spring-petclinic-microservices (primary), TrainTicket (secondary).
 - 0006 Apache-2.0, developed in the open; name Plimsoll (after the load line marking a ship's safe limit).
 - 0007 Positioning: the novelty is extraction from real config, verified semantics and measurement, not the graph math.
+- 0008 HTTP method idempotency (RFC 9110) is a `LIBRARY_DEFAULT`.
+- 0009 Deadline, entry and fanout in collected graphs.
 
 ## Related work (cite it, do not duplicate it)
 
