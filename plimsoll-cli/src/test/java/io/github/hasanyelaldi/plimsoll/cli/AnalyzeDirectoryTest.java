@@ -91,6 +91,29 @@ class AnalyzeDirectoryTest {
     }
 
     @Test
+    void mechanismsNoCollectorModelsAreWarnings() throws IOException {
+        Path controller = petclinic().resolve("api-gateway/src/main/java/org/example/OwnerController.java");
+        Files.createDirectories(controller.getParent());
+        Files.writeString(controller, """
+                package org.example;
+
+                import org.springframework.cloud.client.circuitbreaker.ReactiveCircuitBreakerFactory;
+
+                class OwnerController {
+                    private final ReactiveCircuitBreakerFactory cbFactory = null;
+                }
+                """);
+        Result r = run("analyze", petclinic().toString(), "--fail-on", "WARN");
+        assertThat(r.exit()).isEqualTo(1);
+        assertThat(r.out()).contains("  WARN   PLM-C1   api-gateway  Spring Cloud CircuitBreaker (programmatic) "
+                + "detected, not modelled; edges from api-gateway may carry an unseen timeout layer\n"
+                + "          api-gateway Spring Cloud CircuitBreaker (programmatic) = type "
+                + "org.springframework.cloud.client.circuitbreaker.ReactiveCircuitBreakerFactory "
+                + "[EXPLICIT: api-gateway/src/main/java/org/example/OwnerController.java:6; "
+                + "https://docs.spring.io/spring-cloud-circuitbreaker/reference/]\n");
+    }
+
+    @Test
     void invalidHintExitsWithTwo() throws IOException {
         Files.writeString(petclinic().resolve("customers-service/edges-hint.yaml"), "service: customers-service\nbogus: 1\n");
         Result r = run("analyze", petclinic().toString());

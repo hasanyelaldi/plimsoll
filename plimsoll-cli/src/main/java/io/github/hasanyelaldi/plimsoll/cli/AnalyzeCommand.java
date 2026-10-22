@@ -7,6 +7,7 @@ import io.github.hasanyelaldi.plimsoll.analysis.Severity;
 import io.github.hasanyelaldi.plimsoll.collect.ProjectCollector;
 import io.github.hasanyelaldi.plimsoll.io.InvalidSpecException;
 import io.github.hasanyelaldi.plimsoll.io.SpecLoader;
+import io.github.hasanyelaldi.plimsoll.model.Detection;
 import io.github.hasanyelaldi.plimsoll.model.ServiceGraph;
 import io.github.hasanyelaldi.plimsoll.report.ReportFormat;
 import java.nio.file.Files;
@@ -62,11 +63,13 @@ final class AnalyzeCommand implements Callable<Integer> {
         }
         ServiceGraph graph;
         List<String> notes = List.of();
+        List<Detection> detections = List.of();
         try {
             if (Files.isDirectory(input)) {
                 ProjectCollector.Result collected = ProjectCollector.collect(input);
                 graph = collected.graph();
                 notes = collected.notes();
+                detections = collected.detections();
             } else {
                 graph = SpecLoader.load(input);
             }
@@ -75,7 +78,7 @@ final class AnalyzeCommand implements Callable<Integer> {
             return INVALID_INPUT;
         }
         AnalysisOptions options = new AnalysisOptions(maxAmplification);
-        AnalysisResult result = Analyzer.analyze(graph, options);
+        AnalysisResult result = Analyzer.analyze(graph, options, detections);
         spec.commandLine().getOut().print(format.render(result, name(input), options, notes));
         spec.commandLine().getOut().flush();
         return result.hasFindingAtLeast(failOn) ? FINDINGS : OK;
