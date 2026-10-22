@@ -1,5 +1,6 @@
 package io.github.hasanyelaldi.plimsoll.collect;
 
+import io.github.hasanyelaldi.plimsoll.collect.detect.Detector;
 import io.github.hasanyelaldi.plimsoll.collect.gateway.GatewayCollector;
 import io.github.hasanyelaldi.plimsoll.collect.http.HttpClientCollector;
 import io.github.hasanyelaldi.plimsoll.collect.http.HttpClientCollector.EdgeKey;
@@ -12,6 +13,7 @@ import io.github.hasanyelaldi.plimsoll.collect.spring.RequestMappingScanner.Mapp
 import io.github.hasanyelaldi.plimsoll.collect.spring.SpringProperties;
 import io.github.hasanyelaldi.plimsoll.collect.spring.SpringProperties.Property;
 import io.github.hasanyelaldi.plimsoll.io.InvalidSpecException;
+import io.github.hasanyelaldi.plimsoll.model.Detection;
 import io.github.hasanyelaldi.plimsoll.model.Edge;
 import io.github.hasanyelaldi.plimsoll.model.Layer;
 import io.github.hasanyelaldi.plimsoll.model.ServiceGraph;
@@ -47,6 +49,8 @@ import java.util.TreeMap;
  *       such a file the graph has no mesh.
  * </ul>
  *
+ * <p>Every module is also searched for mechanisms no collector models ({@link Detector}); they become PLM-C1.
+ *
  * <p>File names in evidence and notes are relative to the directory; a module's notes start with its service name.
  * Hidden directories, {@code target}, {@code build} and {@code node_modules} are skipped. Modules and manifests
  * are visited in path order and the notes are sorted, so the same directory always gives the same result.
@@ -57,10 +61,14 @@ public final class ProjectCollector {
     private static final Set<String> SKIPPED = Set.of("target", "build", "node_modules");
     private static final String ISTIO_API = "networking.istio.io/";
 
-    /** @param notes every collector's and assembler's notes; sorted, without repeats */
-    public record Result(ServiceGraph graph, List<String> notes) {
+    /**
+     * @param notes every collector's and assembler's notes; sorted, without repeats
+     * @param detections mechanisms found in the modules that no collector models; sorted, without repeats
+     */
+    public record Result(ServiceGraph graph, List<String> notes, List<Detection> detections) {
         public Result {
             notes = List.copyOf(notes);
+            detections = List.copyOf(detections);
         }
     }
 
@@ -69,10 +77,10 @@ public final class ProjectCollector {
     private ProjectCollector() {}
 
     public static Result collect(Path dir) {
-        return collect(dir, DefaultsKb.classpath());
+        return collect(dir, DefaultsKb.classpath(), Detector.classpath());
     }
 
-    public static Result collect(Path dir, DefaultsKb kb) {
+    public static Result collect(Path dir, DefaultsKb kb, Detector detector) {
         Path root = dir.toAbsolutePath().normalize();
         if (!Files.isDirectory(root)) {
             throw new InvalidSpecException(dir + ": not a directory");
@@ -101,6 +109,11 @@ public final class ProjectCollector {
             RequestMappingScanner.Result scanned = RequestMappingScanner.scan(root, m.root());
             served.put(m.name(), scanned.mappings());
             scanned.notes().forEach(n -> notes.add(m.name() + ": " + n));
+        }
+
+        List<Detection> detections = new ArrayList<>();
+        for (Module m : modules.values()) {
+            detections.addAll(detector.detect(root, m.root(), m.name(), m.props()));
         }
 
         List<Edge> edges = new ArrayList<>();
@@ -140,7 +153,8 @@ public final class ProjectCollector {
         ServiceAssembler.Result services = ServiceAssembler.assemble(assembled.edges(), hints, gateways);
         notes.addAll(services.notes());
 
-        return new Result(services.graph(), notes.stream().sorted().distinct().toList());
+        return new Result(services.graph(), notes.stream().sorted().distinct().toList(),
+                detections.stream().sorted(Detection.ORDER).distinct().toList());
     }
 
     private static List<Module> sortedByPath(Map<String, Module> modules) {

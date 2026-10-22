@@ -2,8 +2,10 @@ package io.github.hasanyelaldi.plimsoll.collect;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 
 import io.github.hasanyelaldi.plimsoll.io.InvalidSpecException;
+import io.github.hasanyelaldi.plimsoll.model.Detection;
 import io.github.hasanyelaldi.plimsoll.model.Edge;
 import io.github.hasanyelaldi.plimsoll.model.Layer;
 import io.github.hasanyelaldi.plimsoll.model.Service;
@@ -160,6 +162,34 @@ class ProjectCollectorTest {
                 .contains("gateway-repo/api-gateway/src/main/resources/application.yml:");
         assertThat(customers.idempotent().evidence()).contains(
                 "customers-service-repo/customers-service/src/main/java/org/springframework/samples/petclinic/");
+    }
+
+    @Test
+    void mechanismsNoCollectorModelsAreDetectedPerServiceInOrder() throws IOException {
+        petclinic();
+        write("visits-service/pom.xml", """
+                <project>
+                  <dependencies>
+                    <dependency>
+                      <groupId>org.springframework.retry</groupId>
+                      <artifactId>spring-retry</artifactId>
+                    </dependency>
+                  </dependencies>
+                </project>
+                """);
+        write("api-gateway/src/main/java/org/example/Client.java", """
+                package org.example;
+                import reactor.core.publisher.Mono;
+                class Client {
+                    Mono<String> get(Mono<String> m) { return m.retry(2); }
+                }
+                """);
+        ProjectCollector.Result r = ProjectCollector.collect(dir);
+        assertThat(r.detections()).extracting(Detection::service, Detection::mechanism, Detection::evidence)
+                .containsExactly(
+                        tuple("api-gateway", "Reactor retry", "api-gateway/src/main/java/org/example/Client.java:4"),
+                        tuple("visits-service", "Spring Retry", "visits-service/pom.xml:5"));
+        assertThat(ProjectCollector.collect(dir)).isEqualTo(r);
     }
 
     @Test

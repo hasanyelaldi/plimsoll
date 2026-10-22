@@ -50,6 +50,7 @@ examples/         hand-written specs; checkout.yaml is the canonical demo and ac
 findings/         runs on real testbeds (pinned commit, generated report, hand check, gaps); petclinic.md for #9
 docs/adr/         decisions in MADR format (0001–0010 below)
 kb/defaults/      library defaults knowledge base, one YAML file per library
+kb/detectors/     patterns of mechanisms no collector models (PLM-C1); `Detector` in `…collect.detect`
 ```
 
 Base package: `io.github.hasanyelaldi.plimsoll`. Collectors live in `plimsoll-collectors` (package `…plimsoll.collect`); its differential oracles bind the same fixture with real Spring Boot. With Istio manifests given, every callee is assumed to be in the mesh; a host with several HTTP routes keeps the fields they agree on, the rest is `UNKNOWN`. Maven coordinates: `io.github.hasanyelaldi:plimsoll-core`, `plimsoll-collectors`, `plimsoll-cli`.
@@ -85,7 +86,7 @@ The Resilience4j row is checked by `RetryAttemptCountingOracleTest`; the Istio r
 
 ## Analyzer rules (v0.1)
 
-Rule ids `PLM-A1` … `PLM-A5`. Severities: `ERROR`, `WARN`, `INFO`.
+Rule ids `PLM-A1` … `PLM-A5`, plus `PLM-C1` for coverage. Severities: `ERROR`, `WARN`, `INFO`.
 
 - **A1 Amplification.** Upper bound, assuming every try fails and failure propagates upward (fail-close). For each entry `s`, in topological order: `L(s) = 1`, `L(v) = Σ over edges u→v of L(u) × E(u→v) × fanout(u→v)`, where `E` is the product of `totalAttempts` across the edge's layers. Diamonds are handled by the sum. Report `L(v)` per service; `ERROR` if above the limit (default 10, `--max-amp`). A cycle reachable from an entry gives `ERROR UNBOUNDED`, and the analysis still terminates.
 - **A2a Retry budget exceeds the caller's deadline.** `W_k = k × perTry + Σ_{j=1..k-1} min(initial × multiplier^(j-1), maxBackoff)`. If `W_n > deadline(caller)`: `WARN`, "only k of n tries fit", where k is the largest with `W_k ≤ deadline`.
@@ -93,6 +94,7 @@ Rule ids `PLM-A1` … `PLM-A5`. Severities: `ERROR`, `WARN`, `INFO`.
 - **A3 Retry on a non-idempotent edge.** `ERROR`.
 - **A4 Backoff hygiene.** Retries with zero backoff: `WARN`. Retries without jitter: `INFO`.
 - **A5 Layered retries.** One edge with ≥ 2 layers where `totalAttempts > 1`: `WARN`. One path with retries on ≥ 2 edges: `WARN`.
+- **C1 Mechanism detected but not modelled.** A retry, timeout or breaker mechanism no collector models, found by the patterns in `kb/detectors/mechanisms.yaml` (dependency, annotation, type, call, config key; each with a doc link): `WARN`, one finding per service and mechanism, every match with `file:line`. Only collected directories produce it, so hand-written specs never do.
 
 Unknown inputs: compute with what is known, tag the finding `depends-on-unknown` and name the unknown value. Never substitute a guess.
 

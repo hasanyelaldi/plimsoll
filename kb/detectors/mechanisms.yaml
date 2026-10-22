@@ -1,0 +1,148 @@
+# Retry, timeout and breaker mechanisms that no collector models (PLM-C1, issue #23).
+#
+# A match means the edges from that service may carry a layer the graph does not have. Detection is cheap and
+# pattern-based; it never yields a value, only a finding that names the match.
+#
+# kind:
+#   dependency  groupId:artifactId of a direct, non-test dependency in pom.xml or build.gradle(.kts);
+#               the artifactId may end with '*'
+#   annotation  fully qualified annotation type; it must resolve through the file's imports
+#   type        fully qualified class or interface; it must resolve through the file's imports
+#   call        <import prefix>#<method>: a call of <method> in a file importing something under the prefix
+#   config-key  Spring property prefix (relaxed binding), in the service's application.yml
+# effect: the kind of layer it can add (retry, timeout, breaker)
+#
+# Mechanisms Plimsoll collects (Resilience4j annotations and properties, Spring Cloud Gateway Retry, Spring Cloud
+# LoadBalancer retry, Istio) are not listed here.
+
+- mechanism: Spring Retry
+  effect: retry
+  kind: dependency
+  pattern: org.springframework.retry:spring-retry
+  source: https://github.com/spring-projects/spring-retry
+
+- mechanism: Spring Retry
+  effect: retry
+  kind: annotation
+  pattern: org.springframework.retry.annotation.Retryable
+  source: https://github.com/spring-projects/spring-retry
+
+- mechanism: Spring Retry
+  effect: retry
+  kind: type
+  pattern: org.springframework.retry.support.RetryTemplate
+  source: https://github.com/spring-projects/spring-retry
+
+- mechanism: Spring Framework resilience
+  effect: retry
+  kind: annotation
+  pattern: org.springframework.resilience.annotation.Retryable
+  source: https://docs.spring.io/spring-framework/reference/core/resilience.html
+
+- mechanism: Spring Framework resilience
+  effect: retry
+  kind: type
+  pattern: org.springframework.core.retry.RetryTemplate
+  source: https://docs.spring.io/spring-framework/reference/core/resilience.html
+
+- mechanism: Reactor retry
+  effect: retry
+  kind: call
+  pattern: reactor.core.publisher#retry
+  source: https://projectreactor.io/docs/core/release/reference/coreFeatures/error-handling.html
+
+- mechanism: Reactor retry
+  effect: retry
+  kind: call
+  pattern: reactor.core.publisher#retryWhen
+  source: https://projectreactor.io/docs/core/release/reference/coreFeatures/error-handling.html
+
+- mechanism: Feign Retryer
+  effect: retry
+  kind: type
+  pattern: feign.Retryer
+  source: https://github.com/OpenFeign/feign
+
+- mechanism: Feign Retryer
+  effect: retry
+  kind: config-key
+  pattern: spring.cloud.openfeign.client.config
+  source: https://docs.spring.io/spring-cloud-openfeign/reference/spring-cloud-openfeign.html
+
+- mechanism: OkHttp connection retry
+  effect: retry
+  kind: dependency
+  pattern: com.squareup.okhttp3:okhttp
+  source: https://javadoc.io/doc/com.squareup.okhttp3/okhttp/4.12.0/okhttp3/OkHttpClient.Builder.html
+
+- mechanism: Apache HttpClient 5 retry strategy
+  effect: retry
+  kind: dependency
+  pattern: org.apache.httpcomponents.client5:httpclient5
+  source: https://hc.apache.org/httpcomponents-client-5.5.x/current/httpclient5/apidocs/org/apache/hc/client5/http/impl/DefaultHttpRequestRetryStrategy.html
+
+- mechanism: Failsafe
+  effect: retry
+  kind: dependency
+  pattern: dev.failsafe:failsafe
+  source: https://failsafe.dev/retry/
+
+- mechanism: MicroProfile Fault Tolerance
+  effect: retry
+  kind: annotation
+  pattern: org.eclipse.microprofile.faulttolerance.Retry
+  source: https://download.eclipse.org/microprofile/microprofile-fault-tolerance-4.1/microprofile-fault-tolerance-spec-4.1.html
+
+- mechanism: MicroProfile Fault Tolerance
+  effect: timeout
+  kind: annotation
+  pattern: org.eclipse.microprofile.faulttolerance.Timeout
+  source: https://download.eclipse.org/microprofile/microprofile-fault-tolerance-4.1/microprofile-fault-tolerance-spec-4.1.html
+
+- mechanism: Hystrix
+  effect: timeout
+  kind: annotation
+  pattern: com.netflix.hystrix.contrib.javanica.annotation.HystrixCommand
+  source: https://github.com/Netflix/Hystrix/wiki/Configuration
+
+- mechanism: gRPC retry policy
+  effect: retry
+  kind: call
+  pattern: io.grpc#defaultServiceConfig
+  source: https://grpc.io/docs/guides/retry/
+
+- mechanism: Spring Cloud CircuitBreaker (programmatic)
+  effect: timeout
+  kind: type
+  pattern: org.springframework.cloud.client.circuitbreaker.CircuitBreakerFactory
+  source: https://docs.spring.io/spring-cloud-circuitbreaker/reference/
+
+- mechanism: Spring Cloud CircuitBreaker (programmatic)
+  effect: timeout
+  kind: type
+  pattern: org.springframework.cloud.client.circuitbreaker.ReactiveCircuitBreakerFactory
+  source: https://docs.spring.io/spring-cloud-circuitbreaker/reference/
+
+- mechanism: Spring Cloud CircuitBreaker (programmatic)
+  effect: timeout
+  kind: type
+  pattern: org.springframework.cloud.circuitbreaker.resilience4j.ReactiveResilience4JCircuitBreakerFactory
+  source: https://docs.spring.io/spring-cloud-circuitbreaker/reference/
+
+- mechanism: Spring Cloud CircuitBreaker (programmatic)
+  effect: timeout
+  kind: type
+  pattern: org.springframework.cloud.circuitbreaker.resilience4j.Resilience4JCircuitBreakerFactory
+  source: https://docs.spring.io/spring-cloud-circuitbreaker/reference/
+
+- mechanism: Spring AI retry
+  effect: retry
+  kind: dependency
+  pattern: org.springframework.ai:spring-ai-starter-model-*
+  source: https://docs.spring.io/spring-ai/reference/api/chat/openai-chat.html
+
+- mechanism: Spring AI retry
+  effect: retry
+  kind: config-key
+  pattern: spring.ai.retry
+  source: https://docs.spring.io/spring-ai/reference/api/chat/openai-chat.html
