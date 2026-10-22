@@ -45,10 +45,10 @@ CI (GitHub Actions): `./mvnw -B verify` on every push and pull request, on Java 
 pom.xml           parent POM: modules, versions, plugin management
 plimsoll-core/    model, normalization, engine (effective policy), analysis (rules), io (spec loading)
 plimsoll-collectors/  read real config into the model: Spring Boot properties, Resilience4j (application.yml + annotations, edges-hint.yaml), HTTP clients (`client:` in edges-hint.yaml, Spring Cloud LoadBalancer retries), Istio (VirtualService, DestinationRule manifests), Spring Cloud Gateway (routes to `lb://` services and their `Retry` filters become edges); `GraphAssembler` merges them onto edges, layers outermost first (resilience4j, http-client, istio); `ServiceAssembler` builds the services (deadline, entry) per ADR 0009; `ProjectCollector` finds the service modules and Istio manifests of a directory and runs all of the above
-plimsoll-cli/     picocli entry point: `plimsoll analyze <spec-or-dir>` (a directory is collected; collector notes are printed sorted in a Notes section)
+plimsoll-cli/     picocli entry point: `plimsoll analyze <spec-or-dir>` (a directory is collected; collector notes are printed sorted in a Notes section; several repositories are analysed by checking them out side by side under one directory, ADR 0010)
 examples/         hand-written specs; checkout.yaml is the canonical demo and acceptance test
 findings/         runs on real testbeds (pinned commit, generated report, hand check, gaps); petclinic.md for #9
-docs/adr/         decisions in MADR format (0001–0009 below)
+docs/adr/         decisions in MADR format (0001–0010 below)
 kb/defaults/      library defaults knowledge base, one YAML file per library
 ```
 
@@ -183,6 +183,7 @@ Seed entries, all `verified_by: none` until checked against primary sources:
 - 0007 Positioning: the novelty is extraction from real config, verified semantics and measurement, not the graph math.
 - 0008 HTTP method idempotency (RFC 9110) is a `LIBRARY_DEFAULT`.
 - 0009 Deadline, entry and fanout in collected graphs.
+- 0010 Several repositories: check them out side by side and analyse the parent directory; fragments + merge parked (#40).
 
 ## Related work (cite it, do not duplicate it)
 
