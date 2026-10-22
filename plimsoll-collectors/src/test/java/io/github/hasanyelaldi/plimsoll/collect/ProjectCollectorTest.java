@@ -131,6 +131,38 @@ class ProjectCollectorTest {
     }
 
     @Test
+    void checkoutsOfSeveralRepositoriesSideBySideGiveOneGraph() throws IOException {
+        copy("projects/petclinic-gateway", "gateway-repo/api-gateway");
+        for (String s : new String[] {"customers-service", "vets-service", "visits-service"}) {
+            copy("projects/petclinic-" + s, s + "-repo/" + s);
+        }
+        copy("istio/petclinic", "mesh-repo/k8s");
+        write("customers-service-repo/customers-service/edges-hint.yaml",
+                "service: customers-service\ndeadline: 2s\n");
+        for (String repo : new String[] {"gateway-repo", "customers-service-repo", "vets-service-repo",
+                "visits-service-repo", "mesh-repo"}) {
+            write(repo + "/.git/HEAD", "ref: refs/heads/main\n");
+        }
+        ProjectCollector.Result r = ProjectCollector.collect(dir);
+
+        assertThat(r.graph().services().keySet()).containsExactly(
+                "api-gateway", "customers-service", "genai-service", "vets-service", "visits-service");
+        assertThat(r.graph().services().get("customers-service").deadline()).isEqualTo(
+                Val.explicit(Duration.ofSeconds(2), "customers-service-repo/customers-service/edges-hint.yaml:2"));
+        assertThat(r.graph().edges()).extracting(Edge::to)
+                .containsExactly("vets-service", "visits-service", "customers-service", "genai-service");
+        assertThat(r.graph().edges()).allSatisfy(e -> assertThat(e.layers()).extracting(Layer::kind)
+                .containsExactly("spring-cloud-gateway", "istio"));
+        Edge customers = edge(r, "customers-service", "/api/customer/**");
+        assertThat(innermost(customers).retry().totalAttempts())
+                .isEqualTo(Val.explicit(4, "mesh-repo/k8s/mesh.yaml:11 (attempts 3 + 1)"));
+        assertThat(customers.layers().get(0).retry().totalAttempts().evidence())
+                .contains("gateway-repo/api-gateway/src/main/resources/application.yml:");
+        assertThat(customers.idempotent().evidence()).contains(
+                "customers-service-repo/customers-service/src/main/java/org/springframework/samples/petclinic/");
+    }
+
+    @Test
     void buildOutputAndHiddenDirectoriesAreSkipped() throws IOException {
         copy("projects/petclinic-gateway", "api-gateway");
         copy("istio/petclinic", "target/k8s");
