@@ -18,6 +18,6 @@ public record Detection(String service, String mechanism, String effect, String 
     /** Service, then mechanism, then evidence, then pattern. */
     public static final Comparator<Detection> ORDER = Comparator.comparing(Detection::service)
             .thenComparing(Detection::mechanism)
-            .thenComparing(Detection::evidence)
+            .thenComparing(Detection::evidence, Evidence.ORDER)
             .thenComparing(Detection::pattern);
 }

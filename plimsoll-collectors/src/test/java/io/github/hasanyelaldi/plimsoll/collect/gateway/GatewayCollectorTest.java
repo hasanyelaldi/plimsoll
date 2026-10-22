@@ -138,8 +138,7 @@ class GatewayCollectorTest {
                 .anyMatch(n -> n.contains("CircuitBreaker 'genaiCircuitBreaker' (route genai-service filters[1])")
                         && n.contains("application.yml:46"))
                 .anyMatch(n -> n.contains("route genai-service: CircuitBreaker and Retry both apply")
-                        && n.contains("UNKNOWN"))
-                .anyMatch(n -> n.contains("document skipped"));
+                        && n.contains("UNKNOWN"));
     }
 
     // ---- operations and idempotency --------------------------------------

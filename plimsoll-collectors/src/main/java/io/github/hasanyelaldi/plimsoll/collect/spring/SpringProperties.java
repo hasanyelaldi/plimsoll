@@ -21,6 +21,7 @@ import java.util.Optional;
 import java.util.SortedSet;
 import java.util.TreeSet;
 import java.util.function.Predicate;
+import java.util.stream.Stream;
 
 /**
  * Spring Boot properties read from {@code application.yml} files, flattened to property paths with the line each
@@ -32,8 +33,9 @@ import java.util.function.Predicate;
  * <p>A list is available both as one property ({@link Property#items()}, when every item is a scalar) and item by
  * item under its index, {@code routes[0].id}, as Spring Boot binds it; see {@link #indices(String...)}.
  *
- * <p>Only the default profile is read. Documents activated by {@code spring.config.activate.*} are skipped and
- * reported in {@link #notes()}, never merged silently.
+ * <p>Only the default profile is read. Documents activated by {@code spring.config.activate.*} are skipped, never
+ * merged silently. They are listed in {@link #unread()}, together with profile activations, config imports, other
+ * config files of the module, and placeholders in the properties the collectors read.
  */
 public final class SpringProperties {
 
@@ -63,16 +65,31 @@ public final class SpringProperties {
         }
     }
 
+    /**
+     * Configuration that was not read.
+     *
+     * @param kind {@code config-server}, {@code config-import}, {@code config-file}, {@code profile-document},
+     *             {@code profile} or {@code placeholder}
+     * @param evidence {@code file:line}, or the file for a whole file
+     */
+    public record Unread(String kind, String reference, String evidence) {}
+
+    /** Property prefixes whose {@code ${...}} values are reported: the ones the collectors read. */
+    static final List<List<String>> COLLECTED_PREFIXES = List.of(
+            List.of("resilience4j"),
+            List.of("spring", "cloud", "gateway"),
+            List.of("spring", "cloud", "loadbalancer"));
+
     /** Under {@code src/main/resources}. Spring Boot reads {@code config/} after the root, so it overrides it. */
     public static final List<String> SERVICE_CONFIG_FILES = List.of(
             "application.yml", "application.yaml", "config/application.yml", "config/application.yaml");
 
     private final List<Property> properties;
-    private final List<String> notes;
+    private final List<Unread> unread;
 
-    private SpringProperties(List<Property> properties, List<String> notes) {
+    private SpringProperties(List<Property> properties, List<Unread> unread) {
         this.properties = List.copyOf(properties);
-        this.notes = List.copyOf(notes);
+        this.unread = List.copyOf(unread);
     }
 
     /** The {@link #SERVICE_CONFIG_FILES} of a service module that exist; evidence paths relative to the module. */
@@ -83,8 +100,31 @@ public final class SpringProperties {
     /** As {@link #forService(Path)}, with evidence paths relative to {@code base}. */
     public static SpringProperties forService(Path base, Path serviceRoot) {
         Path resources = serviceRoot.resolve("src/main/resources");
-        return load(base, SERVICE_CONFIG_FILES.stream().map(resources::resolve).filter(Files::isRegularFile)
-                .toList());
+        SpringProperties props = load(base, SERVICE_CONFIG_FILES.stream().map(resources::resolve)
+                .filter(Files::isRegularFile).toList());
+        List<Unread> unread = new ArrayList<>(props.unread);
+        for (Path dir : List.of(resources, resources.resolve("config"))) {
+            otherConfigFiles(base, resources, dir).forEach(f -> unread.add(new Unread("config-file",
+                    f.substring(f.lastIndexOf('/') + 1), f)));
+        }
+        return new SpringProperties(props.properties, unread);
+    }
+
+    /** {@code application*} and {@code bootstrap*} files in {@code dir} other than {@link #SERVICE_CONFIG_FILES}. */
+    private static List<String> otherConfigFiles(Path base, Path resources, Path dir) {
+        if (!Files.isDirectory(dir)) {
+            return List.of();
+        }
+        try (Stream<Path> list = Files.list(dir)) {
+            return list.filter(Files::isRegularFile)
+                    .filter(p -> p.getFileName().toString().matches("(application|bootstrap).*\\.(properties|ya?ml)"))
+                    .filter(p -> !SERVICE_CONFIG_FILES.contains(resources.relativize(p).toString().replace('\\', '/')))
+                    .map(p -> base.relativize(p).toString().replace('\\', '/'))
+                    .sorted()
+                    .toList();
+        } catch (IOException e) {
+            throw new InvalidSpecException(dir + ": cannot list: " + e.getMessage(), e);
+        }
     }
 
     /**
@@ -93,7 +133,7 @@ public final class SpringProperties {
      */
     public static SpringProperties load(Path root, List<Path> files) {
         List<Property> props = new ArrayList<>();
-        List<String> notes = new ArrayList<>();
+        List<Unread> unread = new ArrayList<>();
         for (Path file : files) {
             String name = root.relativize(file).toString().replace('\\', '/');
             String text;
@@ -102,20 +142,20 @@ public final class SpringProperties {
             } catch (IOException e) {
                 throw new InvalidSpecException(name + ": cannot read: " + e.getMessage(), e);
             }
-            read(text, name, props, notes);
+            read(text, name, props, unread);
         }
-        return new SpringProperties(props, notes);
+        return new SpringProperties(props, unread);
     }
 
     /** @param fileName used in {@code file:line} evidence */
     public static SpringProperties parse(String yaml, String fileName) {
         List<Property> props = new ArrayList<>();
-        List<String> notes = new ArrayList<>();
-        read(yaml, fileName, props, notes);
-        return new SpringProperties(props, notes);
+        List<Unread> unread = new ArrayList<>();
+        read(yaml, fileName, props, unread);
+        return new SpringProperties(props, unread);
     }
 
-    private static void read(String yaml, String fileName, List<Property> out, List<String> notes) {
+    private static void read(String yaml, String fileName, List<Property> out, List<Unread> unread) {
         for (Node doc : YamlTree.parseAll(yaml, fileName)) {
             List<Property> docProps = new ArrayList<>();
             if (!(doc instanceof MapNode m)) {
@@ -126,15 +166,26 @@ public final class SpringProperties {
                     .filter(p -> startsWith(p.path(), "spring", "config", "activate"))
                     .findFirst();
             if (activation.isPresent()) {
-                notes.add(fileName + ":" + doc.line() + ": document skipped, it is activated by "
-                        + String.join(".", activation.get().path()) + " (only the default profile is read)");
+                unread.add(new Unread("profile-document", assignment(activation.get()), fileName + ":" + doc.line()));
                 continue;
             }
-            docProps.stream()
-                    .filter(p -> startsWith(p.path(), "spring", "profiles", "active")
-                            || startsWith(p.path(), "spring", "profiles", "include"))
-                    .forEach(p -> notes.add(p.evidence() + ": " + String.join(".", p.path())
-                            + " activates profiles; their documents and files are not applied"));
+            for (Property p : docProps) {
+                if (p.path().getLast().startsWith("[")) {
+                    continue;  // a scalar list item; the whole list is a property of its own
+                }
+                if (startsWith(p.path(), "spring", "profiles", "active")
+                        || startsWith(p.path(), "spring", "profiles", "include")) {
+                    unread.add(new Unread("profile", assignment(p), p.evidence()));
+                } else if (startsWith(p.path(), "spring", "config", "import")) {
+                    for (String location : p.values()) {
+                        boolean server = location.replaceFirst("^optional:", "").startsWith("configserver:");
+                        unread.add(new Unread(server ? "config-server" : "config-import", location, p.evidence()));
+                    }
+                } else if (p.isPlaceholder() && COLLECTED_PREFIXES.stream()
+                        .anyMatch(prefix -> startsWith(p.path(), prefix.toArray(String[]::new)))) {
+                    unread.add(new Unread("placeholder", assignment(p), p.evidence()));
+                }
+            }
             out.addAll(docProps);
         }
     }
@@ -259,9 +310,14 @@ public final class SpringProperties {
                 .toList();
     }
 
-    /** Skipped documents and other parts of the configuration that were not applied. */
-    public List<String> notes() {
-        return notes;
+    /** Configuration that was not read, in file order. */
+    public List<Unread> unread() {
+        return unread;
+    }
+
+    /** {@code a.b.c = value} as written. */
+    private static String assignment(Property p) {
+        return String.join(".", p.path()) + " = " + (p.text() != null ? p.text() : String.join(",", p.items()));
     }
 
     private Optional<Property> last(Predicate<List<String>> match) {

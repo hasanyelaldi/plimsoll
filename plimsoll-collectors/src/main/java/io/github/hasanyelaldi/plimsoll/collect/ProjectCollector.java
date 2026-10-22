@@ -17,6 +17,7 @@ import io.github.hasanyelaldi.plimsoll.model.Detection;
 import io.github.hasanyelaldi.plimsoll.model.Edge;
 import io.github.hasanyelaldi.plimsoll.model.Layer;
 import io.github.hasanyelaldi.plimsoll.model.ServiceGraph;
+import io.github.hasanyelaldi.plimsoll.model.UnreadSource;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileVisitResult;
@@ -49,7 +50,8 @@ import java.util.TreeMap;
  *       such a file the graph has no mesh.
  * </ul>
  *
- * <p>Every module is also searched for mechanisms no collector models ({@link Detector}); they become PLM-C1.
+ * <p>Every module is also searched for mechanisms no collector models ({@link Detector}); they become PLM-C1. Its
+ * configuration that was not read (profiles, imports, other config files) is listed in {@link Result#unreadSources()}.
  *
  * <p>File names in evidence and notes are relative to the directory; a module's notes start with its service name.
  * Hidden directories, {@code target}, {@code build} and {@code node_modules} are skipped. Modules and manifests
@@ -64,11 +66,14 @@ public final class ProjectCollector {
     /**
      * @param notes every collector's and assembler's notes; sorted, without repeats
      * @param detections mechanisms found in the modules that no collector models; sorted, without repeats
+     * @param unreadSources configuration the modules refer to or ship but that was not read; sorted, without repeats
      */
-    public record Result(ServiceGraph graph, List<String> notes, List<Detection> detections) {
+    public record Result(ServiceGraph graph, List<String> notes, List<Detection> detections,
+            List<UnreadSource> unreadSources) {
         public Result {
             notes = List.copyOf(notes);
             detections = List.copyOf(detections);
+            unreadSources = List.copyOf(unreadSources);
         }
     }
 
@@ -112,8 +117,11 @@ public final class ProjectCollector {
         }
 
         List<Detection> detections = new ArrayList<>();
+        List<UnreadSource> unread = new ArrayList<>();
         for (Module m : modules.values()) {
             detections.addAll(detector.detect(root, m.root(), m.name(), m.props()));
+            m.props().unread().forEach(u -> unread.add(new UnreadSource(m.name(), u.kind(), u.reference(),
+                    u.evidence())));
         }
 
         List<Edge> edges = new ArrayList<>();
@@ -131,8 +139,6 @@ public final class ProjectCollector {
                 HttpClientCollector.Result http = HttpClientCollector.collect(m.props(), m.hint(), kb);
                 httpLayers.putAll(http.layers());
                 http.notes().forEach(n -> notes.add(m.name() + ": " + n));
-            } else {
-                m.props().notes().forEach(n -> notes.add(m.name() + ": " + n));
             }
             if (GatewayCollector.configuresGateway(m.props())) {
                 GatewayCollector.Result gateway = GatewayCollector.collect(m.props(), m.name(), served, m.hint(), kb);
@@ -154,7 +160,8 @@ public final class ProjectCollector {
         notes.addAll(services.notes());
 
         return new Result(services.graph(), notes.stream().sorted().distinct().toList(),
-                detections.stream().sorted(Detection.ORDER).distinct().toList());
+                detections.stream().sorted(Detection.ORDER).distinct().toList(),
+                unread.stream().sorted(UnreadSource.ORDER).distinct().toList());
     }
 
     private static List<Module> sortedByPath(Map<String, Module> modules) {

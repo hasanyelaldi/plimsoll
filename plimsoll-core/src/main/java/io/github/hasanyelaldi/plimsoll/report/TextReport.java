@@ -5,13 +5,14 @@ import io.github.hasanyelaldi.plimsoll.analysis.AnalysisResult;
 import io.github.hasanyelaldi.plimsoll.analysis.Finding;
 import io.github.hasanyelaldi.plimsoll.analysis.ServiceAmplification;
 import io.github.hasanyelaldi.plimsoll.analysis.UsedValue;
+import io.github.hasanyelaldi.plimsoll.model.UnreadSource;
 import java.util.List;
 
 final class TextReport {
 
     private TextReport() {}
 
-    static String render(AnalysisResult r, String specName, AnalysisOptions options, List<String> notes) {
+    static String render(AnalysisResult r, String specName, AnalysisOptions options, Collected collected) {
         StringBuilder out = new StringBuilder();
         out.append("Plimsoll analysis of ").append(specName).append('\n');
 
@@ -36,9 +37,20 @@ final class TextReport {
             }
         }
 
-        if (!notes.isEmpty()) {
+        if (!collected.unreadSources().isEmpty()) {
+            out.append("\nSources not read\n");
+            List<UnreadSource> unread = collected.unreadSources();
+            int service = unread.stream().mapToInt(u -> u.service().length()).max().orElse(0);
+            int kind = unread.stream().mapToInt(u -> u.kind().length()).max().orElse(0);
+            for (UnreadSource u : unread) {
+                out.append("  ").append(pad(u.service(), service)).append("  ").append(pad(u.kind(), kind))
+                        .append("  ").append(u.reference()).append("  (").append(u.evidence()).append(")\n");
+            }
+        }
+
+        if (!collected.notes().isEmpty()) {
             out.append("\nNotes\n");
-            for (String n : notes) {
+            for (String n : collected.notes()) {
                 out.append("  ").append(n).append('\n');
             }
         }

@@ -9,6 +9,7 @@ import io.github.hasanyelaldi.plimsoll.model.Detection;
 import io.github.hasanyelaldi.plimsoll.model.Edge;
 import io.github.hasanyelaldi.plimsoll.model.Layer;
 import io.github.hasanyelaldi.plimsoll.model.Service;
+import io.github.hasanyelaldi.plimsoll.model.UnreadSource;
 import io.github.hasanyelaldi.plimsoll.model.Val;
 import java.io.IOException;
 import java.io.UncheckedIOException;
@@ -120,9 +121,8 @@ class ProjectCollectorTest {
                 .startsWith("'deadline' absent (gw/edges-hint.yaml:1)");
         assertThat(r.notes()).anyMatch(n -> n.startsWith("api-gateway: ") && n.contains("notInTheHint")
                 && n.endsWith("is annotated but no edges-hint.yaml entry names it; not analysed"));
-        assertThat(r.notes()).contains(
-                "api-gateway: gw/src/main/resources/application-docker.yml: not read (only application.yml / "
-                        + "application.yaml of the default profile)");
+        assertThat(r.unreadSources()).contains(new UnreadSource("api-gateway", "config-file",
+                "application-docker.yml", "gw/src/main/resources/application-docker.yml"));
     }
 
     @Test
