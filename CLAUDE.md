@@ -47,6 +47,7 @@ plimsoll-core/    model, normalization, engine (effective policy), analysis (rul
 plimsoll-collectors/  read real config into the model: Spring Boot properties, Resilience4j (application.yml + annotations, edges-hint.yaml), HTTP clients (`client:` in edges-hint.yaml, Spring Cloud LoadBalancer retries), Istio (VirtualService, DestinationRule manifests), Spring Cloud Gateway (routes to `lb://` services and their `Retry` filters become edges); `GraphAssembler` merges them onto edges, layers outermost first (resilience4j, http-client, istio); `ServiceAssembler` builds the services (deadline, entry) per ADR 0009; `ProjectCollector` finds the service modules and Istio manifests of a directory and runs all of the above
 plimsoll-cli/     picocli entry point: `plimsoll analyze <spec-or-dir>` (a directory is collected; collector notes are printed sorted in a Notes section)
 examples/         hand-written specs; checkout.yaml is the canonical demo and acceptance test
+findings/         runs on real testbeds (pinned commit, generated report, hand check, gaps); petclinic.md for #9
 docs/adr/         decisions in MADR format (0001–0009 below)
 kb/defaults/      library defaults knowledge base, one YAML file per library
 ```
