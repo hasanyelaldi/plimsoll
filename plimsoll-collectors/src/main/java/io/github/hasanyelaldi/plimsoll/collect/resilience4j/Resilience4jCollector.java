@@ -13,8 +13,6 @@ import io.github.hasanyelaldi.plimsoll.model.Edge;
 import io.github.hasanyelaldi.plimsoll.model.Layer;
 import io.github.hasanyelaldi.plimsoll.model.RetryPolicy;
 import io.github.hasanyelaldi.plimsoll.model.Val;
-import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -24,7 +22,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
-import java.util.stream.Stream;
 
 /**
  * Collects the Resilience4j layers of one Spring Boot service: {@code application.yml} for the instances,
@@ -79,12 +76,9 @@ public final class Resilience4jCollector {
 
     /** @param base file names in evidence and notes are relative to it */
     public static Result collect(Path base, Path serviceRoot, EdgesHint hint, DefaultsKb kb) {
-        Path resources = serviceRoot.resolve("src/main/resources");
         SpringProperties props = SpringProperties.forService(base, serviceRoot);
 
         Resilience4jCollector c = new Resilience4jCollector(Resilience4jConfig.of(props, kb), kb);
-        c.noteUnreadConfig(base, resources);
-        c.notes.addAll(props.notes());
 
         List<ScannedClass> classes = AnnotationScanner.scan(base, serviceRoot.resolve("src/main/java"));
         List<Edge> edges = new ArrayList<>();
@@ -95,21 +89,6 @@ public final class Resilience4jCollector {
             mapped.add(h.className());
         }
         return new Result(edges, unmapped(classes, mapped), c.notes);
-    }
-
-    private void noteUnreadConfig(Path root, Path resources) {
-        if (!Files.isDirectory(resources)) {
-            return;
-        }
-        try (Stream<Path> list = Files.list(resources)) {
-            list.map(p -> p.getFileName().toString())
-                    .filter(n -> n.matches("application.*\\.(properties|ya?ml)") && !SpringProperties.SERVICE_CONFIG_FILES.contains(n))
-                    .sorted()
-                    .forEach(n -> notes.add(root.relativize(resources.resolve(n)).toString().replace('\\', '/')
-                            + ": not read (only application.yml / application.yaml of the default profile)"));
-        } catch (IOException e) {
-            throw new InvalidSpecException(resources + ": cannot list: " + e.getMessage(), e);
-        }
     }
 
     private Edge edge(String from, Hint h, List<ScannedClass> classes) {

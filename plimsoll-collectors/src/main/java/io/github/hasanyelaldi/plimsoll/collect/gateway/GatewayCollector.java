@@ -173,7 +173,6 @@ public final class GatewayCollector {
             service = fallbackName;
             c.notes.add("spring.application.name not set; the gateway is named after its directory, " + fallbackName);
         }
-        c.notes.addAll(props.notes());
         if (hint != null) {
             if (!hint.service().equals(service)) {
                 throw new InvalidSpecException("edges hint is for service " + hint.service() + ", the gateway is "
