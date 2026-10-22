@@ -9,6 +9,7 @@ import io.github.hasanyelaldi.plimsoll.io.InvalidSpecException;
 import io.github.hasanyelaldi.plimsoll.io.SpecLoader;
 import io.github.hasanyelaldi.plimsoll.model.Detection;
 import io.github.hasanyelaldi.plimsoll.model.ServiceGraph;
+import io.github.hasanyelaldi.plimsoll.report.Collected;
 import io.github.hasanyelaldi.plimsoll.report.ReportFormat;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -62,14 +63,14 @@ final class AnalyzeCommand implements Callable<Integer> {
             return INVALID_INPUT;
         }
         ServiceGraph graph;
-        List<String> notes = List.of();
+        Collected collected = Collected.NONE;
         List<Detection> detections = List.of();
         try {
             if (Files.isDirectory(input)) {
-                ProjectCollector.Result collected = ProjectCollector.collect(input);
-                graph = collected.graph();
-                notes = collected.notes();
-                detections = collected.detections();
+                ProjectCollector.Result project = ProjectCollector.collect(input);
+                graph = project.graph();
+                collected = new Collected(project.notes(), project.unreadSources());
+                detections = project.detections();
             } else {
                 graph = SpecLoader.load(input);
             }
@@ -79,7 +80,7 @@ final class AnalyzeCommand implements Callable<Integer> {
         }
         AnalysisOptions options = new AnalysisOptions(maxAmplification);
         AnalysisResult result = Analyzer.analyze(graph, options, detections);
-        spec.commandLine().getOut().print(format.render(result, name(input), options, notes));
+        spec.commandLine().getOut().print(format.render(result, name(input), options, collected));
         spec.commandLine().getOut().flush();
         return result.hasFindingAtLeast(failOn) ? FINDINGS : OK;
     }

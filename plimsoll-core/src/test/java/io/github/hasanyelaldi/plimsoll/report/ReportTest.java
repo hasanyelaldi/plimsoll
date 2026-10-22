@@ -7,6 +7,7 @@ import io.github.hasanyelaldi.plimsoll.analysis.AnalysisResult;
 import io.github.hasanyelaldi.plimsoll.analysis.Analyzer;
 import io.github.hasanyelaldi.plimsoll.analysis.Finding;
 import io.github.hasanyelaldi.plimsoll.io.SpecLoader;
+import io.github.hasanyelaldi.plimsoll.model.UnreadSource;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -45,7 +46,7 @@ class ReportTest {
                           a→b layer 1 (resilience4j) maxBackoff = UNKNOWN [UNKNOWN: 'maxBackoff' absent (demo.yaml:6)]
                           a deadline = 1 s [EXPLICIT: demo.yaml:2]
                 """;
-        assertThat(TextReport.render(result(), "demo.yaml", AnalysisOptions.defaults(), List.of())).startsWith(expected.stripTrailing());
+        assertThat(TextReport.render(result(), "demo.yaml", AnalysisOptions.defaults(), Collected.NONE)).startsWith(expected.stripTrailing());
     }
 
     @Test
@@ -93,7 +94,7 @@ class ReportTest {
 
     @Test
     void notesArePrintedAsGivenAndOnlyWhenThereAreAny() {
-        List<String> notes = List.of("a: first | note", "b: second note");
+        Collected notes = new Collected(List.of("a: first | note", "b: second note"), List.of());
         String text = ReportFormat.TEXT.render(result(), "demo", AnalysisOptions.defaults(), notes);
         assertThat(text).contains("\nNotes\n  a: first | note\n  b: second note\n\nSummary: ");
         String md = ReportFormat.MARKDOWN.render(result(), "demo", AnalysisOptions.defaults(), notes);
@@ -105,9 +106,44 @@ class ReportTest {
                 .endsWith("None.\n\n## Notes\n\n- a: first | note\n- b: second note\n");
 
         for (ReportFormat format : ReportFormat.values()) {
-            assertThat(format.render(result(), "demo", AnalysisOptions.defaults(), List.of()))
+            assertThat(format.render(result(), "demo", AnalysisOptions.defaults(), Collected.NONE))
                     .isEqualTo(format.render(result(), "demo", AnalysisOptions.defaults()))
-                    .doesNotContain("Notes");
+                    .doesNotContain("Notes")
+                    .doesNotContain("Sources not read");
         }
+    }
+
+    @Test
+    void unreadSourcesComeBeforeNotesWithAlignedColumns() {
+        Collected collected = new Collected(List.of("gw: a note"), List.of(
+                new UnreadSource("gw", "config-server", "optional:configserver:${URL:http://x|y}",
+                        "gw/src/main/resources/application.yml:5"),
+                new UnreadSource("orders", "profile", "spring.profiles.active = docker",
+                        "orders/src/main/resources/application.yml:2")));
+        String text = ReportFormat.TEXT.render(result(), "demo", AnalysisOptions.defaults(), collected);
+        assertThat(text).contains("""
+
+                Sources not read
+                  gw      config-server  optional:configserver:${URL:http://x|y}  (gw/src/main/resources/application.yml:5)
+                  orders  profile        spring.profiles.active = docker  (orders/src/main/resources/application.yml:2)
+
+                Notes
+                  gw: a note
+
+                Summary: """);
+        String md = ReportFormat.MARKDOWN.render(result(), "demo", AnalysisOptions.defaults(), collected);
+        assertThat(md).endsWith("""
+
+                ## Sources not read
+
+                | Service | Kind | Reference | Evidence |
+                | --- | --- | --- | --- |
+                | gw | config-server | `optional:configserver:${URL:http://x\\|y}` | gw/src/main/resources/application.yml:5 |
+                | orders | profile | `spring.profiles.active = docker` | orders/src/main/resources/application.yml:2 |
+
+                ## Notes
+
+                - gw: a note
+                """);
     }
 }

@@ -5,13 +5,13 @@ import io.github.hasanyelaldi.plimsoll.analysis.AnalysisResult;
 import io.github.hasanyelaldi.plimsoll.analysis.Finding;
 import io.github.hasanyelaldi.plimsoll.analysis.ServiceAmplification;
 import io.github.hasanyelaldi.plimsoll.analysis.UsedValue;
-import java.util.List;
+import io.github.hasanyelaldi.plimsoll.model.UnreadSource;
 
 final class MarkdownReport {
 
     private MarkdownReport() {}
 
-    static String render(AnalysisResult r, String specName, AnalysisOptions options, List<String> notes) {
+    static String render(AnalysisResult r, String specName, AnalysisOptions options, Collected collected) {
         StringBuilder out = new StringBuilder();
         out.append("# Plimsoll analysis of `").append(specName).append("`\n\n");
         out.append("**").append(Reports.summary(r)).append("**\n\n");
@@ -26,7 +26,7 @@ final class MarkdownReport {
         out.append("\n## Findings\n\n");
         if (r.findings().isEmpty()) {
             out.append("None.\n");
-            return notes(out, notes);
+            return collected(out, collected);
         }
         out.append("| Severity | Rule | Location | Detail |\n| --- | --- | --- | --- |\n");
         for (Finding f : r.findings()) {
@@ -45,13 +45,21 @@ final class MarkdownReport {
                 out.append("- **").append(cell(Reports.unknowns(f))).append("**\n");
             }
         }
-        return notes(out, notes);
+        return collected(out, collected);
     }
 
-    private static String notes(StringBuilder out, List<String> notes) {
-        if (!notes.isEmpty()) {
+    private static String collected(StringBuilder out, Collected collected) {
+        if (!collected.unreadSources().isEmpty()) {
+            out.append("\n## Sources not read\n\n");
+            out.append("| Service | Kind | Reference | Evidence |\n| --- | --- | --- | --- |\n");
+            for (UnreadSource u : collected.unreadSources()) {
+                out.append("| ").append(cell(u.service())).append(" | ").append(u.kind()).append(" | `")
+                        .append(cell(u.reference())).append("` | ").append(cell(u.evidence())).append(" |\n");
+            }
+        }
+        if (!collected.notes().isEmpty()) {
             out.append("\n## Notes\n\n");
-            for (String n : notes) {
+            for (String n : collected.notes()) {
                 out.append("- ").append(n).append('\n');
             }
         }
