@@ -45,6 +45,10 @@
         <directory>${project.basedir}/../kb/defaults</directory>
         <targetPath>kb/defaults</targetPath>
       </resource>
+      <resource>
+        <directory>${project.basedir}/../kb/detectors</directory>
+        <targetPath>kb/detectors</targetPath>
+      </resource>
     </resources>
   </build>
 
