@@ -84,10 +84,12 @@ public final class SpringProperties {
     public static final List<String> SERVICE_CONFIG_FILES = List.of(
             "application.yml", "application.yaml", "config/application.yml", "config/application.yaml");
 
+    private final List<String> files;
     private final List<Property> properties;
     private final List<Unread> unread;
 
-    private SpringProperties(List<Property> properties, List<Unread> unread) {
+    private SpringProperties(List<String> files, List<Property> properties, List<Unread> unread) {
+        this.files = List.copyOf(files);
         this.properties = List.copyOf(properties);
         this.unread = List.copyOf(unread);
     }
@@ -107,7 +109,7 @@ public final class SpringProperties {
             otherConfigFiles(base, resources, dir).forEach(f -> unread.add(new Unread("config-file",
                     f.substring(f.lastIndexOf('/') + 1), f)));
         }
-        return new SpringProperties(props.properties, unread);
+        return new SpringProperties(props.files, props.properties, unread);
     }
 
     /** {@code application*} and {@code bootstrap*} files in {@code dir} other than {@link #SERVICE_CONFIG_FILES}. */
@@ -132,10 +134,12 @@ public final class SpringProperties {
      * {@code root}.
      */
     public static SpringProperties load(Path root, List<Path> files) {
+        List<String> names = new ArrayList<>();
         List<Property> props = new ArrayList<>();
         List<Unread> unread = new ArrayList<>();
         for (Path file : files) {
             String name = root.relativize(file).toString().replace('\\', '/');
+            names.add(name);
             String text;
             try {
                 text = Files.readString(file, StandardCharsets.UTF_8);
@@ -144,7 +148,7 @@ public final class SpringProperties {
             }
             read(text, name, props, unread);
         }
-        return new SpringProperties(props, unread);
+        return new SpringProperties(names, props, unread);
     }
 
     /** @param fileName used in {@code file:line} evidence */
@@ -152,7 +156,7 @@ public final class SpringProperties {
         List<Property> props = new ArrayList<>();
         List<Unread> unread = new ArrayList<>();
         read(yaml, fileName, props, unread);
-        return new SpringProperties(props, unread);
+        return new SpringProperties(List.of(fileName), props, unread);
     }
 
     private static void read(String yaml, String fileName, List<Property> out, List<Unread> unread) {
@@ -260,6 +264,11 @@ public final class SpringProperties {
             }
         }
         return true;
+    }
+
+    /** The files read, in reading order, as named in evidence. */
+    public List<String> files() {
+        return files;
     }
 
     /** The effective property at {@code path}, every segment matched with relaxed binding. */

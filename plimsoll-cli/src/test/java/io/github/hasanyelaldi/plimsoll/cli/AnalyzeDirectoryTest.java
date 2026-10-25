@@ -114,19 +114,31 @@ class AnalyzeDirectoryTest {
     }
 
     @Test
-    void configurationThatWasNotReadIsListedBeforeTheNotes() {
+    void configurationThatWasNotReadIsListedUnderCoverageBeforeTheNotes() {
         Result r = run("analyze", petclinic().toString());
         assertThat(r.out()).contains("""
-
-                Sources not read
-                  api-gateway  config-server     optional:configserver:${CONFIG_SERVER_URL:http://localhost:8888/}  \
+                  Sources not read
+                    api-gateway  config-server     optional:configserver:${CONFIG_SERVER_URL:http://localhost:8888/}  \
                 (api-gateway/src/main/resources/application.yml:6)
-                  api-gateway  profile-document  spring.config.activate.on-profile = docker  \
+                    api-gateway  profile-document  spring.config.activate.on-profile = docker  \
                 (api-gateway/src/main/resources/application.yml:50)
 
                 Notes
                 """);
         assertThat(r.out()).doesNotContain("document skipped");
+    }
+
+    @Test
+    void coverageSaysWhatWasReadAndSearchedFor() {
+        String out = run("analyze", petclinic().toString()).out();
+        String coverage = out.substring(out.indexOf("\nCoverage\n"), out.indexOf("\nNotes\n"));
+        assertThat(coverage).startsWith("\nCoverage\n  Source: collected from 4 service modules\n  Sources read\n")
+                .contains("\n    genai-service      none (no module in the directory)\n")
+                .contains("\n    Istio manifests: k8s/mesh.yaml\n  Layer kinds searched\n")
+                .contains("searched: spring-cloud-gateway, istio; found: spring-cloud-gateway, istio\n")
+                .contains("\n  Sources not read\n");
+        assertThat(run("analyze", petclinic().toString(), "--format", "markdown").out())
+                .contains("\n## Coverage\n\nSource: collected from 4 service modules.\n\n### Sources read\n");
     }
 
     @Test

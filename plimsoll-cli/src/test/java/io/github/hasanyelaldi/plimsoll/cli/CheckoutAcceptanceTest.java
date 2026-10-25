@@ -33,6 +33,12 @@ class CheckoutAcceptanceTest {
                         "  WARN   PLM-A5   gateway→orders→payments→ledger  retries on 3 edges of one path",
                         "  INFO   PLM-A4   gateway→orders  no jitter",
                         "  INFO   PLM-A4   payments→ledger  no jitter");
-        assertThat(out.toString()).endsWith("Summary: 2 error, 7 warn, 2 info\n");
+        assertThat(out.toString()).endsWith("""
+
+                Coverage
+                  Source: hand-written spec; every layer is taken as written, nothing was collected
+
+                Summary: 2 error, 7 warn, 2 info
+                """);
     }
 }

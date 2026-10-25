@@ -5,6 +5,7 @@ import io.github.hasanyelaldi.plimsoll.analysis.Finding;
 import io.github.hasanyelaldi.plimsoll.analysis.ServiceAmplification;
 import io.github.hasanyelaldi.plimsoll.analysis.Severity;
 import io.github.hasanyelaldi.plimsoll.analysis.UsedValue;
+import java.util.List;
 
 /** Wording shared by the text and Markdown reports. */
 final class Reports {
@@ -24,6 +25,22 @@ final class Reports {
 
     static String value(UsedValue v) {
         return v.display() + " [" + v.source() + ": " + v.evidence() + "]";
+    }
+
+    static String read(Coverage.ServiceSources s) {
+        return s.read().isEmpty() ? "none (no module in the directory)" : String.join(", ", s.read());
+    }
+
+    static String manifests(Coverage c) {
+        return c.manifests().isEmpty() ? "none" : String.join(", ", c.manifests());
+    }
+
+    static String operation(Coverage.EdgeSearch e) {
+        return e.operation() == null ? "-" : e.operation();
+    }
+
+    static String kinds(List<String> kinds) {
+        return kinds.isEmpty() ? "none" : String.join(", ", kinds);
     }
 
     static String unknowns(Finding f) {

@@ -63,13 +63,13 @@ final class AnalyzeCommand implements Callable<Integer> {
             return INVALID_INPUT;
         }
         ServiceGraph graph;
-        Collected collected = Collected.NONE;
+        Collected collected = Collected.SPEC;
         List<Detection> detections = List.of();
         try {
             if (Files.isDirectory(input)) {
                 ProjectCollector.Result project = ProjectCollector.collect(input);
                 graph = project.graph();
-                collected = new Collected(project.notes(), project.unreadSources());
+                collected = new Collected(project.coverage(), project.notes());
                 detections = project.detections();
             } else {
                 graph = SpecLoader.load(input);

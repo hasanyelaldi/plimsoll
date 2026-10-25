@@ -11,6 +11,9 @@ import io.github.hasanyelaldi.plimsoll.model.Layer;
 import io.github.hasanyelaldi.plimsoll.model.Service;
 import io.github.hasanyelaldi.plimsoll.model.UnreadSource;
 import io.github.hasanyelaldi.plimsoll.model.Val;
+import io.github.hasanyelaldi.plimsoll.report.Coverage;
+import io.github.hasanyelaldi.plimsoll.report.Coverage.EdgeSearch;
+import io.github.hasanyelaldi.plimsoll.report.Coverage.ServiceSources;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.nio.file.Files;
@@ -99,6 +102,42 @@ class ProjectCollectorTest {
                 "visits-service: no VirtualService; assumed to be in the mesh, so the Istio default retry policy applies");
         assertThat(r.notes()).anyMatch(n -> n.startsWith(
                 "api-gateway: api-gateway/src/main/resources/application.yml:12: CircuitBreaker 'defaultCircuitBreaker'"));
+    }
+
+    @Test
+    void coverageListsTheFilesReadPerServiceAndTheLayerKindsSearchedPerEdge() throws IOException {
+        petclinic();
+        Coverage c = ProjectCollector.collect(dir).coverage();
+
+        assertThat(c.source()).isEqualTo("collected from 4 service modules");
+        assertThat(c.services()).extracting(ServiceSources::service).containsExactly(
+                "api-gateway", "customers-service", "genai-service", "vets-service", "visits-service");
+        assertThat(c.services().get(0).read()).contains("api-gateway/src/main/resources/application.yml");
+        assertThat(c.services().get(1).read()).contains("customers-service/edges-hint.yaml",
+                "customers-service/src/main/java/").isSorted();
+        assertThat(c.services().get(2).read()).isEmpty();
+        assertThat(c.manifests()).containsExactly("k8s/mesh.yaml");
+
+        assertThat(c.edges()).extracting(EdgeSearch::edge).isSorted().containsExactly(
+                "api-gateway→customers-service", "api-gateway→genai-service", "api-gateway→vets-service",
+                "api-gateway→visits-service");
+        assertThat(c.edges()).allSatisfy(e -> {
+            assertThat(e.searched()).containsExactly("spring-cloud-gateway", "istio");
+            assertThat(e.found()).containsExactly("spring-cloud-gateway", "istio");
+        });
+    }
+
+    @Test
+    void edgesFromAHintAreSearchedForResilience4jAndTheHttpClientWithoutAMesh() throws IOException {
+        copy("projects/gateway", "gw");
+        Coverage c = ProjectCollector.collect(dir).coverage();
+
+        assertThat(c.manifests()).isEmpty();
+        assertThat(c.edges()).filteredOn(e -> "GET /owners/{id}".equals(e.operation())).singleElement()
+                .satisfies(e -> {
+                    assertThat(e.searched()).containsExactly("resilience4j", "http-client");
+                    assertThat(e.found()).containsExactly("resilience4j", "http-client");
+                });
     }
 
     @Test

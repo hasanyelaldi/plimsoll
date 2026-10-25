@@ -6,6 +6,8 @@ import io.github.hasanyelaldi.plimsoll.analysis.Finding;
 import io.github.hasanyelaldi.plimsoll.analysis.ServiceAmplification;
 import io.github.hasanyelaldi.plimsoll.analysis.UsedValue;
 import io.github.hasanyelaldi.plimsoll.model.UnreadSource;
+import io.github.hasanyelaldi.plimsoll.report.Coverage.EdgeSearch;
+import io.github.hasanyelaldi.plimsoll.report.Coverage.ServiceSources;
 
 final class MarkdownReport {
 
@@ -49,10 +51,32 @@ final class MarkdownReport {
     }
 
     private static String collected(StringBuilder out, Collected collected) {
-        if (!collected.unreadSources().isEmpty()) {
-            out.append("\n## Sources not read\n\n");
+        Coverage c = collected.coverage();
+        out.append("\n## Coverage\n\n").append("Source: ").append(cell(c.source())).append(".\n");
+
+        if (!c.services().isEmpty() || !c.manifests().isEmpty()) {
+            out.append("\n### Sources read\n\n");
+            out.append("| Service | Sources |\n| --- | --- |\n");
+            for (ServiceSources s : c.services()) {
+                out.append("| ").append(cell(s.service())).append(" | ").append(cell(Reports.read(s))).append(" |\n");
+            }
+            out.append("\nIstio manifests: ").append(cell(Reports.manifests(c))).append(".\n");
+        }
+
+        if (!c.edges().isEmpty()) {
+            out.append("\n### Layer kinds searched\n\n");
+            out.append("| Edge | Operation | Searched | Found |\n| --- | --- | --- | --- |\n");
+            for (EdgeSearch e : c.edges()) {
+                out.append("| ").append(cell(e.edge())).append(" | ").append(cell(Reports.operation(e))).append(" | ")
+                        .append(Reports.kinds(e.searched())).append(" | ").append(Reports.kinds(e.found()))
+                        .append(" |\n");
+            }
+        }
+
+        if (!c.unreadSources().isEmpty()) {
+            out.append("\n### Sources not read\n\n");
             out.append("| Service | Kind | Reference | Evidence |\n| --- | --- | --- | --- |\n");
-            for (UnreadSource u : collected.unreadSources()) {
+            for (UnreadSource u : c.unreadSources()) {
                 out.append("| ").append(cell(u.service())).append(" | ").append(u.kind()).append(" | `")
                         .append(cell(u.reference())).append("` | ").append(cell(u.evidence())).append(" |\n");
             }
