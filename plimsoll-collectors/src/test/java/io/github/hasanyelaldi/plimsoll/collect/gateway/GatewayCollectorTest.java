@@ -130,15 +130,26 @@ class GatewayCollectorTest {
     }
 
     @Test
-    void petclinicBreakersAreNotedWithTheirOrderUnknown() {
+    void petclinicBreakersAreNotedWithTheirVerifiedOrder() {
         GatewayCollector.Result r = GatewayCollector.collect(PETCLINIC);
         assertThat(r.notes())
                 .anyMatch(n -> n.contains("CircuitBreaker 'defaultCircuitBreaker' (default-filters[0])")
                         && n.contains("route vets-service"))
                 .anyMatch(n -> n.contains("CircuitBreaker 'genaiCircuitBreaker' (route genai-service filters[1])")
                         && n.contains("application.yml:46"))
-                .anyMatch(n -> n.contains("route genai-service: CircuitBreaker and Retry both apply")
-                        && n.contains("UNKNOWN"));
+                .contains("route genai-service: CircuitBreaker listed before Retry, so it wraps all tries; a "
+                        + "TimeLimiter timeout ends the request without a retry (the breaker answers 504, which Retry "
+                        + "does not repeat)");
+    }
+
+    @Test
+    void breakerListedAfterRetryWrapsEachTry() {
+        GatewayCollector.Result r = collect(route("""
+                - Retry=1
+                - CircuitBreaker=cb
+                """));
+        assertThat(r.notes()).anyMatch(n -> n.startsWith("route a: CircuitBreaker listed after Retry, so it wraps "
+                + "each try; a TimeLimiter timeout ends the request without a retry"));
     }
 
     // ---- operations and idempotency --------------------------------------
@@ -335,7 +346,7 @@ class GatewayCollectorTest {
         assertThat(retry.totalAttempts().value()).isEqualTo(4);
         assertThat(retry.totalAttempts().source()).isEqualTo(Source.LIBRARY_DEFAULT);
         assertThat(retry.totalAttempts().evidence())
-                .contains("retries not set", "spring-cloud-gateway 5.0.0, 5.0.3 default (verified by doc)");
+                .contains("retries not set", "spring-cloud-gateway 5.0.0, 5.0.3 default (verified by oracle)");
         assertThat(retry.retryOn().value()).containsExactlyInAnyOrder("series SERVER_ERROR", "java.io.IOException",
                 "java.util.concurrent.TimeoutException", "method GET");
     }

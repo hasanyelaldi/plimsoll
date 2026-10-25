@@ -58,6 +58,7 @@ class Resilience4jConfigOracleTest {
         void start() throws IOException {
             context = new SpringApplicationBuilder(App.class)
                     .web(WebApplicationType.NONE)
+                    .properties(GatewayRetryOracleTest.GATEWAY_OFF)
                     .properties("spring.main.banner-mode=off", "spring.config.location=classpath:" + resource)
                     .run();
             try (InputStream in = getClass().getClassLoader().getResourceAsStream(resource)) {
@@ -166,6 +167,7 @@ class Resilience4jConfigOracleTest {
     void maxAttemptsBelowOneStopsTheApplication() {
         SpringApplicationBuilder app = new SpringApplicationBuilder(App.class)
                 .web(WebApplicationType.NONE)
+                .properties(GatewayRetryOracleTest.GATEWAY_OFF)
                 .properties("spring.main.banner-mode=off", "spring.config.location=optional:classpath:none.yml",
                         "resilience4j.retry.instances.zero.max-attempts=0");
         assertThatThrownBy(app::run).hasRootCauseMessage("maxAttempts must be greater than or equal to 1.");

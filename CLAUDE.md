@@ -82,7 +82,7 @@ Normalize attempt counts at the boundary. This mismatch is the first thing the t
 | Spring Cloud LoadBalancer (`@LoadBalanced` WebClient) | `max-retries-on-same-service-instance`, `max-retries-on-next-service-instance` | retries only; off unless `retry.enabled: true` is set | `(same + 1) × (next + 1)` |
 | Hand-written `generic` layer | `totalAttempts` | as named | value |
 
-The Resilience4j row is checked by `RetryAttemptCountingOracleTest`; the Istio row against the v1.31 reference (`kb/defaults/istio.yaml`); the LoadBalancer row by `LoadBalancerRetryOracleTest` (exceptions are retried for every HTTP method, status codes for GET only). The Gateway row is read from the docs and the `RetryGatewayFilterFactory` source (5.0.0), with no oracle yet; whether a `CircuitBreaker` filter listed before `Retry` wraps all tries or each try stays `UNKNOWN` until one exists.
+The Resilience4j row is checked by `RetryAttemptCountingOracleTest`; the Istio row against the v1.31 reference (`kb/defaults/istio.yaml`); the LoadBalancer row by `LoadBalancerRetryOracleTest` (exceptions are retried for every HTTP method, status codes for GET only). The Gateway row is checked by `GatewayRetryOracleTest` against the real gateway 5.0.3 (`statuses` adds to the default `series`); it also shows that filters run in list order, so a `CircuitBreaker` listed before `Retry` wraps all tries, and that a TimeLimiter timeout is never retried (the breaker answers 504).
 
 ## Analyzer rules (v0.1)
 

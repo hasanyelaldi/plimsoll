@@ -204,10 +204,10 @@ Istio manifests: none.
 ## Notes
 
 - api-gateway: entry, Spring Cloud Gateway routing to customers-service, genai-service, vets-service, visits-service (ADR 0009)
-- api-gateway: route customers-service: CircuitBreaker and Retry both apply; whether the breaker wraps all tries or each try is UNKNOWN (not checked against the real gateway yet)
-- api-gateway: route genai-service: CircuitBreaker and Retry both apply; whether the breaker wraps all tries or each try is UNKNOWN (not checked against the real gateway yet)
-- api-gateway: route vets-service: CircuitBreaker and Retry both apply; whether the breaker wraps all tries or each try is UNKNOWN (not checked against the real gateway yet)
-- api-gateway: route visits-service: CircuitBreaker and Retry both apply; whether the breaker wraps all tries or each try is UNKNOWN (not checked against the real gateway yet)
+- api-gateway: route customers-service: CircuitBreaker listed before Retry, so it wraps all tries; a TimeLimiter timeout ends the request without a retry (the breaker answers 504, which Retry does not repeat)
+- api-gateway: route genai-service: CircuitBreaker listed before Retry, so it wraps all tries; a TimeLimiter timeout ends the request without a retry (the breaker answers 504, which Retry does not repeat)
+- api-gateway: route vets-service: CircuitBreaker listed before Retry, so it wraps all tries; a TimeLimiter timeout ends the request without a retry (the breaker answers 504, which Retry does not repeat)
+- api-gateway: route visits-service: CircuitBreaker listed before Retry, so it wraps all tries; a TimeLimiter timeout ends the request without a retry (the breaker answers 504, which Retry does not repeat)
 - api-gateway: spring-petclinic-api-gateway/src/main/resources/application.yml:11: CircuitBreaker 'defaultCircuitBreaker' (default-filters[0]) on route customers-service is not modelled; its TimeLimiter is UNKNOWN
 - api-gateway: spring-petclinic-api-gateway/src/main/resources/application.yml:11: CircuitBreaker 'defaultCircuitBreaker' (default-filters[0]) on route genai-service is not modelled; its TimeLimiter is UNKNOWN
 - api-gateway: spring-petclinic-api-gateway/src/main/resources/application.yml:11: CircuitBreaker 'defaultCircuitBreaker' (default-filters[0]) on route vets-service is not modelled; its TimeLimiter is UNKNOWN
