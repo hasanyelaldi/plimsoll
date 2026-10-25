@@ -10,6 +10,7 @@ import io.github.hasanyelaldi.plimsoll.io.SpecLoader;
 import io.github.hasanyelaldi.plimsoll.model.Detection;
 import io.github.hasanyelaldi.plimsoll.model.ServiceGraph;
 import io.github.hasanyelaldi.plimsoll.report.Collected;
+import io.github.hasanyelaldi.plimsoll.report.Coverage;
 import io.github.hasanyelaldi.plimsoll.report.ReportFormat;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -63,13 +64,14 @@ final class AnalyzeCommand implements Callable<Integer> {
             return INVALID_INPUT;
         }
         ServiceGraph graph;
-        Collected collected = Collected.NONE;
+        Collected collected = Collected.SPEC;
         List<Detection> detections = List.of();
         try {
             if (Files.isDirectory(input)) {
                 ProjectCollector.Result project = ProjectCollector.collect(input);
                 graph = project.graph();
-                collected = new Collected(project.notes(), project.unreadSources());
+                collected = new Collected(new Coverage("collected directory", List.of(), List.of(), List.of(),
+                        project.unreadSources()), project.notes());
                 detections = project.detections();
             } else {
                 graph = SpecLoader.load(input);

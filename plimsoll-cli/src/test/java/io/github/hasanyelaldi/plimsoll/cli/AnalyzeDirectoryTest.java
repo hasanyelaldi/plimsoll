@@ -114,14 +114,13 @@ class AnalyzeDirectoryTest {
     }
 
     @Test
-    void configurationThatWasNotReadIsListedBeforeTheNotes() {
+    void configurationThatWasNotReadIsListedUnderCoverageBeforeTheNotes() {
         Result r = run("analyze", petclinic().toString());
         assertThat(r.out()).contains("""
-
-                Sources not read
-                  api-gateway  config-server     optional:configserver:${CONFIG_SERVER_URL:http://localhost:8888/}  \
+                  Sources not read
+                    api-gateway  config-server     optional:configserver:${CONFIG_SERVER_URL:http://localhost:8888/}  \
                 (api-gateway/src/main/resources/application.yml:6)
-                  api-gateway  profile-document  spring.config.activate.on-profile = docker  \
+                    api-gateway  profile-document  spring.config.activate.on-profile = docker  \
                 (api-gateway/src/main/resources/application.yml:50)
 
                 Notes

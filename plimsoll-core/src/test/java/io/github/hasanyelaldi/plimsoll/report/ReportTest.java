@@ -8,6 +8,8 @@ import io.github.hasanyelaldi.plimsoll.analysis.Analyzer;
 import io.github.hasanyelaldi.plimsoll.analysis.Finding;
 import io.github.hasanyelaldi.plimsoll.io.SpecLoader;
 import io.github.hasanyelaldi.plimsoll.model.UnreadSource;
+import io.github.hasanyelaldi.plimsoll.report.Coverage.EdgeSearch;
+import io.github.hasanyelaldi.plimsoll.report.Coverage.ServiceSources;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -46,7 +48,7 @@ class ReportTest {
                           a→b layer 1 (resilience4j) maxBackoff = UNKNOWN [UNKNOWN: 'maxBackoff' absent (demo.yaml:6)]
                           a deadline = 1 s [EXPLICIT: demo.yaml:2]
                 """;
-        assertThat(TextReport.render(result(), "demo.yaml", AnalysisOptions.defaults(), Collected.NONE)).startsWith(expected.stripTrailing());
+        assertThat(TextReport.render(result(), "demo.yaml", AnalysisOptions.defaults(), Collected.SPEC)).startsWith(expected.stripTrailing());
     }
 
     @Test
@@ -94,7 +96,7 @@ class ReportTest {
 
     @Test
     void notesArePrintedAsGivenAndOnlyWhenThereAreAny() {
-        Collected notes = new Collected(List.of("a: first | note", "b: second note"), List.of());
+        Collected notes = new Collected(Coverage.SPEC, List.of("a: first | note", "b: second note"));
         String text = ReportFormat.TEXT.render(result(), "demo", AnalysisOptions.defaults(), notes);
         assertThat(text).contains("\nNotes\n  a: first | note\n  b: second note\n\nSummary: ");
         String md = ReportFormat.MARKDOWN.render(result(), "demo", AnalysisOptions.defaults(), notes);
@@ -103,10 +105,11 @@ class ReportTest {
         AnalysisResult none = Analyzer.analyze(SpecLoader.parse("services: { a: { entry: true } }\n", "x.yaml"),
                 AnalysisOptions.defaults());
         assertThat(ReportFormat.MARKDOWN.render(none, "x", AnalysisOptions.defaults(), notes))
-                .endsWith("None.\n\n## Notes\n\n- a: first | note\n- b: second note\n");
+                .endsWith("None.\n\n## Coverage\n\nSource: hand-written spec; every layer is taken as written, nothing was collected.\n"
+                        + "\n## Notes\n\n- a: first | note\n- b: second note\n");
 
         for (ReportFormat format : ReportFormat.values()) {
-            assertThat(format.render(result(), "demo", AnalysisOptions.defaults(), Collected.NONE))
+            assertThat(format.render(result(), "demo", AnalysisOptions.defaults(), Collected.SPEC))
                     .isEqualTo(format.render(result(), "demo", AnalysisOptions.defaults()))
                     .doesNotContain("Notes")
                     .doesNotContain("Sources not read");
@@ -114,18 +117,50 @@ class ReportTest {
     }
 
     @Test
-    void unreadSourcesComeBeforeNotesWithAlignedColumns() {
-        Collected collected = new Collected(List.of("gw: a note"), List.of(
-                new UnreadSource("gw", "config-server", "optional:configserver:${URL:http://x|y}",
-                        "gw/src/main/resources/application.yml:5"),
-                new UnreadSource("orders", "profile", "spring.profiles.active = docker",
-                        "orders/src/main/resources/application.yml:2")));
+    void aSpecGetsOneCoverageLine() {
+        assertThat(ReportFormat.TEXT.render(result(), "demo", AnalysisOptions.defaults())).contains("""
+
+                Coverage
+                  Source: hand-written spec; every layer is taken as written, nothing was collected
+
+                Summary: """);
+        assertThat(ReportFormat.MARKDOWN.render(result(), "demo", AnalysisOptions.defaults())).endsWith("""
+
+                ## Coverage
+
+                Source: hand-written spec; every layer is taken as written, nothing was collected.
+                """);
+    }
+
+    @Test
+    void coverageListsSourcesReadLayerKindsSearchedAndSourcesNotReadBeforeNotes() {
+        Coverage coverage = new Coverage("collected from 2 service modules",
+                List.of(new ServiceSources("gw", List.of("gw/pom.xml", "gw/src/main/resources/application.yml")),
+                        new ServiceSources("orders", List.of())),
+                List.of(),
+                List.of(new EdgeSearch("gw→orders", "GET /orders", List.of("spring-cloud-gateway", "istio"),
+                                List.of("spring-cloud-gateway")),
+                        new EdgeSearch("orders→payments", null, List.of("resilience4j"), List.of())),
+                List.of(new UnreadSource("gw", "config-server", "optional:configserver:${URL:http://x|y}",
+                                "gw/src/main/resources/application.yml:5"),
+                        new UnreadSource("orders", "profile", "spring.profiles.active = docker",
+                                "orders/src/main/resources/application.yml:2")));
+        Collected collected = new Collected(coverage, List.of("gw: a note"));
         String text = ReportFormat.TEXT.render(result(), "demo", AnalysisOptions.defaults(), collected);
         assertThat(text).contains("""
 
-                Sources not read
-                  gw      config-server  optional:configserver:${URL:http://x|y}  (gw/src/main/resources/application.yml:5)
-                  orders  profile        spring.profiles.active = docker  (orders/src/main/resources/application.yml:2)
+                Coverage
+                  Source: collected from 2 service modules
+                  Sources read
+                    gw      gw/pom.xml, gw/src/main/resources/application.yml
+                    orders  none (no module in the directory)
+                    Istio manifests: none
+                  Layer kinds searched
+                    gw→orders        GET /orders  searched: spring-cloud-gateway, istio; found: spring-cloud-gateway
+                    orders→payments  -            searched: resilience4j; found: none
+                  Sources not read
+                    gw      config-server  optional:configserver:${URL:http://x|y}  (gw/src/main/resources/application.yml:5)
+                    orders  profile        spring.profiles.active = docker  (orders/src/main/resources/application.yml:2)
 
                 Notes
                   gw: a note
@@ -134,7 +169,27 @@ class ReportTest {
         String md = ReportFormat.MARKDOWN.render(result(), "demo", AnalysisOptions.defaults(), collected);
         assertThat(md).endsWith("""
 
-                ## Sources not read
+                ## Coverage
+
+                Source: collected from 2 service modules.
+
+                ### Sources read
+
+                | Service | Sources |
+                | --- | --- |
+                | gw | gw/pom.xml, gw/src/main/resources/application.yml |
+                | orders | none (no module in the directory) |
+
+                Istio manifests: none.
+
+                ### Layer kinds searched
+
+                | Edge | Operation | Searched | Found |
+                | --- | --- | --- | --- |
+                | gw→orders | GET /orders | spring-cloud-gateway, istio | spring-cloud-gateway |
+                | orders→payments | - | resilience4j | none |
+
+                ### Sources not read
 
                 | Service | Kind | Reference | Evidence |
                 | --- | --- | --- | --- |
@@ -145,5 +200,9 @@ class ReportTest {
 
                 - gw: a note
                 """);
+        for (ReportFormat format : ReportFormat.values()) {
+            assertThat(format.render(result(), "demo", AnalysisOptions.defaults(), collected))
+                    .isEqualTo(format.render(result(), "demo", AnalysisOptions.defaults(), collected));
+        }
     }
 }
