@@ -63,6 +63,7 @@ class TimeLimiterOrderOracleTest {
     private static ConfigurableApplicationContext start(String... extraProperties) {
         return new SpringApplicationBuilder(App.class)
                 .web(WebApplicationType.NONE)
+                .properties(GatewayRetryOracleTest.GATEWAY_OFF)
                 .properties(
                         "spring.main.banner-mode=off",
                         "spring.config.location=optional:classpath:none.yml",

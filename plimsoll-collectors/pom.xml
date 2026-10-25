@@ -93,6 +93,23 @@
           <artifactId>reactor-netty-http</artifactId>
           <scope>test</scope>
         </dependency>
+        <dependency>
+          <groupId>org.springframework.cloud</groupId>
+          <artifactId>spring-cloud-starter-gateway-server-webflux</artifactId>
+          <scope>test</scope>
+        </dependency>
+        <dependency>
+          <groupId>org.springframework.cloud</groupId>
+          <artifactId>spring-cloud-starter-circuitbreaker-reactor-resilience4j</artifactId>
+          <scope>test</scope>
+          <exclusions>
+            <!-- resilience4j-spring-boot4 above is the Boot 4 one; both register the same beans -->
+            <exclusion>
+              <groupId>io.github.resilience4j</groupId>
+              <artifactId>resilience4j-spring-boot3</artifactId>
+            </exclusion>
+          </exclusions>
+        </dependency>
       </dependencies>
     </profile>
     <profile>

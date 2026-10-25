@@ -63,6 +63,7 @@ class LoadBalancerRetryOracleTest {
     private static List<URI> tries(HttpMethod method, HttpStatus status, String... extraProperties) {
         try (ConfigurableApplicationContext context = new SpringApplicationBuilder(App.class)
                 .web(WebApplicationType.NONE)
+                .properties(GatewayRetryOracleTest.GATEWAY_OFF)
                 .properties(
                         "spring.main.banner-mode=off",
                         "spring.config.location=optional:classpath:none.yml",

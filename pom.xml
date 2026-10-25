@@ -160,6 +160,26 @@
         </exclusions>
       </dependency>
       <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter</artifactId>
+        <version>${spring-boot.version}</version>
+        <exclusions>
+          <!-- as above, for the starters the Gateway oracle pulls in -->
+          <exclusion>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-logging</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <!-- Gateway oracle: the Spring Cloud starters pull Spring Boot 4.0.x modules; align them with spring-boot.version -->
+      <dependency>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-dependencies</artifactId>
+        <version>${spring-boot.version}</version>
+        <type>pom</type>
+        <scope>import</scope>
+      </dependency>
+      <dependency>
         <groupId>io.github.hasanyelaldi</groupId>
         <artifactId>plimsoll-core</artifactId>
         <version>${project.version}</version>
