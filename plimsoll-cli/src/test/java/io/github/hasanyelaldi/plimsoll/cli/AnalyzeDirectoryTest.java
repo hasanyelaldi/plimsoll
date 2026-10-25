@@ -129,6 +129,19 @@ class AnalyzeDirectoryTest {
     }
 
     @Test
+    void coverageSaysWhatWasReadAndSearchedFor() {
+        String out = run("analyze", petclinic().toString()).out();
+        String coverage = out.substring(out.indexOf("\nCoverage\n"), out.indexOf("\nNotes\n"));
+        assertThat(coverage).startsWith("\nCoverage\n  Source: collected from 4 service modules\n  Sources read\n")
+                .contains("\n    genai-service      none (no module in the directory)\n")
+                .contains("\n    Istio manifests: k8s/mesh.yaml\n  Layer kinds searched\n")
+                .contains("searched: spring-cloud-gateway, istio; found: spring-cloud-gateway, istio\n")
+                .contains("\n  Sources not read\n");
+        assertThat(run("analyze", petclinic().toString(), "--format", "markdown").out())
+                .contains("\n## Coverage\n\nSource: collected from 4 service modules.\n\n### Sources read\n");
+    }
+
+    @Test
     void invalidHintExitsWithTwo() throws IOException {
         Files.writeString(petclinic().resolve("customers-service/edges-hint.yaml"), "service: customers-service\nbogus: 1\n");
         Result r = run("analyze", petclinic().toString());
