@@ -456,6 +456,36 @@ class GatewayCollectorTest {
     }
 
     @Test
+    void placeholderInTheUriResolvesToItsDefaultWithANote() {
+        GatewayCollector.Result r = serving("""
+                spring.cloud.gateway.server.webflux.routes:
+                  - { id: a, uri: "lb://${A_HOST:a-service}", predicates: [ "Path=/api/a/**" ] }
+                """, "POST /api/a/x");
+        assertThat(r.edges()).extracting(Edge::to).containsExactly("a-service");
+        assertThat(r.edges().get(0).idempotent().value()).isFalse();
+        assertThat(r.notes()).anyMatch(n -> n.endsWith("route a goes to lb://${A_HOST:a-service}; the callee is "
+                + "a-service, the placeholder default; setting A_HOST changes it"));
+    }
+
+    @Test
+    void placeholderWithoutADefaultGivesNoEdge() {
+        GatewayCollector.Result r = collect("""
+                spring.cloud.gateway.server.webflux.routes:
+                  - { id: a, uri: "lb://${A_HOST}" }
+                  - { id: b, uri: "lb://${B_HOST:}" }
+                  - { id: c, uri: "lb://${C_HOST:${D_HOST:c}}" }
+                  - { id: d, uri: "lb://${E_PREFIX:d}-service" }
+                """);
+        assertThat(r.edges()).extracting(Edge::to).containsExactly("d-service");
+        assertThat(r.notes()).anyMatch(n -> n.endsWith("route a goes to lb://${A_HOST}; ${A_HOST} has no default, "
+                + "so the callee is not known; no edge"));
+        assertThat(r.notes()).anyMatch(n -> n.endsWith("route b goes to lb://${B_HOST:}; the callee cannot be "
+                + "resolved from its placeholder defaults; no edge"));
+        assertThat(r.notes()).anyMatch(n -> n.contains("route c goes to lb://${C_HOST:${D_HOST:c}}; the callee "
+                + "cannot be resolved"));
+    }
+
+    @Test
     void legacyPrefixIsReadWithANote() {
         GatewayCollector.Result r = collect("""
                 spring.application.name: edge
