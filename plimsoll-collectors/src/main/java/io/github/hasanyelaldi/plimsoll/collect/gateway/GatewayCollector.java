@@ -52,8 +52,10 @@ import java.util.regex.Pattern;
  * other than literal segments with an optional trailing {@code /**} leave the operations, and so idempotency,
  * UNKNOWN. An {@code operations} entry of the gateway's {@code edges-hint.yaml} overrides an operation's idempotency.
  *
- * <p>CircuitBreaker filters are noted, not modelled. Whether a CircuitBreaker listed before Retry wraps all tries
- * or each try is not checked against the real gateway yet, so it is stated as UNKNOWN in the notes.
+ * <p>CircuitBreaker filters are noted, not modelled. Filters run in the order they are listed, default-filters first,
+ * so a CircuitBreaker listed before Retry wraps all tries and one listed after it wraps each try. Either way a
+ * TimeLimiter timeout ends the request after that try: the breaker turns it into a 504, which Retry does not repeat.
+ * Both are checked against the real gateway by {@code GatewayRetryOracleTest}.
  */
 public final class GatewayCollector {
 
@@ -273,8 +275,10 @@ public final class GatewayCollector {
                     + " is not modelled; its TimeLimiter is UNKNOWN");
         }
         if (!breakers.isEmpty() && !retries.isEmpty()) {
-            notes.add("route " + id + ": CircuitBreaker and Retry both apply; whether the breaker wraps all tries "
-                    + "or each try is UNKNOWN (not checked against the real gateway yet)");
+            boolean outer = filters.indexOf(breakers.get(0)) < filters.indexOf(retries.get(0));
+            notes.add("route " + id + ": CircuitBreaker listed " + (outer ? "before" : "after") + " Retry, so it "
+                    + (outer ? "wraps all tries" : "wraps each try") + "; a TimeLimiter timeout ends the request "
+                    + "without a retry (the breaker answers 504, which Retry does not repeat)");
         }
         if (retries.size() > 1) {
             notes.add("route " + id + ": " + retries.size() + " Retry filters; listed default-filters first, "

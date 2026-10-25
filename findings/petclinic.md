@@ -65,7 +65,6 @@ All four edges come from one `Retry` default filter (`spring-petclinic-api-gatew
 | --- | --- |
 | `perTryTimeout` on every gateway edge | `spring.cloud.gateway.server.webflux.httpclient.response-timeout` is not set and the KB has no sourced default for it (#38) |
 | `deadline` of every service | no `edges-hint.yaml` anywhere; ADR 0009 takes deadlines only from hints |
-| Breaker/Retry nesting on every route | `CircuitBreaker` is listed before `Retry`; whether it wraps all tries or each try needs the Gateway oracle (#31) |
 | TimeLimiter of `defaultCircuitBreaker` and `genaiCircuitBreaker` | set in code (10 s in `ApiGatewayApplication.java:88`), not read (#18) |
 
 Because both A2 inputs are `UNKNOWN`, A2a and A2b give only "cannot evaluate" INFO findings. With a deadline hint per service and #38 they would become real checks.
@@ -93,7 +92,7 @@ No false positives were found.
 | Calls made from code are not edges without a hint file | gateway → customers and visits (`CustomersServiceClient`, `VisitsServiceClient`); genai → vets (`VectorStoreController`); genai → customers (`AIDataProvider`, incl. two POSTs) | #37 |
 | Gateway HTTP client timeouts | `response-timeout` and `connect-timeout` defaults | #38 |
 | Programmatic Spring Cloud CircuitBreaker and its 10 s TimeLimiter | `ApiGatewayApplication.java:85-88`, `ApiGatewayController` (`getOwnerDetails` breaker) | #18 |
-| Breakers in the model, filter order | `CircuitBreaker` default filter and `genaiCircuitBreaker` with fallbacks | #22, #31 |
+| Breakers in the model | `CircuitBreaker` default filter and `genaiCircuitBreaker` with fallbacks; the order is known since #31 (listed before `Retry`, so it wraps all tries, and a timeout is not retried) | #22 |
 | Spring AI retry to the LLM provider | genai-service (`spring.ai.retry.*` not set, so the Spring AI defaults apply) | #19 |
 | Condition-aware A3 (which status or exception triggers the retry) | `statuses: SERVICE_UNAVAILABLE` plus default exceptions | #24 |
 
