@@ -18,6 +18,9 @@ import io.github.hasanyelaldi.plimsoll.model.Edge;
 import io.github.hasanyelaldi.plimsoll.model.Layer;
 import io.github.hasanyelaldi.plimsoll.model.ServiceGraph;
 import io.github.hasanyelaldi.plimsoll.model.UnreadSource;
+import io.github.hasanyelaldi.plimsoll.report.Coverage;
+import io.github.hasanyelaldi.plimsoll.report.Coverage.EdgeSearch;
+import io.github.hasanyelaldi.plimsoll.report.Coverage.ServiceSources;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileVisitResult;
@@ -26,12 +29,14 @@ import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.TreeSet;
 
 /**
  * Collects the service graph of a directory: finds its service modules and Istio manifests, runs every collector
@@ -52,6 +57,9 @@ import java.util.TreeMap;
  *
  * <p>Every module is also searched for mechanisms no collector models ({@link Detector}); they become PLM-C1. Its
  * configuration that was not read (profiles, imports, other config files) is listed in {@link Result#unreadSources()}.
+ * {@link Result#coverage()} also says, per service, which files were read and, per edge, which layer kinds were
+ * searched for: Resilience4j and the HTTP client on edges from an edges hint, Spring Cloud Gateway on gateway
+ * routes, and Istio on every edge when the directory has Istio manifests.
  *
  * <p>File names in evidence and notes are relative to the directory; a module's notes start with its service name.
  * Hidden directories, {@code target}, {@code build} and {@code node_modules} are skipped. Modules and manifests
@@ -62,18 +70,24 @@ public final class ProjectCollector {
     public static final String EDGES_HINT = "edges-hint.yaml";
     private static final Set<String> SKIPPED = Set.of("target", "build", "node_modules");
     private static final String ISTIO_API = "networking.istio.io/";
+    private static final List<String> BUILD_FILES = List.of("pom.xml", "build.gradle", "build.gradle.kts");
+    private static final Comparator<EdgeSearch> EDGE_ORDER = Comparator.comparing(EdgeSearch::edge)
+            .thenComparing(EdgeSearch::operation, Comparator.nullsFirst(Comparator.naturalOrder()));
 
     /**
      * @param notes every collector's and assembler's notes; sorted, without repeats
      * @param detections mechanisms found in the modules that no collector models; sorted, without repeats
-     * @param unreadSources configuration the modules refer to or ship but that was not read; sorted, without repeats
+     * @param coverage what was read per service and searched for per edge, and what was not read; each list sorted
      */
-    public record Result(ServiceGraph graph, List<String> notes, List<Detection> detections,
-            List<UnreadSource> unreadSources) {
+    public record Result(ServiceGraph graph, List<String> notes, List<Detection> detections, Coverage coverage) {
         public Result {
             notes = List.copyOf(notes);
             detections = List.copyOf(detections);
-            unreadSources = List.copyOf(unreadSources);
+        }
+
+        /** Configuration the modules refer to or ship but that was not read; sorted, without repeats. */
+        public List<UnreadSource> unreadSources() {
+            return coverage.unreadSources();
         }
     }
 
@@ -125,6 +139,7 @@ public final class ProjectCollector {
         }
 
         List<Edge> edges = new ArrayList<>();
+        List<List<String>> searched = new ArrayList<>();
         Map<EdgeKey, Layer> httpLayers = new LinkedHashMap<>();
         List<EdgesHint> hints = new ArrayList<>();
         List<GatewayCollector.Result> gateways = new ArrayList<>();
@@ -133,6 +148,7 @@ public final class ProjectCollector {
                 hints.add(m.hint());
                 Resilience4jCollector.Result r4j = Resilience4jCollector.collect(root, m.root(), m.hint(), kb);
                 edges.addAll(r4j.edges());
+                r4j.edges().forEach(e -> searched.add(List.of("resilience4j", "http-client")));
                 r4j.notes().forEach(n -> notes.add(m.name() + ": " + n));
                 r4j.unmapped().forEach(u -> notes.add(m.name() + ": " + u + " is annotated but no "
                         + EDGES_HINT + " entry names it; not analysed"));
@@ -144,6 +160,7 @@ public final class ProjectCollector {
                 GatewayCollector.Result gateway = GatewayCollector.collect(m.props(), m.name(), served, m.hint(), kb);
                 gateways.add(gateway);
                 edges.addAll(gateway.edges());
+                gateway.edges().forEach(e -> searched.add(List.of("spring-cloud-gateway")));
                 gateway.notes().forEach(n -> notes.add(m.name() + ": " + n));
             }
         }
@@ -159,9 +176,53 @@ public final class ProjectCollector {
         ServiceAssembler.Result services = ServiceAssembler.assemble(assembled.edges(), hints, gateways);
         notes.addAll(services.notes());
 
-        return new Result(services.graph(), notes.stream().sorted().distinct().toList(),
-                detections.stream().sorted(Detection.ORDER).distinct().toList(),
+        Coverage coverage = new Coverage("collected from " + modules.size() + " service module"
+                + (modules.size() == 1 ? "" : "s"),
+                sourcesRead(root, modules, services.graph()),
+                manifests.stream().map(p -> relative(root, p)).toList(),
+                edgeSearches(assembled.edges(), searched, istio != null),
                 unread.stream().sorted(UnreadSource.ORDER).distinct().toList());
+        return new Result(services.graph(), notes.stream().sorted().distinct().toList(),
+                detections.stream().sorted(Detection.ORDER).distinct().toList(), coverage);
+    }
+
+    /** Every service of the graph, with the files of its module that were read; none when it has no module. */
+    private static List<ServiceSources> sourcesRead(Path root, Map<String, Module> modules, ServiceGraph graph) {
+        TreeSet<String> names = new TreeSet<>(modules.keySet());
+        names.addAll(graph.services().keySet());
+        List<ServiceSources> out = new ArrayList<>();
+        for (String name : names) {
+            Module m = modules.get(name);
+            List<String> read = new ArrayList<>();
+            if (m != null) {
+                if (m.hint() != null) {
+                    read.add(relative(root, m.root().resolve(EDGES_HINT)));
+                }
+                BUILD_FILES.stream().map(m.root()::resolve).filter(Files::isRegularFile)
+                        .forEach(f -> read.add(relative(root, f)));
+                Path java = m.root().resolve("src/main/java");
+                if (Files.isDirectory(java)) {
+                    read.add(relative(root, java) + "/");
+                }
+                read.addAll(m.props().files());
+            }
+            out.add(new ServiceSources(name, read.stream().sorted().distinct().toList()));
+        }
+        return out;
+    }
+
+    /** @param searched per edge, in the order of {@code edges}, the layer kinds its collectors look for */
+    private static List<EdgeSearch> edgeSearches(List<Edge> edges, List<List<String>> searched, boolean mesh) {
+        List<EdgeSearch> out = new ArrayList<>();
+        for (int i = 0; i < edges.size(); i++) {
+            Edge e = edges.get(i);
+            List<String> kinds = new ArrayList<>(searched.get(i));
+            if (mesh) {
+                kinds.add("istio");
+            }
+            out.add(new EdgeSearch(e.location(), e.operation(), kinds, e.layers().stream().map(Layer::kind).toList()));
+        }
+        return out.stream().sorted(EDGE_ORDER).distinct().toList();
     }
 
     private static List<Module> sortedByPath(Map<String, Module> modules) {
