@@ -26,6 +26,8 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.Function;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * Collects the routes of a Spring Cloud Gateway (WebFlux) service: each route to {@code lb://<service>} becomes an
@@ -60,6 +62,7 @@ public final class GatewayCollector {
     private static final String[] PREFIX = {"spring", "cloud", "gateway", "server", "webflux"};
     private static final String[] LEGACY_PREFIX = {"spring", "cloud", "gateway"};
     private static final String LB = "lb://";
+    private static final Pattern PLACEHOLDER = Pattern.compile("\\$\\{([^}:]*)(?::([^}]*))?}");
     private static final Set<String> PATH_REWRITES = Set.of("RewritePath", "PrefixPath", "SetPath");
 
     /** Positional arguments of the Retry shortcut form (RetryGatewayFilterFactory#shortcutFieldOrder). */
@@ -216,12 +219,48 @@ public final class GatewayCollector {
                         + ", not to an lb:// service; no edge");
                 continue;
             }
-            String to = uri.get().substring(LB.length());
+            Optional<String> callee = callee(uri.get().substring(LB.length()), id, routeEvidence);
+            if (callee.isEmpty()) {
+                continue;
+            }
+            String to = callee.get();
             List<Filter> filters = new ArrayList<>(defaults);
             filters.addAll(filters(path(route, "filters"), "route " + id + " filters"));
             edges.add(edge(service, to, id, route, filters));
         }
         return edges;
+    }
+
+    /**
+     * The service of an {@code lb://} URI. Each {@code ${NAME:default}} is resolved to its default, the callee
+     * when {@code NAME} is not set, with a note; a placeholder without a default leaves the callee unknown.
+     */
+    private Optional<String> callee(String host, String id, String routeEvidence) {
+        Matcher m = PLACEHOLDER.matcher(host);
+        StringBuilder resolved = new StringBuilder();
+        List<String> names = new ArrayList<>();
+        while (m.find()) {
+            if (m.group(2) == null) {
+                notes.add(routeEvidence + ": route " + id + " goes to " + LB + host + "; ${" + m.group(1)
+                        + "} has no default, so the callee is not known; no edge");
+                return Optional.empty();
+            }
+            names.add(m.group(1));
+            m.appendReplacement(resolved, Matcher.quoteReplacement(m.group(2)));
+        }
+        m.appendTail(resolved);
+        String to = resolved.toString();
+        if (names.isEmpty()) {
+            return Optional.of(host);
+        }
+        if (to.isEmpty() || to.contains("$") || to.contains("{") || to.contains("}")) {
+            notes.add(routeEvidence + ": route " + id + " goes to " + LB + host
+                    + "; the callee cannot be resolved from its placeholder defaults; no edge");
+            return Optional.empty();
+        }
+        notes.add(routeEvidence + ": route " + id + " goes to " + LB + host + "; the callee is " + to
+                + ", the placeholder default; setting " + String.join(", ", names) + " changes it");
+        return Optional.of(to);
     }
 
     private Edge edge(String service, String to, String id, String[] route, List<Filter> filters) {
