@@ -128,6 +128,53 @@ class ProjectCollectorTest {
     }
 
     @Test
+    void petclinicClientCallsInCodeBecomeEdgesOrNotes() throws IOException {
+        petclinic();
+        copy("projects/petclinic-gateway-clients", "api-gateway");
+        copy("projects/petclinic-genai-service", "genai-service");
+        ProjectCollector.Result r = ProjectCollector.collect(dir);
+
+        String gw = "api-gateway/src/main/java/org/springframework/samples/petclinic/api/";
+        String genai = "genai-service/src/main/java/org/springframework/samples/petclinic/genai/";
+        Edge owner = edge(r, "customers-service", "GET /owners/{ownerId}");
+        assertThat(owner.from()).isEqualTo("api-gateway");
+        assertThat(owner.layers()).extracting(Layer::kind).containsExactly("http-client", "istio");
+        assertThat(owner.layers().get(0).retry().totalAttempts().evidence()).startsWith("@LoadBalanced WebClient "
+                + "(@LoadBalanced WebClient.Builder bean at " + gw + "ApiGatewayApplication.java:61, injected at "
+                + "parameter webClientBuilder at " + gw + "application/CustomersServiceClient.java:32)");
+        assertThat(owner.fanout().isKnown()).isFalse();
+
+        Edge visits = edge(r, "visits-service", "GET /pets/visits");
+        assertThat(visits.from()).isEqualTo("api-gateway");
+        assertThat(visits.idempotent().value()).isTrue();
+        assertThat(visits.idempotent().evidence()).contains(gw + "application/VisitsServiceClient.java:45",
+                "field hostname is also assigned at " + gw + "application/VisitsServiceClient.java:56");
+
+        Edge vets = edge(r, "vets-service", "GET /vets");
+        assertThat(vets.from()).isEqualTo("genai-service");
+
+        assertThat(r.graph().edges()).filteredOn(e -> e.from().equals("genai-service")).extracting(Edge::to)
+                .containsExactly("vets-service");
+        assertThat(r.notes()).filteredOn(n -> n.contains("with a host computed at run time")).containsExactly(
+                "genai-service: " + genai + "AIDataProvider.java:45: org.springframework.samples.petclinic.genai."
+                        + "AIDataProvider#getAllOwners calls GET {?}/owners through RestClient with a host computed "
+                        + "at run time (getCustomerServiceUri() + \"/owners\"); not an edge",
+                "genai-service: " + genai + "AIDataProvider.java:73: org.springframework.samples.petclinic.genai."
+                        + "AIDataProvider#addPetToOwner calls POST {?}/owners/{ownerId}/pets through RestClient with "
+                        + "a host computed at run time (getCustomerServiceUri() + \"/owners/\" + ownerId + \"/pets\"); "
+                        + "not an edge",
+                "genai-service: " + genai + "AIDataProvider.java:82: org.springframework.samples.petclinic.genai."
+                        + "AIDataProvider#addOwnerToPetclinic calls POST {?}/owners through RestClient with a host "
+                        + "computed at run time (getCustomerServiceUri() + \"/owners\"); not an edge");
+
+        assertThat(r.coverage().edges()).filteredOn(e -> "GET /vets".equals(e.operation())).singleElement()
+                .satisfies(e -> {
+                    assertThat(e.searched()).containsExactly("http-client", "istio");
+                    assertThat(e.found()).containsExactly("http-client", "istio");
+                });
+    }
+
+    @Test
     void edgesFromAHintAreSearchedForResilience4jAndTheHttpClientWithoutAMesh() throws IOException {
         copy("projects/gateway", "gw");
         Coverage c = ProjectCollector.collect(dir).coverage();

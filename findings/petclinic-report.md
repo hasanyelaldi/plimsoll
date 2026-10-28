@@ -1,6 +1,6 @@
 # Plimsoll analysis of `spring-petclinic-microservices`
 
-**3 error, 5 warn, 10 info**
+**3 error, 5 warn, 16 info**
 
 ## Amplification per service
 
@@ -9,10 +9,10 @@ Limit: 10
 | Service | Amplification |
 | --- | --- |
 | api-gateway | ×1 |
-| customers-service | ×2 |
+| customers-service | at least ×3 |
 | genai-service | ×2 |
-| vets-service | ×1 |
-| visits-service | ×2 |
+| vets-service | at least ×3 |
+| visits-service | at least ×3 |
 
 ## Findings
 
@@ -26,13 +26,19 @@ Limit: 10
 | WARN | PLM-A4 | api-gateway→visits-service | zero backoff |
 | WARN | PLM-C1 | api-gateway | Spring Cloud CircuitBreaker (programmatic) detected, not modelled; edges from api-gateway may carry an unseen timeout layer |
 | WARN | PLM-C1 | genai-service | Spring AI retry detected, not modelled; edges from genai-service may carry an unseen retry layer |
+| INFO | PLM-A1 | customers-service | at least ×3, limit 10; the real value may be higher |
+| INFO | PLM-A1 | vets-service | at least ×3 (genai-service ×2), limit 10; the real value may be higher |
+| INFO | PLM-A1 | visits-service | at least ×3, limit 10; the real value may be higher |
 | INFO | PLM-A2a | api-gateway→customers-service | cannot evaluate: api-gateway→customers-service layer 1 (spring-cloud-gateway) perTryTimeout, api-gateway deadline UNKNOWN |
 | INFO | PLM-A2a | api-gateway→genai-service | cannot evaluate: api-gateway→genai-service layer 1 (spring-cloud-gateway) perTryTimeout, api-gateway deadline UNKNOWN |
 | INFO | PLM-A2a | api-gateway→visits-service | cannot evaluate: api-gateway→visits-service layer 1 (spring-cloud-gateway) perTryTimeout, api-gateway deadline UNKNOWN |
+| INFO | PLM-A2b | api-gateway→customers-service | cannot evaluate: customers-service deadline, api-gateway→customers-service layer 1 (http-client) perTryTimeout UNKNOWN |
 | INFO | PLM-A2b | api-gateway→customers-service | cannot evaluate: customers-service deadline, api-gateway→customers-service layer 1 (spring-cloud-gateway) perTryTimeout UNKNOWN |
 | INFO | PLM-A2b | api-gateway→genai-service | cannot evaluate: genai-service deadline, api-gateway→genai-service layer 1 (spring-cloud-gateway) perTryTimeout UNKNOWN |
 | INFO | PLM-A2b | api-gateway→vets-service | cannot evaluate: vets-service deadline, api-gateway→vets-service layer 1 (spring-cloud-gateway) perTryTimeout UNKNOWN |
+| INFO | PLM-A2b | api-gateway→visits-service | cannot evaluate: visits-service deadline, api-gateway→visits-service layer 1 (http-client) perTryTimeout UNKNOWN |
 | INFO | PLM-A2b | api-gateway→visits-service | cannot evaluate: visits-service deadline, api-gateway→visits-service layer 1 (spring-cloud-gateway) perTryTimeout UNKNOWN |
+| INFO | PLM-A2b | genai-service→vets-service | cannot evaluate: vets-service deadline, genai-service→vets-service layer 1 (http-client) perTryTimeout UNKNOWN |
 | INFO | PLM-A4 | api-gateway→customers-service | no jitter |
 | INFO | PLM-A4 | api-gateway→genai-service | no jitter |
 | INFO | PLM-A4 | api-gateway→visits-service | no jitter |
@@ -78,6 +84,28 @@ Limit: 10
 
 - genai-service Spring AI retry = dependency org.springframework.ai:spring-ai-starter-model-* [EXPLICIT: spring-petclinic-genai-service/pom.xml:27; https://docs.spring.io/spring-ai/reference/api/chat/openai-chat.html]
 
+### INFO PLM-A1 customers-service
+
+- api-gateway→customers-service layer 1 (spring-cloud-gateway) totalAttempts = 2 [EXPLICIT: Retry (default-filters[1], spring-petclinic-api-gateway/src/main/resources/application.yml:15): retries 1 + 1; spring-petclinic-api-gateway/src/main/resources/application.yml:17]
+- api-gateway→customers-service layer 1 (http-client) totalAttempts = 1 [LIBRARY_DEFAULT: @LoadBalanced WebClient (@LoadBalanced WebClient.Builder bean at spring-petclinic-api-gateway/src/main/java/org/springframework/samples/petclinic/api/ApiGatewayApplication.java:60, injected at parameter webClientBuilder at spring-petclinic-api-gateway/src/main/java/org/springframework/samples/petclinic/api/application/CustomersServiceClient.java:31): LoadBalancer retry off; spring.cloud.loadbalancer.retry.enabled not set; spring-cloud-loadbalancer 5.0.0, 5.0.3 default (verified by oracle), https://github.com/spring-cloud/spring-cloud-commons/blob/v5.0.3/spring-cloud-commons/src/main/java/org/springframework/cloud/client/loadbalancer/reactive/ReactorLoadBalancerClientAutoConfiguration.java]
+- api-gateway→customers-service fanout = UNKNOWN [UNKNOWN: found in code at spring-petclinic-api-gateway/src/main/java/org/springframework/samples/petclinic/api/application/CustomersServiceClient.java:36; no edges-hint.yaml entry gives its fanout (ADR 0009)]
+- **depends-on-unknown: api-gateway→customers-service fanout**
+
+### INFO PLM-A1 vets-service
+
+- api-gateway→vets-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: Retry (default-filters[1], spring-petclinic-api-gateway/src/main/resources/application.yml:15) repeats only POST (spring-petclinic-api-gateway/src/main/resources/application.yml:19 (methods)); route vets-service serves vets-service GET /vets at spring-petclinic-vets-service/src/main/java/org/springframework/samples/petclinic/vets/web/VetResource.java:44]
+- api-gateway→genai-service layer 1 (spring-cloud-gateway) totalAttempts = 2 [EXPLICIT: Retry (default-filters[1], spring-petclinic-api-gateway/src/main/resources/application.yml:15): retries 1 + 1; spring-petclinic-api-gateway/src/main/resources/application.yml:17]
+- genai-service→vets-service layer 1 (http-client) totalAttempts = 1 [LIBRARY_DEFAULT: @LoadBalanced WebClient (@LoadBalanced WebClient.Builder bean at spring-petclinic-genai-service/src/main/java/org/springframework/samples/petclinic/genai/AIBeanConfiguration.java:26, injected at parameter webClientBuilder at spring-petclinic-genai-service/src/main/java/org/springframework/samples/petclinic/genai/VectorStoreController.java:44): LoadBalancer retry off; spring.cloud.loadbalancer.retry.enabled not set; spring-cloud-loadbalancer 5.0.0, 5.0.3 default (verified by oracle), https://github.com/spring-cloud/spring-cloud-commons/blob/v5.0.3/spring-cloud-commons/src/main/java/org/springframework/cloud/client/loadbalancer/reactive/ReactorLoadBalancerClientAutoConfiguration.java]
+- genai-service→vets-service fanout = UNKNOWN [UNKNOWN: found in code at spring-petclinic-genai-service/src/main/java/org/springframework/samples/petclinic/genai/VectorStoreController.java:68; no edges-hint.yaml entry gives its fanout (ADR 0009)]
+- **depends-on-unknown: genai-service→vets-service fanout**
+
+### INFO PLM-A1 visits-service
+
+- api-gateway→visits-service layer 1 (spring-cloud-gateway) totalAttempts = 2 [EXPLICIT: Retry (default-filters[1], spring-petclinic-api-gateway/src/main/resources/application.yml:15): retries 1 + 1; spring-petclinic-api-gateway/src/main/resources/application.yml:17]
+- api-gateway→visits-service layer 1 (http-client) totalAttempts = 1 [LIBRARY_DEFAULT: @LoadBalanced WebClient (@LoadBalanced WebClient.Builder bean at spring-petclinic-api-gateway/src/main/java/org/springframework/samples/petclinic/api/ApiGatewayApplication.java:60, injected at parameter webClientBuilder at spring-petclinic-api-gateway/src/main/java/org/springframework/samples/petclinic/api/application/VisitsServiceClient.java:38): LoadBalancer retry off; spring.cloud.loadbalancer.retry.enabled not set; spring-cloud-loadbalancer 5.0.0, 5.0.3 default (verified by oracle), https://github.com/spring-cloud/spring-cloud-commons/blob/v5.0.3/spring-cloud-commons/src/main/java/org/springframework/cloud/client/loadbalancer/reactive/ReactorLoadBalancerClientAutoConfiguration.java]
+- api-gateway→visits-service fanout = UNKNOWN [UNKNOWN: found in code at spring-petclinic-api-gateway/src/main/java/org/springframework/samples/petclinic/api/application/VisitsServiceClient.java:44; no edges-hint.yaml entry gives its fanout (ADR 0009)]
+- **depends-on-unknown: api-gateway→visits-service fanout**
+
 ### INFO PLM-A2a api-gateway→customers-service
 
 - api-gateway→customers-service layer 1 (spring-cloud-gateway) totalAttempts = 2 [EXPLICIT: Retry (default-filters[1], spring-petclinic-api-gateway/src/main/resources/application.yml:15): retries 1 + 1; spring-petclinic-api-gateway/src/main/resources/application.yml:17]
@@ -111,6 +139,13 @@ Limit: 10
 ### INFO PLM-A2b api-gateway→customers-service
 
 - customers-service deadline = UNKNOWN [UNKNOWN: customers-service has no edges hint; set 'deadline:' in the edges-hint.yaml of customers-service (ADR 0009)]
+- api-gateway→customers-service layer 1 (http-client) perTryTimeout = UNKNOWN [UNKNOWN: @LoadBalanced WebClient (@LoadBalanced WebClient.Builder bean at spring-petclinic-api-gateway/src/main/java/org/springframework/samples/petclinic/api/ApiGatewayApplication.java:60, injected at parameter webClientBuilder at spring-petclinic-api-gateway/src/main/java/org/springframework/samples/petclinic/api/application/CustomersServiceClient.java:31): no response timeout (WebClient.builder() with Reactor Netty); spring-web 7.0.2, 7.0.9 default (verified by oracle), https://github.com/spring-projects/spring-framework/blob/v7.0.9/spring-web/src/main/java/org/springframework/http/client/reactive/ReactorClientHttpConnector.java]
+- api-gateway→customers-service layer 1 (http-client) totalAttempts = 1 [LIBRARY_DEFAULT: @LoadBalanced WebClient (@LoadBalanced WebClient.Builder bean at spring-petclinic-api-gateway/src/main/java/org/springframework/samples/petclinic/api/ApiGatewayApplication.java:60, injected at parameter webClientBuilder at spring-petclinic-api-gateway/src/main/java/org/springframework/samples/petclinic/api/application/CustomersServiceClient.java:31): LoadBalancer retry off; spring.cloud.loadbalancer.retry.enabled not set; spring-cloud-loadbalancer 5.0.0, 5.0.3 default (verified by oracle), https://github.com/spring-cloud/spring-cloud-commons/blob/v5.0.3/spring-cloud-commons/src/main/java/org/springframework/cloud/client/loadbalancer/reactive/ReactorLoadBalancerClientAutoConfiguration.java]
+- **depends-on-unknown: api-gateway→customers-service layer 1 (http-client) perTryTimeout, customers-service deadline**
+
+### INFO PLM-A2b api-gateway→customers-service
+
+- customers-service deadline = UNKNOWN [UNKNOWN: customers-service has no edges hint; set 'deadline:' in the edges-hint.yaml of customers-service (ADR 0009)]
 - api-gateway→customers-service layer 1 (spring-cloud-gateway) perTryTimeout = UNKNOWN [UNKNOWN: spring.cloud.gateway.server.webflux.httpclient.response-timeout not set; no verified spring-cloud-gateway default for it]
 - api-gateway→customers-service layer 1 (spring-cloud-gateway) totalAttempts = 2 [EXPLICIT: Retry (default-filters[1], spring-petclinic-api-gateway/src/main/resources/application.yml:15): retries 1 + 1; spring-petclinic-api-gateway/src/main/resources/application.yml:17]
 - **depends-on-unknown: api-gateway→customers-service layer 1 (spring-cloud-gateway) perTryTimeout, customers-service deadline**
@@ -132,9 +167,23 @@ Limit: 10
 ### INFO PLM-A2b api-gateway→visits-service
 
 - visits-service deadline = UNKNOWN [UNKNOWN: visits-service has no edges hint; set 'deadline:' in the edges-hint.yaml of visits-service (ADR 0009)]
+- api-gateway→visits-service layer 1 (http-client) perTryTimeout = UNKNOWN [UNKNOWN: @LoadBalanced WebClient (@LoadBalanced WebClient.Builder bean at spring-petclinic-api-gateway/src/main/java/org/springframework/samples/petclinic/api/ApiGatewayApplication.java:60, injected at parameter webClientBuilder at spring-petclinic-api-gateway/src/main/java/org/springframework/samples/petclinic/api/application/VisitsServiceClient.java:38): no response timeout (WebClient.builder() with Reactor Netty); spring-web 7.0.2, 7.0.9 default (verified by oracle), https://github.com/spring-projects/spring-framework/blob/v7.0.9/spring-web/src/main/java/org/springframework/http/client/reactive/ReactorClientHttpConnector.java]
+- api-gateway→visits-service layer 1 (http-client) totalAttempts = 1 [LIBRARY_DEFAULT: @LoadBalanced WebClient (@LoadBalanced WebClient.Builder bean at spring-petclinic-api-gateway/src/main/java/org/springframework/samples/petclinic/api/ApiGatewayApplication.java:60, injected at parameter webClientBuilder at spring-petclinic-api-gateway/src/main/java/org/springframework/samples/petclinic/api/application/VisitsServiceClient.java:38): LoadBalancer retry off; spring.cloud.loadbalancer.retry.enabled not set; spring-cloud-loadbalancer 5.0.0, 5.0.3 default (verified by oracle), https://github.com/spring-cloud/spring-cloud-commons/blob/v5.0.3/spring-cloud-commons/src/main/java/org/springframework/cloud/client/loadbalancer/reactive/ReactorLoadBalancerClientAutoConfiguration.java]
+- **depends-on-unknown: api-gateway→visits-service layer 1 (http-client) perTryTimeout, visits-service deadline**
+
+### INFO PLM-A2b api-gateway→visits-service
+
+- visits-service deadline = UNKNOWN [UNKNOWN: visits-service has no edges hint; set 'deadline:' in the edges-hint.yaml of visits-service (ADR 0009)]
 - api-gateway→visits-service layer 1 (spring-cloud-gateway) perTryTimeout = UNKNOWN [UNKNOWN: spring.cloud.gateway.server.webflux.httpclient.response-timeout not set; no verified spring-cloud-gateway default for it]
 - api-gateway→visits-service layer 1 (spring-cloud-gateway) totalAttempts = 2 [EXPLICIT: Retry (default-filters[1], spring-petclinic-api-gateway/src/main/resources/application.yml:15): retries 1 + 1; spring-petclinic-api-gateway/src/main/resources/application.yml:17]
 - **depends-on-unknown: api-gateway→visits-service layer 1 (spring-cloud-gateway) perTryTimeout, visits-service deadline**
+
+### INFO PLM-A2b genai-service→vets-service
+
+- vets-service deadline = UNKNOWN [UNKNOWN: vets-service has no edges hint; set 'deadline:' in the edges-hint.yaml of vets-service (ADR 0009)]
+- genai-service→vets-service layer 1 (http-client) perTryTimeout = UNKNOWN [UNKNOWN: @LoadBalanced WebClient (@LoadBalanced WebClient.Builder bean at spring-petclinic-genai-service/src/main/java/org/springframework/samples/petclinic/genai/AIBeanConfiguration.java:26, injected at parameter webClientBuilder at spring-petclinic-genai-service/src/main/java/org/springframework/samples/petclinic/genai/VectorStoreController.java:44): no response timeout (WebClient.builder() with Reactor Netty); spring-web 7.0.2, 7.0.9 default (verified by oracle), https://github.com/spring-projects/spring-framework/blob/v7.0.9/spring-web/src/main/java/org/springframework/http/client/reactive/ReactorClientHttpConnector.java]
+- genai-service→vets-service layer 1 (http-client) totalAttempts = 1 [LIBRARY_DEFAULT: @LoadBalanced WebClient (@LoadBalanced WebClient.Builder bean at spring-petclinic-genai-service/src/main/java/org/springframework/samples/petclinic/genai/AIBeanConfiguration.java:26, injected at parameter webClientBuilder at spring-petclinic-genai-service/src/main/java/org/springframework/samples/petclinic/genai/VectorStoreController.java:44): LoadBalancer retry off; spring.cloud.loadbalancer.retry.enabled not set; spring-cloud-loadbalancer 5.0.0, 5.0.3 default (verified by oracle), https://github.com/spring-cloud/spring-cloud-commons/blob/v5.0.3/spring-cloud-commons/src/main/java/org/springframework/cloud/client/loadbalancer/reactive/ReactorLoadBalancerClientAutoConfiguration.java]
+- **depends-on-unknown: genai-service→vets-service layer 1 (http-client) perTryTimeout, vets-service deadline**
 
 ### INFO PLM-A4 api-gateway→customers-service
 
@@ -175,9 +224,12 @@ Istio manifests: none.
 | Edge | Operation | Searched | Found |
 | --- | --- | --- | --- |
 | api-gateway→customers-service | /api/customer/** | spring-cloud-gateway | spring-cloud-gateway |
+| api-gateway→customers-service | GET /owners/{ownerId} | http-client | http-client |
 | api-gateway→genai-service | /api/genai/** | spring-cloud-gateway | spring-cloud-gateway |
 | api-gateway→vets-service | /api/vet/** | spring-cloud-gateway | spring-cloud-gateway |
 | api-gateway→visits-service | /api/visit/** | spring-cloud-gateway | spring-cloud-gateway |
+| api-gateway→visits-service | GET /pets/visits | http-client | http-client |
+| genai-service→vets-service | GET /vets | http-client | http-client |
 
 ### Sources not read
 
@@ -213,3 +265,6 @@ Istio manifests: none.
 - api-gateway: spring-petclinic-api-gateway/src/main/resources/application.yml:11: CircuitBreaker 'defaultCircuitBreaker' (default-filters[0]) on route vets-service is not modelled; its TimeLimiter is UNKNOWN
 - api-gateway: spring-petclinic-api-gateway/src/main/resources/application.yml:11: CircuitBreaker 'defaultCircuitBreaker' (default-filters[0]) on route visits-service is not modelled; its TimeLimiter is UNKNOWN
 - api-gateway: spring-petclinic-api-gateway/src/main/resources/application.yml:45: CircuitBreaker 'genaiCircuitBreaker' (route genai-service filters[1]) on route genai-service is not modelled; its TimeLimiter is UNKNOWN
+- genai-service: spring-petclinic-genai-service/src/main/java/org/springframework/samples/petclinic/genai/AIDataProvider.java:44: org.springframework.samples.petclinic.genai.AIDataProvider#getAllOwners calls GET {?}/owners through RestClient with a host computed at run time (getCustomerServiceUri() + "/owners"); not an edge
+- genai-service: spring-petclinic-genai-service/src/main/java/org/springframework/samples/petclinic/genai/AIDataProvider.java:72: org.springframework.samples.petclinic.genai.AIDataProvider#addPetToOwner calls POST {?}/owners/{ownerId}/pets through RestClient with a host computed at run time (getCustomerServiceUri() + "/owners/" + ownerId + "/pets"); not an edge
+- genai-service: spring-petclinic-genai-service/src/main/java/org/springframework/samples/petclinic/genai/AIDataProvider.java:81: org.springframework.samples.petclinic.genai.AIDataProvider#addOwnerToPetclinic calls POST {?}/owners through RestClient with a host computed at run time (getCustomerServiceUri() + "/owners"); not an edge

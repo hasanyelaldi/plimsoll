@@ -15,6 +15,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -39,7 +40,13 @@ import java.util.function.Function;
  * </ul>
  *
  * Each behaviour is checked against the real libraries by {@code LoadBalancerRetryOracleTest} and
- * {@code HttpClientTimeoutOracleTest}. Per-client LoadBalancer properties
+ * {@code HttpClientTimeoutOracleTest}.
+ *
+ * <p>{@link #discover} turns the requests {@link ClientCallScanner} finds in code into edges, for methods no hint
+ * names (#37). A request becomes an edge only when its host is a service of the graph and its client goes through
+ * Spring Cloud LoadBalancer, so the host is a service id; every other request becomes a note. A
+ * {@code @LoadBalanced} WebClient gets the layer above. A {@code @LoadBalanced} RestTemplate or RestClient retries
+ * through spring-retry's interceptor, which no oracle covers yet: its attempts are UNKNOWN. Per-client LoadBalancer properties
  * ({@code spring.cloud.loadbalancer.clients.<service>.*}), backoff and custom retryable exceptions are not modelled
  * yet: they give UNKNOWN and a note.
  */
@@ -72,6 +79,18 @@ public final class HttpClientCollector {
         }
     }
 
+    /**
+     * Edges found in code, with their HTTP client layers.
+     *
+     * @param edges one per caller, callee and operation, in source order
+     * @param http  the layer of each edge, and the requests that did not become edges
+     */
+    public record Discovered(List<Edge> edges, Result http) {
+        public Discovered {
+            edges = List.copyOf(edges);
+        }
+    }
+
     private final SpringProperties props;
     private final DefaultsKb kb;
     private final List<String> notes = new ArrayList<>();
@@ -100,8 +119,9 @@ public final class HttpClientCollector {
             }
             EdgeKey key = new EdgeKey(hint.service(), h.to(), h.operation() != null ? h.operation() : h.qualifiedMethod());
             Layer layer = switch (h.client().value()) {
-                case "webclient-loadbalanced" -> c.loadBalancedWebClient(h);
-                case "restclient" -> c.restClient(h);
+                case "webclient-loadbalanced" -> c.loadBalancedWebClient(h.to(), h.qualifiedMethod(),
+                        h.client().evidence());
+                case "restclient" -> c.restClient(h.client().evidence());
                 default -> throw new IllegalStateException("client " + h.client().value());
             };
             Layer previous = layers.putIfAbsent(key, layer);
@@ -113,17 +133,90 @@ public final class HttpClientCollector {
         return new Result(layers, c.notes);
     }
 
+    /**
+     * @param service  the caller
+     * @param calls    the requests in its code
+     * @param services the services of the graph
+     * @param hint     the caller's edges hint, or null; a request in a method it names is left to the hint
+     */
+    public static Discovered discover(String service, List<ClientCallScanner.ClientCall> calls, Set<String> services,
+            EdgesHint hint, SpringProperties props, DefaultsKb kb) {
+        HttpClientCollector c = new HttpClientCollector(props, kb);
+        Set<String> hinted = new TreeSet<>();
+        Set<EdgeKey> hintEdges = new HashSet<>();
+        if (hint != null) {
+            for (Hint h : hint.methods()) {
+                hinted.add(h.qualifiedMethod());
+                hintEdges.add(new EdgeKey(service, h.to(), h.operation() != null ? h.operation() : h.qualifiedMethod()));
+            }
+        }
+        List<Edge> edges = new ArrayList<>();
+        Map<EdgeKey, Layer> layers = new LinkedHashMap<>();
+        for (ClientCallScanner.ClientCall call : calls) {
+            if (hinted.contains(call.qualifiedMethod())) {
+                continue;
+            }
+            String request = call.evidence() + ": " + call.qualifiedMethod() + " calls " + call.operation()
+                    + " through " + (call.client() == null ? "a client" : call.client());
+            if (!call.host().isKnown()) {
+                c.notes.add(request + " with a host computed at run time (" + call.uri() + "); not an edge");
+                continue;
+            }
+            String to = call.host().value();
+            if (!services.contains(to)) {
+                if (Boolean.TRUE.equals(call.loadBalanced().value())) {
+                    c.notes.add(request + " on " + to + ", which is not a service of this directory; not an edge");
+                }
+                continue;
+            }
+            if (!call.loadBalanced().isKnown() || call.client() == null) {
+                c.notes.add(request + " on " + to + "; whether it is load-balanced is not known ("
+                        + call.loadBalanced().evidence() + "); not an edge");
+                continue;
+            }
+            if (!call.loadBalanced().value()) {
+                c.notes.add(request + " on " + to + " without a load balancer (" + call.loadBalanced().evidence()
+                        + "), so the host is resolved by DNS; not an edge");
+                continue;
+            }
+            if (!call.resilience4j().isEmpty()) {
+                c.notes.add(request + " on " + to + " under " + String.join(", ", call.resilience4j())
+                        + "; add an edges-hint.yaml entry for " + call.qualifiedMethod()
+                        + " so that its Resilience4j layer is read; not an edge");
+                continue;
+            }
+            EdgeKey key = new EdgeKey(service, to, call.operation());
+            if (hintEdges.contains(key) || layers.containsKey(key)) {
+                continue;
+            }
+            Val<Boolean> idempotent = call.method().isKnown()
+                    ? HttpMethods.idempotent(call.method().value(), call.host().evidence(), kb)
+                    : Val.unknown(call.method().evidence());
+            Val<Integer> fanout = Val.unknown("found in code at " + call.evidence()
+                    + "; no edges-hint.yaml entry gives its fanout (ADR 0009)");
+            edges.add(new Edge(service, to, call.operation(), idempotent, fanout, List.of()));
+            layers.put(key, call.client().equals("WebClient")
+                    ? c.loadBalancedWebClient(to, call.qualifiedMethod(), call.loadBalanced().evidence())
+                    : c.unverifiedLoadBalanced(call));
+        }
+        return new Discovered(edges, new Result(layers, c.notes));
+    }
+
     // ---- WebClient + Spring Cloud LoadBalancer ---------------------------
 
-    private Layer loadBalancedWebClient(Hint h) {
-        String client = "@LoadBalanced WebClient (" + h.client().evidence() + ")";
+    /**
+     * @param where  the calling method, e.g. {@code Class#method}
+     * @param@param origin where the client is declared or configured
+     */
+    private Layer loadBalancedWebClient(String to, String where, String origin) {
+        String client = "@LoadBalanced WebClient (" + origin + ")";
         Val<Duration> timeout = webClientResponseTimeout(client);
         Set<String> perClient = props.names("spring", "cloud", "loadbalancer", "clients");
-        if (perClient.contains(h.to())) {
-            notes.add(h.to() + ": spring.cloud.loadbalancer.clients." + h.to()
+        if (perClient.contains(to)) {
+            notes.add(to + ": spring.cloud.loadbalancer.clients." + to
                     + ".* found; per-client LoadBalancer properties are not modelled yet, retries of "
-                    + h.qualifiedMethod() + " are UNKNOWN");
-            return new Layer(KIND, unknownRetry("per-client LoadBalancer properties for " + h.to()
+                    + where + " are UNKNOWN");
+            return new Layer(KIND, unknownRetry("per-client LoadBalancer properties for " + to
                     + " are not modelled", timeout), timeout);
         }
 
@@ -165,7 +258,7 @@ public final class HttpClientCollector {
             jitter = Val.unknown(why);
         } else if (backoff.value()) {
             notes.add(backoff.evidence() + ": LoadBalancer backoff is not modelled yet, backoff of "
-                    + h.qualifiedMethod() + " is UNKNOWN");
+                    + where + " is UNKNOWN");
             String why = "LoadBalancer backoff is not modelled yet (" + backoff.evidence() + ")";
             initial = Val.unknown(why);
             multiplier = Val.unknown(why);
@@ -178,17 +271,27 @@ public final class HttpClientCollector {
             maxBackoff = new Val<>(Duration.ZERO, backoff.source(), why);
             jitter = new Val<>(false, backoff.source(), why);
         }
-        RetryPolicy retry = new RetryPolicy(attempts, timeout, initial, multiplier, maxBackoff, jitter, retryOn(h));
+        RetryPolicy retry = new RetryPolicy(attempts, timeout, initial, multiplier, maxBackoff, jitter, retryOn(where));
         return new Layer(KIND, retry, timeout);
     }
 
+    /** A {@code @LoadBalanced} RestTemplate or RestClient: blocking LoadBalancer retries, not verified yet. */
+    private Layer unverifiedLoadBalanced(ClientCallScanner.ClientCall call) {
+        String why = "@LoadBalanced " + call.client() + " (" + call.loadBalanced().evidence()
+                + "): blocking LoadBalancer retries (spring-retry) are not verified yet";
+        notes.add(call.evidence() + ": " + call.qualifiedMethod() + " calls " + call.host().value() + " through a "
+                + "@LoadBalanced " + call.client() + "; its LoadBalancer retries are not verified yet and are UNKNOWN");
+        Val<Duration> timeout = Val.unknown(why);
+        return new Layer(KIND, unknownRetry(why, timeout), timeout);
+    }
+
     /** Exceptions are retried for every method; status codes for GET only, unless retry-on-all-operations. */
-    private Val<Set<String>> retryOn(Hint h) {
+    private Val<Set<String>> retryOn(String where) {
         for (String custom : List.of("retryable-exceptions", "retry-on-all-exceptions")) {
             Optional<Property> p = property(custom);
             if (p.isPresent()) {
                 notes.add(p.get().evidence() + ": " + RETRY + custom + " is not modelled yet, retry conditions of "
-                        + h.qualifiedMethod() + " are UNKNOWN");
+                        + where + " are UNKNOWN");
                 return Val.unknown(RETRY + custom + " is not modelled yet (" + p.get().evidence() + ")");
             }
         }
@@ -240,8 +343,8 @@ public final class HttpClientCollector {
 
     // ---- RestClient ------------------------------------------------------
 
-    private Layer restClient(Hint h) {
-        String client = "RestClient (" + h.client().evidence() + ")";
+    private Layer restClient(String source) {
+        String client = "RestClient (" + source + ")";
         String factories = kb.lookup(WEB_KB, "restclient-builder.request-factory")
                 .map(e -> "the first of " + e.value() + " on the classpath (" + e.evidence() + ")")
                 .orElse("the HTTP library on the classpath");

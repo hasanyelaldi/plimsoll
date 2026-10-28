@@ -12,8 +12,12 @@ import io.github.hasanyelaldi.plimsoll.model.Layer;
 import io.github.hasanyelaldi.plimsoll.model.RetryPolicy;
 import io.github.hasanyelaldi.plimsoll.model.Source;
 import io.github.hasanyelaldi.plimsoll.model.Val;
+import io.github.hasanyelaldi.plimsoll.collect.http.ClientCallScanner.ClientCall;
+import io.github.hasanyelaldi.plimsoll.model.Edge;
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 class HttpClientCollectorTest {
@@ -179,5 +183,113 @@ class HttpClientCollectorTest {
                 .isInstanceOf(InvalidSpecException.class)
                 .hasMessageContaining("application.yml:3")
                 .hasMessageContaining("must be an integer of at least 0, got -1");
+    }
+
+    // ---- edges found in code (#37) ---------------------------------------
+
+    private static final Set<String> SERVICES = Set.of("api-gateway", "customers-service", "vets-service");
+
+    private static ClientCall call(String method, String host, String client, Val<Boolean> loadBalanced) {
+        return call("p.C#m", method, host, client, loadBalanced, List.of());
+    }
+
+    private static ClientCall call(String where, String method, String host, String client,
+            Val<Boolean> loadBalanced, List<String> resilience4j) {
+        Val<String> h = host == null ? Val.unknown("C.java:9: host not resolved from uri()")
+                : Val.explicit(host, "C.java:9: \"http://" + host + "/x\"");
+        return new ClientCall(where, client, loadBalanced, Val.explicit(method, "C.java:9"), h, "/x", "uri()",
+                resilience4j, "C.java:9");
+    }
+
+    private static final Val<Boolean> LB = Val.explicit(true, "@LoadBalanced bean at Config.java:3");
+
+    private static HttpClientCollector.Discovered discover(EdgesHint hint, ClientCall... calls) {
+        return HttpClientCollector.discover("api-gateway", List.of(calls), SERVICES, hint,
+                SpringProperties.parse("server.port: 8080", "application.yml"), DefaultsKb.classpath());
+    }
+
+    @Test
+    void loadBalancedWebClientRequestToAServiceIsAnEdgeWithTheWebClientLayer() {
+        HttpClientCollector.Discovered d = discover(null, call("POST", "customers-service", "WebClient", LB));
+
+        Edge e = d.edges().get(0);
+        assertThat(d.edges()).hasSize(1);
+        assertThat(e.from()).isEqualTo("api-gateway");
+        assertThat(e.to()).isEqualTo("customers-service");
+        assertThat(e.operation()).isEqualTo("POST /x");
+        assertThat(e.layers()).isEmpty();
+        assertThat(e.idempotent().value()).isFalse();
+        assertThat(e.idempotent().source()).isEqualTo(Source.LIBRARY_DEFAULT);
+        assertThat(e.idempotent().evidence()).startsWith("POST (C.java:9: \"http://customers-service/x\")");
+        assertThat(e.fanout()).isEqualTo(Val.unknown(
+                "found in code at C.java:9; no edges-hint.yaml entry gives its fanout (ADR 0009)"));
+
+        Layer layer = d.http().layerFor(e).orElseThrow();
+        assertThat(layer.kind()).isEqualTo("http-client");
+        assertThat(layer.retry().totalAttempts().value()).isEqualTo(1);
+        assertThat(layer.retry().totalAttempts().evidence())
+                .startsWith("@LoadBalanced WebClient (@LoadBalanced bean at Config.java:3): LoadBalancer retry off");
+        assertThat(d.http().notes()).isEmpty();
+    }
+
+    @Test
+    void loadBalancedRestTemplateIsAnEdgeWithUnknownAttempts() {
+        HttpClientCollector.Discovered d = discover(null, call("GET", "vets-service", "RestTemplate", LB));
+
+        Layer layer = d.http().layerFor(d.edges().get(0)).orElseThrow();
+        assertThat(layer.retry().totalAttempts().source()).isEqualTo(Source.UNKNOWN);
+        assertThat(layer.retry().totalAttempts().evidence())
+                .contains("@LoadBalanced RestTemplate", "not verified yet");
+        assertThat(d.http().notes()).singleElement().asString()
+                .startsWith("C.java:9: p.C#m calls vets-service through a @LoadBalanced RestTemplate");
+    }
+
+    @Test
+    void requestsThatAreNotLoadBalancedServiceCallsAreNotes() {
+        HttpClientCollector.Discovered d = discover(null,
+                call("GET", null, "RestClient", Val.explicit(false, "C.java:2: built in place")),
+                call("GET", "customers-service", "RestClient", Val.explicit(false, "C.java:2: built in place")),
+                call("GET", "billing", "WebClient", LB),
+                call("GET", "api.example.com", "RestClient", Val.explicit(false, "C.java:2: built in place")),
+                call("GET", "vets-service", "WebClient", Val.unknown("C.java:4: client not traced")));
+
+        assertThat(d.edges()).isEmpty();
+        assertThat(d.http().layers()).isEmpty();
+        assertThat(d.http().notes()).containsExactly(
+                "C.java:9: p.C#m calls GET /x through RestClient with a host computed at run time (uri()); not an edge",
+                "C.java:9: p.C#m calls GET /x through RestClient on customers-service without a load balancer "
+                        + "(C.java:2: built in place), so the host is resolved by DNS; not an edge",
+                "C.java:9: p.C#m calls GET /x through WebClient on billing, which is not a service of this "
+                        + "directory; not an edge",
+                "C.java:9: p.C#m calls GET /x through WebClient on vets-service; whether it is load-balanced is "
+                        + "not known (C.java:4: client not traced); not an edge");
+    }
+
+    @Test
+    void requestUnderResilience4jAnnotationsNeedsAHintEntry() {
+        HttpClientCollector.Discovered d = discover(null,
+                call("p.C#m", "GET", "vets-service", "WebClient", LB, List.of("@Retry at C.java:7")));
+
+        assertThat(d.edges()).isEmpty();
+        assertThat(d.http().notes()).containsExactly("C.java:9: p.C#m calls GET /x through WebClient on vets-service "
+                + "under @Retry at C.java:7; add an edges-hint.yaml entry for p.C#m so that its Resilience4j layer "
+                + "is read; not an edge");
+    }
+
+    @Test
+    void theHintWinsForTheMethodsItNamesAndDuplicatesCollapse() {
+        EdgesHint hint = EdgesHint.parse("""
+                service: api-gateway
+                methods:
+                  - { method: p.Customers#getOwner, to: customers-service }
+                """, "edges-hint.yaml");
+        HttpClientCollector.Discovered d = discover(hint,
+                call("p.Customers#getOwner", "GET", "customers-service", "WebClient", LB, List.of()),
+                call("p.Other#a", "GET", "vets-service", "WebClient", LB, List.of()),
+                call("p.Other#b", "GET", "vets-service", "WebClient", LB, List.of()));
+
+        assertThat(d.edges()).extracting(Edge::to, Edge::operation)
+                .containsExactly(org.assertj.core.api.Assertions.tuple("vets-service", "GET /x"));
+        assertThat(d.http().notes()).isEmpty();
     }
 }
