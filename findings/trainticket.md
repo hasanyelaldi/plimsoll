@@ -31,8 +31,8 @@ The first run, before #46, named every callee `${..._HOST:ts-...}` after the unr
 | --- | --- | --- |
 | A1 | none above the limit | ×3 on 37 callees, ×6 on `ts-auth-service`, ×1 on the gateway |
 | A3 `ERROR` | 34 | POST routes retried 3 times by the Istio default |
-| A2a `INFO` | 39 | cannot evaluate: gateway deadline and Istio per-try timeout `UNKNOWN` |
-| A2b `INFO` | 39 | cannot evaluate: callee deadline and both per-try timeouts `UNKNOWN` |
+| A2a `INFO` | 39 | cannot evaluate: gateway deadline `UNKNOWN` (per-try timeouts are unlimited since #38) |
+| A2b `INFO` | 39 | cannot evaluate: callee deadline `UNKNOWN` |
 | A4, A5, C1 | none | Istio backs off (25 ms base, jittered); only one layer retries; no mechanism from `kb/detectors` was found |
 
 Coverage: 44 modules read, 3 Istio manifests read, 39 edges searched for `spring-cloud-gateway` and `istio`. There are 39 sources not read, all of them the `${..._HOST:...}` placeholders in the gateway routes.
@@ -47,6 +47,8 @@ After #37 (client calls in code) the findings are unchanged; the report gains 14
 | Istio `totalAttempts` | 3 | `LIBRARY_DEFAULT` | no VirtualService for the host; Istio 1.31 default, attempts 2 + 1 (`kb/defaults/istio.yaml`, verified by doc) |
 | Istio `backoff`, `jitter` | 25 ms, true | `LIBRARY_DEFAULT` | same KB entries; Envoy's fully jittered back-off |
 | Istio `multiplier`, `maxBackoff` | `UNKNOWN` | | Envoy's back-off has no fixed multiplier or cap on the minimum wait |
+| Gateway `perTryTimeout` | unlimited | `LIBRARY_DEFAULT` | `response-timeout` not set; Gateway 5.0.x default (`GatewayTimeoutOracleTest`). TrainTicket runs Gateway 2.2.x (Hoxton); the KB has no entry for that version and does not check versions yet, as for the Retry defaults |
+| Istio `perTryTimeout`, route timeout | unlimited | `LIBRARY_DEFAULT` | no VirtualService, so no route timeout (Istio 1.31 reference: "default is disabled") and the per-try timeout falls back to it |
 | `idempotent` (34 routes) | false | `LIBRARY_DEFAULT` | a `POST` mapping of the callee reached by the route, e.g. `OrderController.java:37`; RFC 9110 (ADR 0008) |
 | Callee names | e.g. `ts-order-service` | placeholder default | `lb://${ORDER_SERVICE_HOST:ts-order-service}`; a note says setting the variable changes the callee (#46) |
 | `entry` (gateway) | true | ADR 0009 | a Gateway with routes is an entry |
@@ -56,8 +58,6 @@ After #37 (client calls in code) the findings are unchanged; the report gains 14
 | Value | Why |
 | --- | --- |
 | `deadline` of every service | no `edges-hint.yaml`; ADR 0009 takes deadlines only from hints |
-| Gateway `perTryTimeout` | `spring.cloud.gateway.httpclient.response-timeout` is not set and the KB has no sourced default (#38) |
-| Istio `perTryTimeout` | no VirtualService, so no route timeout and no per-try timeout |
 | `idempotent` on 5 routes | `ts-avatar-service` is Python (no module); `cancel`, `execute`, `train-food` and `verification-code` have only GET mappings, so they get no A3 finding, as expected |
 
 ## Hand check
@@ -70,7 +70,7 @@ Checked against the TrainTicket sources and manifests at the pinned commit.
 | A3 on 34 POST routes | true positive in form, low risk in practice | POSTs do get up to 3 tries under the Istio default. But the default retries only on `connect-failure` and `refused-stream`, both before the upstream processes the request, and on `unavailable` and `cancelled`, gRPC statuses a REST call does not return. A duplicate side effect is therefore unlikely. A3 does not look at `retryOn` yet (comment on #24). |
 | A1 ×3 per callee | correct | 1 (gateway) × 3 (Istio) per route. |
 | A1 ×6 on `ts-auth-service` | overstated | Two routes (`auth`, `auth-user`) go to it. A request matches only one route, so the bound is ×3 (#48). The two A3 findings on these routes have the same location and cannot be told apart in the report (#48). |
-| A2a / A2b `INFO` | correct to stay silent | No deadline or timeout is configured anywhere. |
+| A2a / A2b `INFO` | correct to stay silent | No deadline is configured anywhere; the timeouts are known to be absent (#38). |
 | C1 none | correct | No Resilience4j, Spring Retry, Feign, Hystrix or other listed mechanism in the poms or the code. |
 
 **Deployment caveat.** The Istio manifests in `deployment/kubernetes-manifests/k8s-with-istio` (May 2021, images `0.0.4`) deploy the older architecture, which has no `ts-gateway-service`; there, `ts-ui-dashboard` routes requests. The gateway was added in August 2022 and is deployed by `quickstart-k8s`, which has no Istio. Plimsoll merges all manifests under the directory with all the code, so the 34 A3 findings describe a combination that the repository never deploys: the current gateway inside the 2021 mesh. If that gateway ran in a mesh with sidecar injection, the findings would hold. Filed as #49.
@@ -80,7 +80,6 @@ Checked against the TrainTicket sources and manifests at the pinned commit.
 | Gap | Where in TrainTicket | Follow-up |
 | --- | --- | --- |
 | Service-to-service calls in code are not edges | `RestTemplate` calls in 70 files, e.g. preserve → order, seat, travel, … | #37 |
-| Gateway HTTP client timeouts | `response-timeout` not set | #38 |
 | Condition-aware A3 and A1 | Istio default `retryOn` | #24 |
 | Version of the libraries | Gateway 2.2.x (Hoxton) and Istio `v1alpha3`, while the KB covers Gateway 5.0.0 and Istio 1.31 | #51 |
 | Modules that are not services | `old-docs/Json2Shiviz`, `old-docs/Lib/ms-monitoring-core`, `ts-common` (a library) | #50 |
