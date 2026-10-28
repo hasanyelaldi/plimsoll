@@ -8,7 +8,7 @@ Issue #9. Testbed choice: ADR 0005. The full generated report is in [`petclinic-
 | --- | --- |
 | spring-petclinic-microservices | `1d76b00d683e86b62867a6bf59530f8ab301244f` (7 Oct 2026), Spring Boot 4.0.1, Spring Cloud 2025.1.0 (Gateway 5.0.0) |
 | spring-petclinic-microservices-config | `323993ce2519c6d02df63e08bf4458d123d3b611` (2 May 2026), read by hand only |
-| Plimsoll | `3851edd` (main after #35); report regenerated after #23 (PLM-C1, Coverage section), same command |
+| Plimsoll | `3851edd` (main after #35); report regenerated after #23 (PLM-C1, Coverage section) and after #37 (client calls in code), same command |
 
 ```bash
 git clone https://github.com/spring-petclinic/spring-petclinic-microservices.git
@@ -21,15 +21,17 @@ No file in petclinic was changed and no `edges-hint.yaml` was added: this is wha
 
 ## Result
 
-**3 error, 5 warn, 10 info.** The graph has one entry (`api-gateway`) and four edges, all from Gateway routes.
+After #37: **3 error, 5 warn, 16 info.** The graph has one entry (`api-gateway`) and seven edges: four from Gateway routes and three from `@LoadBalanced` WebClient calls found in code. The first run (before #37) gave 3 error, 5 warn, 10 info on the four route edges only; the six new findings are all INFO.
 
 | Service | Amplification |
 | --- | --- |
 | api-gateway | ×1 |
-| customers-service | ×2 |
+| customers-service | at least ×3 |
 | genai-service | ×2 |
-| vets-service | ×1 |
-| visits-service | ×2 |
+| vets-service | at least ×3 |
+| visits-service | at least ×3 |
+
+"At least": the edges found in code have no fanout (ADR 0009: fanout comes only from a hint), so A1 counts them as 1 and reports INFO with `depends-on-unknown` instead of a plain number.
 
 | Severity | Rule | Location | Detail |
 | --- | --- | --- | --- |
@@ -39,9 +41,20 @@ No file in petclinic was changed and no `edges-hint.yaml` was added: this is wha
 | WARN | A4 | api-gateway→customers-service, genai-service, visits-service | zero backoff |
 | WARN | C1 | api-gateway | Spring Cloud CircuitBreaker (programmatic) detected, not modelled |
 | WARN | C1 | genai-service | Spring AI retry detected, not modelled |
-| INFO | A2a | same three edges | cannot evaluate (per-try timeout, gateway deadline `UNKNOWN`) |
-| INFO | A2b | all four edges | cannot evaluate (per-try timeout, callee deadline `UNKNOWN`) |
-| INFO | A4 | same three edges | no jitter |
+| INFO | A1 | customers-service, vets-service, visits-service | at least ×3 (fanout of a code edge `UNKNOWN`) |
+| INFO | A2a | the three retried route edges | cannot evaluate (per-try timeout, gateway deadline `UNKNOWN`) |
+| INFO | A2b | all seven edges | cannot evaluate (per-try timeout, callee deadline `UNKNOWN`) |
+| INFO | A4 | the three retried route edges | no jitter |
+
+### Edges found in code (#37)
+
+| Edge | Operation | Call site | How the host was found |
+| --- | --- | --- | --- |
+| api-gateway→customers-service | `GET /owners/{ownerId}` | `CustomersServiceClient.java:36` | string literal `http://customers-service/owners/{ownerId}` |
+| api-gateway→visits-service | `GET /pets/visits` | `VisitsServiceClient.java:44` | field `hostname` initialised to `http://visits-service/`; the evidence names its reassignment in `setHostname` (line 55), which only tests call |
+| genai-service→vets-service | `GET /vets` | `VectorStoreController.java:68` | local variable `vetsHostname` |
+
+All three clients are the `@LoadBalanced WebClient.Builder` beans of their module (`ApiGatewayApplication.java:60`, `AIBeanConfiguration.java:26`), traced from the constructor parameter. LoadBalancer retries are off (`spring.cloud.loadbalancer.retry.enabled` not set), so each adds an `http-client` layer with 1 try. The three `AIDataProvider` calls to customers-service (`GET /owners`, `POST /owners`, `POST /owners/{id}/pets`) take their host from `DiscoveryClient.getInstances("customers-service")` at run time and use a plain `RestClient`: they are listed as notes with `file:line`, not edges.
 
 ## Values used and their provenance
 
@@ -89,16 +102,25 @@ No false positives were found.
 
 | Gap | Where in petclinic | Follow-up |
 | --- | --- | --- |
-| Calls made from code are not edges without a hint file | gateway → customers and visits (`CustomersServiceClient`, `VisitsServiceClient`); genai → vets (`VectorStoreController`); genai → customers (`AIDataProvider`, incl. two POSTs) | #37 |
+| Calls whose host is computed at run time are notes, not edges | genai → customers (`AIDataProvider`, `DiscoveryClient`, incl. two POSTs) | — (by design in #37) |
 | Gateway HTTP client timeouts | `response-timeout` and `connect-timeout` defaults | #38 |
 | Programmatic Spring Cloud CircuitBreaker and its 10 s TimeLimiter | `ApiGatewayApplication.java:85-88`, `ApiGatewayController` (`getOwnerDetails` breaker) | #18 |
 | Breakers in the model | `CircuitBreaker` default filter and `genaiCircuitBreaker` with fallbacks; the order is known since #31 (listed before `Retry`, so it wraps all tries, and a timeout is not retried) | #22 |
 | Spring AI retry to the LLM provider | genai-service (`spring.ai.retry.*` not set, so the Spring AI defaults apply) | #19 |
 | Condition-aware A3 (which status or exception triggers the retry) | `statuses: SERVICE_UNAVAILABLE` plus default exceptions | #24 |
 
-The Coverage section of the report lists the files read for each of the 8 modules, the layer kinds searched on each of the 4 edges (only `spring-cloud-gateway`: there is no edges hint and no Istio manifest) and the 17 sources not read (#23).
+The Coverage section of the report lists the files read for each of the 8 modules, the layer kinds searched on each of the 7 edges (`spring-cloud-gateway` on routes, `http-client` on code edges; there is no edges hint and no Istio manifest) and the 17 sources not read (#23).
 
-Not gaps: Spring Cloud LoadBalancer retries stay off (`spring.cloud.loadbalancer.retry.enabled` is not set), so the `@LoadBalanced` clients would add ×1 edges once #37 lands.
+Not gaps: Spring Cloud LoadBalancer retries stay off (`spring.cloud.loadbalancer.retry.enabled` is not set), so the `@LoadBalanced` clients add ×1 layers, as expected before #37.
+
+### Where the code edges overstate (#37 hand check)
+
+| Value | Why it is higher than the real per-request bound | Follow-up |
+| --- | --- | --- |
+| customers-service, visits-service at least ×3 | A1 sums the gateway route (×2, POST retried) and the composite `GET /api/gateway/owners/{id}` path (×1) as if one gateway request took both. Each request takes one of them, so the real bound is ×2. | #48 (alternatives within one entry) |
+| vets-service at least ×3 | genai-service→vets-service runs once at startup (`@EventListener` on `ApplicationStartedEvent`), not per request; without it vets-service is ×1. | #54 (`later`) |
+
+Both are upper bounds that stay safe (never lower than the real value); no false positive at WARN or ERROR follows from them, since A1 stays below the limit of 10.
 
 ## Takeaways
 

@@ -37,6 +37,8 @@ The first run, before #46, named every callee `${..._HOST:ts-...}` after the unr
 
 Coverage: 44 modules read, 3 Istio manifests read, 39 edges searched for `spring-cloud-gateway` and `istio`. There are 39 sources not read, all of them the `${..._HOST:...}` placeholders in the gateway routes.
 
+After #37 (client calls in code) the findings are unchanged; the report gains 146 notes. The services call each other through `@LoadBalanced RestTemplate`s, but build the host with a helper (`getServiceUrl("ts-order-service")` returning `"http://" + serviceName`) that the scanner does not fold, so each request is a "host computed at run time" note instead of an edge (#55).
+
 ## Values used and their provenance
 
 | Value | Result | Source | Evidence |
