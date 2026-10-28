@@ -6,6 +6,7 @@ import io.github.hasanyelaldi.plimsoll.collect.resilience4j.EdgesHint.Hint;
 import io.github.hasanyelaldi.plimsoll.collect.spring.SpringProperties;
 import io.github.hasanyelaldi.plimsoll.collect.spring.SpringProperties.Property;
 import io.github.hasanyelaldi.plimsoll.io.InvalidSpecException;
+import io.github.hasanyelaldi.plimsoll.model.Durations;
 import io.github.hasanyelaldi.plimsoll.model.Edge;
 import io.github.hasanyelaldi.plimsoll.model.Layer;
 import io.github.hasanyelaldi.plimsoll.model.RetryPolicy;
@@ -332,13 +333,11 @@ public final class HttpClientCollector {
         return new Val<>(Set.copyOf(on), source, String.join("; ", evidence));
     }
 
+    /** None (ADR 0011): {@code WebClient.builder()} with Reactor Netty sets no response timeout. */
     private Val<Duration> webClientResponseTimeout(String client) {
-        return kb.lookup(WEB_KB, "webclient-builder.reactor-netty.response-timeout")
-                .filter(e -> e.value().equals("none"))
-                .<Val<Duration>>map(e -> Val.unknown(client + ": no response timeout (WebClient.builder() with "
-                        + "Reactor Netty); " + e.evidence()))
-                .orElseGet(() -> Val.unknown(client + ": no verified " + WEB_KB
-                        + " default for webclient-builder.reactor-netty.response-timeout"));
+        return kb.defaultOr(WEB_KB, "webclient-builder.reactor-netty.response-timeout",
+                t -> Durations.parseTimeout(t).orElseThrow(() -> new IllegalStateException("kb timeout " + t)),
+                client + ": response timeout of WebClient.builder() with Reactor Netty");
     }
 
     // ---- RestClient ------------------------------------------------------

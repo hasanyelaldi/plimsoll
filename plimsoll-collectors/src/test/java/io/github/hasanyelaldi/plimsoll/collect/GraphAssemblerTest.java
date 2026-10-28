@@ -11,6 +11,7 @@ import io.github.hasanyelaldi.plimsoll.analysis.Severity;
 import io.github.hasanyelaldi.plimsoll.collect.http.HttpClientCollector;
 import io.github.hasanyelaldi.plimsoll.collect.istio.IstioCollector;
 import io.github.hasanyelaldi.plimsoll.collect.resilience4j.Resilience4jCollector;
+import io.github.hasanyelaldi.plimsoll.model.Durations;
 import io.github.hasanyelaldi.plimsoll.model.Edge;
 import io.github.hasanyelaldi.plimsoll.model.Layer;
 import io.github.hasanyelaldi.plimsoll.model.RetryPolicy;
@@ -119,7 +120,8 @@ class GraphAssemblerTest {
         assertThat(p.totalAttempts().value()).isEqualTo(3);
         assertThat(p.totalAttempts().source()).isEqualTo(Source.LIBRARY_DEFAULT);
         assertThat(p.totalAttempts().evidence()).startsWith("no VirtualService for the host; istio 1.31 default");
-        assertThat(edge("CustomersClient#getVisits").layers().get(1).overallTimeout().isKnown()).isFalse();
+        assertThat(edge("CustomersClient#getVisits").layers().get(1).overallTimeout().value())
+                .isEqualTo(Durations.UNLIMITED);
 
         // getVisits UNKNOWN (counted as 1, a lower bound) x 3 + list 2 x 3 x fanout 2
         assertThat(load(analyze(result.edges()), "visits-service")).isEqualTo(BigInteger.valueOf(15));
@@ -187,7 +189,7 @@ class GraphAssemblerTest {
         assertThat(p.retryOn().evidence()).startsWith(
                 "b has 2 HTTP routes with different retryOn (http[0] at vs.yaml:7: [5xx,gateway-error,reset], http[1]");
         assertThat(p.perTryTimeout().evidence()).startsWith(
-                "b has 2 HTTP routes with different perTryTimeout (http[0] at vs.yaml:7: UNKNOWN, "
+                "b has 2 HTTP routes with different perTryTimeout (http[0] at vs.yaml:7: unlimited, "
                         + "http[1] at vs.yaml:8: 250 ms)");
     }
 }

@@ -29,16 +29,16 @@ Limit: 10
 | INFO | PLM-A1 | customers-service | at least ×3, limit 10; the real value may be higher |
 | INFO | PLM-A1 | vets-service | at least ×3 (genai-service ×2), limit 10; the real value may be higher |
 | INFO | PLM-A1 | visits-service | at least ×3, limit 10; the real value may be higher |
-| INFO | PLM-A2a | api-gateway→customers-service | cannot evaluate: api-gateway→customers-service layer 1 (spring-cloud-gateway) perTryTimeout, api-gateway deadline UNKNOWN |
-| INFO | PLM-A2a | api-gateway→genai-service | cannot evaluate: api-gateway→genai-service layer 1 (spring-cloud-gateway) perTryTimeout, api-gateway deadline UNKNOWN |
-| INFO | PLM-A2a | api-gateway→visits-service | cannot evaluate: api-gateway→visits-service layer 1 (spring-cloud-gateway) perTryTimeout, api-gateway deadline UNKNOWN |
-| INFO | PLM-A2b | api-gateway→customers-service | cannot evaluate: customers-service deadline, api-gateway→customers-service layer 1 (http-client) perTryTimeout UNKNOWN |
-| INFO | PLM-A2b | api-gateway→customers-service | cannot evaluate: customers-service deadline, api-gateway→customers-service layer 1 (spring-cloud-gateway) perTryTimeout UNKNOWN |
-| INFO | PLM-A2b | api-gateway→genai-service | cannot evaluate: genai-service deadline, api-gateway→genai-service layer 1 (spring-cloud-gateway) perTryTimeout UNKNOWN |
-| INFO | PLM-A2b | api-gateway→vets-service | cannot evaluate: vets-service deadline, api-gateway→vets-service layer 1 (spring-cloud-gateway) perTryTimeout UNKNOWN |
-| INFO | PLM-A2b | api-gateway→visits-service | cannot evaluate: visits-service deadline, api-gateway→visits-service layer 1 (http-client) perTryTimeout UNKNOWN |
-| INFO | PLM-A2b | api-gateway→visits-service | cannot evaluate: visits-service deadline, api-gateway→visits-service layer 1 (spring-cloud-gateway) perTryTimeout UNKNOWN |
-| INFO | PLM-A2b | genai-service→vets-service | cannot evaluate: vets-service deadline, genai-service→vets-service layer 1 (http-client) perTryTimeout UNKNOWN |
+| INFO | PLM-A2a | api-gateway→customers-service | cannot evaluate: api-gateway deadline UNKNOWN |
+| INFO | PLM-A2a | api-gateway→genai-service | cannot evaluate: api-gateway deadline UNKNOWN |
+| INFO | PLM-A2a | api-gateway→visits-service | cannot evaluate: api-gateway deadline UNKNOWN |
+| INFO | PLM-A2b | api-gateway→customers-service | cannot evaluate: customers-service deadline UNKNOWN |
+| INFO | PLM-A2b | api-gateway→customers-service | cannot evaluate: customers-service deadline UNKNOWN |
+| INFO | PLM-A2b | api-gateway→genai-service | cannot evaluate: genai-service deadline UNKNOWN |
+| INFO | PLM-A2b | api-gateway→vets-service | cannot evaluate: vets-service deadline UNKNOWN |
+| INFO | PLM-A2b | api-gateway→visits-service | cannot evaluate: visits-service deadline UNKNOWN |
+| INFO | PLM-A2b | api-gateway→visits-service | cannot evaluate: visits-service deadline UNKNOWN |
+| INFO | PLM-A2b | genai-service→vets-service | cannot evaluate: vets-service deadline UNKNOWN |
 | INFO | PLM-A4 | api-gateway→customers-service | no jitter |
 | INFO | PLM-A4 | api-gateway→genai-service | no jitter |
 | INFO | PLM-A4 | api-gateway→visits-service | no jitter |
@@ -109,81 +109,81 @@ Limit: 10
 ### INFO PLM-A2a api-gateway→customers-service
 
 - api-gateway→customers-service layer 1 (spring-cloud-gateway) totalAttempts = 2 [EXPLICIT: Retry (default-filters[1], spring-petclinic-api-gateway/src/main/resources/application.yml:15): retries 1 + 1; spring-petclinic-api-gateway/src/main/resources/application.yml:17]
-- api-gateway→customers-service layer 1 (spring-cloud-gateway) perTryTimeout = UNKNOWN [UNKNOWN: spring.cloud.gateway.server.webflux.httpclient.response-timeout not set; no verified spring-cloud-gateway default for it]
+- api-gateway→customers-service layer 1 (spring-cloud-gateway) perTryTimeout = unlimited [LIBRARY_DEFAULT: spring.cloud.gateway.server.webflux.httpclient.response-timeout not set; spring-cloud-gateway 5.0.0, 5.0.3 default (verified by oracle), https://github.com/spring-cloud/spring-cloud-gateway/blob/v5.0.3/spring-cloud-gateway-server-webflux/src/main/java/org/springframework/cloud/gateway/config/HttpClientProperties.java]
 - api-gateway→customers-service layer 1 (spring-cloud-gateway) backoff = 0 ms [LIBRARY_DEFAULT: Retry (default-filters[1], spring-petclinic-api-gateway/src/main/resources/application.yml:15): no backoff, retries follow each other without waiting; spring-cloud-gateway 5.0.0, 5.0.3 default (verified by doc), https://docs.spring.io/spring-cloud-gateway/reference/spring-cloud-gateway-server-webflux/gatewayfilter-factories/retry-factory.html]
 - api-gateway→customers-service layer 1 (spring-cloud-gateway) multiplier = 1.0 [LIBRARY_DEFAULT: Retry (default-filters[1], spring-petclinic-api-gateway/src/main/resources/application.yml:15): no backoff, retries follow each other without waiting; spring-cloud-gateway 5.0.0, 5.0.3 default (verified by doc), https://docs.spring.io/spring-cloud-gateway/reference/spring-cloud-gateway-server-webflux/gatewayfilter-factories/retry-factory.html]
 - api-gateway→customers-service layer 1 (spring-cloud-gateway) maxBackoff = 0 ms [LIBRARY_DEFAULT: Retry (default-filters[1], spring-petclinic-api-gateway/src/main/resources/application.yml:15): no backoff, retries follow each other without waiting; spring-cloud-gateway 5.0.0, 5.0.3 default (verified by doc), https://docs.spring.io/spring-cloud-gateway/reference/spring-cloud-gateway-server-webflux/gatewayfilter-factories/retry-factory.html]
 - api-gateway deadline = UNKNOWN [UNKNOWN: api-gateway has no edges hint; set 'deadline:' in the edges-hint.yaml of api-gateway (ADR 0009)]
-- **depends-on-unknown: api-gateway deadline, api-gateway→customers-service layer 1 (spring-cloud-gateway) perTryTimeout**
+- **depends-on-unknown: api-gateway deadline**
 
 ### INFO PLM-A2a api-gateway→genai-service
 
 - api-gateway→genai-service layer 1 (spring-cloud-gateway) totalAttempts = 2 [EXPLICIT: Retry (default-filters[1], spring-petclinic-api-gateway/src/main/resources/application.yml:15): retries 1 + 1; spring-petclinic-api-gateway/src/main/resources/application.yml:17]
-- api-gateway→genai-service layer 1 (spring-cloud-gateway) perTryTimeout = UNKNOWN [UNKNOWN: spring.cloud.gateway.server.webflux.httpclient.response-timeout not set; no verified spring-cloud-gateway default for it]
+- api-gateway→genai-service layer 1 (spring-cloud-gateway) perTryTimeout = unlimited [LIBRARY_DEFAULT: spring.cloud.gateway.server.webflux.httpclient.response-timeout not set; spring-cloud-gateway 5.0.0, 5.0.3 default (verified by oracle), https://github.com/spring-cloud/spring-cloud-gateway/blob/v5.0.3/spring-cloud-gateway-server-webflux/src/main/java/org/springframework/cloud/gateway/config/HttpClientProperties.java]
 - api-gateway→genai-service layer 1 (spring-cloud-gateway) backoff = 0 ms [LIBRARY_DEFAULT: Retry (default-filters[1], spring-petclinic-api-gateway/src/main/resources/application.yml:15): no backoff, retries follow each other without waiting; spring-cloud-gateway 5.0.0, 5.0.3 default (verified by doc), https://docs.spring.io/spring-cloud-gateway/reference/spring-cloud-gateway-server-webflux/gatewayfilter-factories/retry-factory.html]
 - api-gateway→genai-service layer 1 (spring-cloud-gateway) multiplier = 1.0 [LIBRARY_DEFAULT: Retry (default-filters[1], spring-petclinic-api-gateway/src/main/resources/application.yml:15): no backoff, retries follow each other without waiting; spring-cloud-gateway 5.0.0, 5.0.3 default (verified by doc), https://docs.spring.io/spring-cloud-gateway/reference/spring-cloud-gateway-server-webflux/gatewayfilter-factories/retry-factory.html]
 - api-gateway→genai-service layer 1 (spring-cloud-gateway) maxBackoff = 0 ms [LIBRARY_DEFAULT: Retry (default-filters[1], spring-petclinic-api-gateway/src/main/resources/application.yml:15): no backoff, retries follow each other without waiting; spring-cloud-gateway 5.0.0, 5.0.3 default (verified by doc), https://docs.spring.io/spring-cloud-gateway/reference/spring-cloud-gateway-server-webflux/gatewayfilter-factories/retry-factory.html]
 - api-gateway deadline = UNKNOWN [UNKNOWN: api-gateway has no edges hint; set 'deadline:' in the edges-hint.yaml of api-gateway (ADR 0009)]
-- **depends-on-unknown: api-gateway deadline, api-gateway→genai-service layer 1 (spring-cloud-gateway) perTryTimeout**
+- **depends-on-unknown: api-gateway deadline**
 
 ### INFO PLM-A2a api-gateway→visits-service
 
 - api-gateway→visits-service layer 1 (spring-cloud-gateway) totalAttempts = 2 [EXPLICIT: Retry (default-filters[1], spring-petclinic-api-gateway/src/main/resources/application.yml:15): retries 1 + 1; spring-petclinic-api-gateway/src/main/resources/application.yml:17]
-- api-gateway→visits-service layer 1 (spring-cloud-gateway) perTryTimeout = UNKNOWN [UNKNOWN: spring.cloud.gateway.server.webflux.httpclient.response-timeout not set; no verified spring-cloud-gateway default for it]
+- api-gateway→visits-service layer 1 (spring-cloud-gateway) perTryTimeout = unlimited [LIBRARY_DEFAULT: spring.cloud.gateway.server.webflux.httpclient.response-timeout not set; spring-cloud-gateway 5.0.0, 5.0.3 default (verified by oracle), https://github.com/spring-cloud/spring-cloud-gateway/blob/v5.0.3/spring-cloud-gateway-server-webflux/src/main/java/org/springframework/cloud/gateway/config/HttpClientProperties.java]
 - api-gateway→visits-service layer 1 (spring-cloud-gateway) backoff = 0 ms [LIBRARY_DEFAULT: Retry (default-filters[1], spring-petclinic-api-gateway/src/main/resources/application.yml:15): no backoff, retries follow each other without waiting; spring-cloud-gateway 5.0.0, 5.0.3 default (verified by doc), https://docs.spring.io/spring-cloud-gateway/reference/spring-cloud-gateway-server-webflux/gatewayfilter-factories/retry-factory.html]
 - api-gateway→visits-service layer 1 (spring-cloud-gateway) multiplier = 1.0 [LIBRARY_DEFAULT: Retry (default-filters[1], spring-petclinic-api-gateway/src/main/resources/application.yml:15): no backoff, retries follow each other without waiting; spring-cloud-gateway 5.0.0, 5.0.3 default (verified by doc), https://docs.spring.io/spring-cloud-gateway/reference/spring-cloud-gateway-server-webflux/gatewayfilter-factories/retry-factory.html]
 - api-gateway→visits-service layer 1 (spring-cloud-gateway) maxBackoff = 0 ms [LIBRARY_DEFAULT: Retry (default-filters[1], spring-petclinic-api-gateway/src/main/resources/application.yml:15): no backoff, retries follow each other without waiting; spring-cloud-gateway 5.0.0, 5.0.3 default (verified by doc), https://docs.spring.io/spring-cloud-gateway/reference/spring-cloud-gateway-server-webflux/gatewayfilter-factories/retry-factory.html]
 - api-gateway deadline = UNKNOWN [UNKNOWN: api-gateway has no edges hint; set 'deadline:' in the edges-hint.yaml of api-gateway (ADR 0009)]
-- **depends-on-unknown: api-gateway deadline, api-gateway→visits-service layer 1 (spring-cloud-gateway) perTryTimeout**
+- **depends-on-unknown: api-gateway deadline**
 
 ### INFO PLM-A2b api-gateway→customers-service
 
 - customers-service deadline = UNKNOWN [UNKNOWN: customers-service has no edges hint; set 'deadline:' in the edges-hint.yaml of customers-service (ADR 0009)]
-- api-gateway→customers-service layer 1 (http-client) perTryTimeout = UNKNOWN [UNKNOWN: @LoadBalanced WebClient (@LoadBalanced WebClient.Builder bean at spring-petclinic-api-gateway/src/main/java/org/springframework/samples/petclinic/api/ApiGatewayApplication.java:60, injected at parameter webClientBuilder at spring-petclinic-api-gateway/src/main/java/org/springframework/samples/petclinic/api/application/CustomersServiceClient.java:31): no response timeout (WebClient.builder() with Reactor Netty); spring-web 7.0.2, 7.0.9 default (verified by oracle), https://github.com/spring-projects/spring-framework/blob/v7.0.9/spring-web/src/main/java/org/springframework/http/client/reactive/ReactorClientHttpConnector.java]
-- api-gateway→customers-service layer 1 (http-client) totalAttempts = 1 [LIBRARY_DEFAULT: @LoadBalanced WebClient (@LoadBalanced WebClient.Builder bean at spring-petclinic-api-gateway/src/main/java/org/springframework/samples/petclinic/api/ApiGatewayApplication.java:60, injected at parameter webClientBuilder at spring-petclinic-api-gateway/src/main/java/org/springframework/samples/petclinic/api/application/CustomersServiceClient.java:31): LoadBalancer retry off; spring.cloud.loadbalancer.retry.enabled not set; spring-cloud-loadbalancer 5.0.0, 5.0.3 default (verified by oracle), https://github.com/spring-cloud/spring-cloud-commons/blob/v5.0.3/spring-cloud-commons/src/main/java/org/springframework/cloud/client/loadbalancer/reactive/ReactorLoadBalancerClientAutoConfiguration.java]
-- **depends-on-unknown: api-gateway→customers-service layer 1 (http-client) perTryTimeout, customers-service deadline**
-
-### INFO PLM-A2b api-gateway→customers-service
-
-- customers-service deadline = UNKNOWN [UNKNOWN: customers-service has no edges hint; set 'deadline:' in the edges-hint.yaml of customers-service (ADR 0009)]
-- api-gateway→customers-service layer 1 (spring-cloud-gateway) perTryTimeout = UNKNOWN [UNKNOWN: spring.cloud.gateway.server.webflux.httpclient.response-timeout not set; no verified spring-cloud-gateway default for it]
+- api-gateway→customers-service layer 1 (spring-cloud-gateway) perTryTimeout = unlimited [LIBRARY_DEFAULT: spring.cloud.gateway.server.webflux.httpclient.response-timeout not set; spring-cloud-gateway 5.0.0, 5.0.3 default (verified by oracle), https://github.com/spring-cloud/spring-cloud-gateway/blob/v5.0.3/spring-cloud-gateway-server-webflux/src/main/java/org/springframework/cloud/gateway/config/HttpClientProperties.java]
 - api-gateway→customers-service layer 1 (spring-cloud-gateway) totalAttempts = 2 [EXPLICIT: Retry (default-filters[1], spring-petclinic-api-gateway/src/main/resources/application.yml:15): retries 1 + 1; spring-petclinic-api-gateway/src/main/resources/application.yml:17]
-- **depends-on-unknown: api-gateway→customers-service layer 1 (spring-cloud-gateway) perTryTimeout, customers-service deadline**
+- **depends-on-unknown: customers-service deadline**
+
+### INFO PLM-A2b api-gateway→customers-service
+
+- customers-service deadline = UNKNOWN [UNKNOWN: customers-service has no edges hint; set 'deadline:' in the edges-hint.yaml of customers-service (ADR 0009)]
+- api-gateway→customers-service layer 1 (http-client) perTryTimeout = unlimited [LIBRARY_DEFAULT: @LoadBalanced WebClient (@LoadBalanced WebClient.Builder bean at spring-petclinic-api-gateway/src/main/java/org/springframework/samples/petclinic/api/ApiGatewayApplication.java:60, injected at parameter webClientBuilder at spring-petclinic-api-gateway/src/main/java/org/springframework/samples/petclinic/api/application/CustomersServiceClient.java:31): response timeout of WebClient.builder() with Reactor Netty; spring-web 7.0.2, 7.0.9 default (verified by oracle), https://github.com/spring-projects/spring-framework/blob/v7.0.9/spring-web/src/main/java/org/springframework/http/client/reactive/ReactorClientHttpConnector.java]
+- api-gateway→customers-service layer 1 (http-client) totalAttempts = 1 [LIBRARY_DEFAULT: @LoadBalanced WebClient (@LoadBalanced WebClient.Builder bean at spring-petclinic-api-gateway/src/main/java/org/springframework/samples/petclinic/api/ApiGatewayApplication.java:60, injected at parameter webClientBuilder at spring-petclinic-api-gateway/src/main/java/org/springframework/samples/petclinic/api/application/CustomersServiceClient.java:31): LoadBalancer retry off; spring.cloud.loadbalancer.retry.enabled not set; spring-cloud-loadbalancer 5.0.0, 5.0.3 default (verified by oracle), https://github.com/spring-cloud/spring-cloud-commons/blob/v5.0.3/spring-cloud-commons/src/main/java/org/springframework/cloud/client/loadbalancer/reactive/ReactorLoadBalancerClientAutoConfiguration.java]
+- **depends-on-unknown: customers-service deadline**
 
 ### INFO PLM-A2b api-gateway→genai-service
 
 - genai-service deadline = UNKNOWN [UNKNOWN: genai-service has no edges hint; set 'deadline:' in the edges-hint.yaml of genai-service (ADR 0009)]
-- api-gateway→genai-service layer 1 (spring-cloud-gateway) perTryTimeout = UNKNOWN [UNKNOWN: spring.cloud.gateway.server.webflux.httpclient.response-timeout not set; no verified spring-cloud-gateway default for it]
+- api-gateway→genai-service layer 1 (spring-cloud-gateway) perTryTimeout = unlimited [LIBRARY_DEFAULT: spring.cloud.gateway.server.webflux.httpclient.response-timeout not set; spring-cloud-gateway 5.0.0, 5.0.3 default (verified by oracle), https://github.com/spring-cloud/spring-cloud-gateway/blob/v5.0.3/spring-cloud-gateway-server-webflux/src/main/java/org/springframework/cloud/gateway/config/HttpClientProperties.java]
 - api-gateway→genai-service layer 1 (spring-cloud-gateway) totalAttempts = 2 [EXPLICIT: Retry (default-filters[1], spring-petclinic-api-gateway/src/main/resources/application.yml:15): retries 1 + 1; spring-petclinic-api-gateway/src/main/resources/application.yml:17]
-- **depends-on-unknown: api-gateway→genai-service layer 1 (spring-cloud-gateway) perTryTimeout, genai-service deadline**
+- **depends-on-unknown: genai-service deadline**
 
 ### INFO PLM-A2b api-gateway→vets-service
 
 - vets-service deadline = UNKNOWN [UNKNOWN: vets-service has no edges hint; set 'deadline:' in the edges-hint.yaml of vets-service (ADR 0009)]
-- api-gateway→vets-service layer 1 (spring-cloud-gateway) perTryTimeout = UNKNOWN [UNKNOWN: spring.cloud.gateway.server.webflux.httpclient.response-timeout not set; no verified spring-cloud-gateway default for it]
+- api-gateway→vets-service layer 1 (spring-cloud-gateway) perTryTimeout = unlimited [LIBRARY_DEFAULT: spring.cloud.gateway.server.webflux.httpclient.response-timeout not set; spring-cloud-gateway 5.0.0, 5.0.3 default (verified by oracle), https://github.com/spring-cloud/spring-cloud-gateway/blob/v5.0.3/spring-cloud-gateway-server-webflux/src/main/java/org/springframework/cloud/gateway/config/HttpClientProperties.java]
 - api-gateway→vets-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: Retry (default-filters[1], spring-petclinic-api-gateway/src/main/resources/application.yml:15) repeats only POST (spring-petclinic-api-gateway/src/main/resources/application.yml:19 (methods)); route vets-service serves vets-service GET /vets at spring-petclinic-vets-service/src/main/java/org/springframework/samples/petclinic/vets/web/VetResource.java:44]
-- **depends-on-unknown: api-gateway→vets-service layer 1 (spring-cloud-gateway) perTryTimeout, vets-service deadline**
+- **depends-on-unknown: vets-service deadline**
 
 ### INFO PLM-A2b api-gateway→visits-service
 
 - visits-service deadline = UNKNOWN [UNKNOWN: visits-service has no edges hint; set 'deadline:' in the edges-hint.yaml of visits-service (ADR 0009)]
-- api-gateway→visits-service layer 1 (http-client) perTryTimeout = UNKNOWN [UNKNOWN: @LoadBalanced WebClient (@LoadBalanced WebClient.Builder bean at spring-petclinic-api-gateway/src/main/java/org/springframework/samples/petclinic/api/ApiGatewayApplication.java:60, injected at parameter webClientBuilder at spring-petclinic-api-gateway/src/main/java/org/springframework/samples/petclinic/api/application/VisitsServiceClient.java:38): no response timeout (WebClient.builder() with Reactor Netty); spring-web 7.0.2, 7.0.9 default (verified by oracle), https://github.com/spring-projects/spring-framework/blob/v7.0.9/spring-web/src/main/java/org/springframework/http/client/reactive/ReactorClientHttpConnector.java]
-- api-gateway→visits-service layer 1 (http-client) totalAttempts = 1 [LIBRARY_DEFAULT: @LoadBalanced WebClient (@LoadBalanced WebClient.Builder bean at spring-petclinic-api-gateway/src/main/java/org/springframework/samples/petclinic/api/ApiGatewayApplication.java:60, injected at parameter webClientBuilder at spring-petclinic-api-gateway/src/main/java/org/springframework/samples/petclinic/api/application/VisitsServiceClient.java:38): LoadBalancer retry off; spring.cloud.loadbalancer.retry.enabled not set; spring-cloud-loadbalancer 5.0.0, 5.0.3 default (verified by oracle), https://github.com/spring-cloud/spring-cloud-commons/blob/v5.0.3/spring-cloud-commons/src/main/java/org/springframework/cloud/client/loadbalancer/reactive/ReactorLoadBalancerClientAutoConfiguration.java]
-- **depends-on-unknown: api-gateway→visits-service layer 1 (http-client) perTryTimeout, visits-service deadline**
-
-### INFO PLM-A2b api-gateway→visits-service
-
-- visits-service deadline = UNKNOWN [UNKNOWN: visits-service has no edges hint; set 'deadline:' in the edges-hint.yaml of visits-service (ADR 0009)]
-- api-gateway→visits-service layer 1 (spring-cloud-gateway) perTryTimeout = UNKNOWN [UNKNOWN: spring.cloud.gateway.server.webflux.httpclient.response-timeout not set; no verified spring-cloud-gateway default for it]
+- api-gateway→visits-service layer 1 (spring-cloud-gateway) perTryTimeout = unlimited [LIBRARY_DEFAULT: spring.cloud.gateway.server.webflux.httpclient.response-timeout not set; spring-cloud-gateway 5.0.0, 5.0.3 default (verified by oracle), https://github.com/spring-cloud/spring-cloud-gateway/blob/v5.0.3/spring-cloud-gateway-server-webflux/src/main/java/org/springframework/cloud/gateway/config/HttpClientProperties.java]
 - api-gateway→visits-service layer 1 (spring-cloud-gateway) totalAttempts = 2 [EXPLICIT: Retry (default-filters[1], spring-petclinic-api-gateway/src/main/resources/application.yml:15): retries 1 + 1; spring-petclinic-api-gateway/src/main/resources/application.yml:17]
-- **depends-on-unknown: api-gateway→visits-service layer 1 (spring-cloud-gateway) perTryTimeout, visits-service deadline**
+- **depends-on-unknown: visits-service deadline**
+
+### INFO PLM-A2b api-gateway→visits-service
+
+- visits-service deadline = UNKNOWN [UNKNOWN: visits-service has no edges hint; set 'deadline:' in the edges-hint.yaml of visits-service (ADR 0009)]
+- api-gateway→visits-service layer 1 (http-client) perTryTimeout = unlimited [LIBRARY_DEFAULT: @LoadBalanced WebClient (@LoadBalanced WebClient.Builder bean at spring-petclinic-api-gateway/src/main/java/org/springframework/samples/petclinic/api/ApiGatewayApplication.java:60, injected at parameter webClientBuilder at spring-petclinic-api-gateway/src/main/java/org/springframework/samples/petclinic/api/application/VisitsServiceClient.java:38): response timeout of WebClient.builder() with Reactor Netty; spring-web 7.0.2, 7.0.9 default (verified by oracle), https://github.com/spring-projects/spring-framework/blob/v7.0.9/spring-web/src/main/java/org/springframework/http/client/reactive/ReactorClientHttpConnector.java]
+- api-gateway→visits-service layer 1 (http-client) totalAttempts = 1 [LIBRARY_DEFAULT: @LoadBalanced WebClient (@LoadBalanced WebClient.Builder bean at spring-petclinic-api-gateway/src/main/java/org/springframework/samples/petclinic/api/ApiGatewayApplication.java:60, injected at parameter webClientBuilder at spring-petclinic-api-gateway/src/main/java/org/springframework/samples/petclinic/api/application/VisitsServiceClient.java:38): LoadBalancer retry off; spring.cloud.loadbalancer.retry.enabled not set; spring-cloud-loadbalancer 5.0.0, 5.0.3 default (verified by oracle), https://github.com/spring-cloud/spring-cloud-commons/blob/v5.0.3/spring-cloud-commons/src/main/java/org/springframework/cloud/client/loadbalancer/reactive/ReactorLoadBalancerClientAutoConfiguration.java]
+- **depends-on-unknown: visits-service deadline**
 
 ### INFO PLM-A2b genai-service→vets-service
 
 - vets-service deadline = UNKNOWN [UNKNOWN: vets-service has no edges hint; set 'deadline:' in the edges-hint.yaml of vets-service (ADR 0009)]
-- genai-service→vets-service layer 1 (http-client) perTryTimeout = UNKNOWN [UNKNOWN: @LoadBalanced WebClient (@LoadBalanced WebClient.Builder bean at spring-petclinic-genai-service/src/main/java/org/springframework/samples/petclinic/genai/AIBeanConfiguration.java:26, injected at parameter webClientBuilder at spring-petclinic-genai-service/src/main/java/org/springframework/samples/petclinic/genai/VectorStoreController.java:44): no response timeout (WebClient.builder() with Reactor Netty); spring-web 7.0.2, 7.0.9 default (verified by oracle), https://github.com/spring-projects/spring-framework/blob/v7.0.9/spring-web/src/main/java/org/springframework/http/client/reactive/ReactorClientHttpConnector.java]
+- genai-service→vets-service layer 1 (http-client) perTryTimeout = unlimited [LIBRARY_DEFAULT: @LoadBalanced WebClient (@LoadBalanced WebClient.Builder bean at spring-petclinic-genai-service/src/main/java/org/springframework/samples/petclinic/genai/AIBeanConfiguration.java:26, injected at parameter webClientBuilder at spring-petclinic-genai-service/src/main/java/org/springframework/samples/petclinic/genai/VectorStoreController.java:44): response timeout of WebClient.builder() with Reactor Netty; spring-web 7.0.2, 7.0.9 default (verified by oracle), https://github.com/spring-projects/spring-framework/blob/v7.0.9/spring-web/src/main/java/org/springframework/http/client/reactive/ReactorClientHttpConnector.java]
 - genai-service→vets-service layer 1 (http-client) totalAttempts = 1 [LIBRARY_DEFAULT: @LoadBalanced WebClient (@LoadBalanced WebClient.Builder bean at spring-petclinic-genai-service/src/main/java/org/springframework/samples/petclinic/genai/AIBeanConfiguration.java:26, injected at parameter webClientBuilder at spring-petclinic-genai-service/src/main/java/org/springframework/samples/petclinic/genai/VectorStoreController.java:44): LoadBalancer retry off; spring.cloud.loadbalancer.retry.enabled not set; spring-cloud-loadbalancer 5.0.0, 5.0.3 default (verified by oracle), https://github.com/spring-cloud/spring-cloud-commons/blob/v5.0.3/spring-cloud-commons/src/main/java/org/springframework/cloud/client/loadbalancer/reactive/ReactorLoadBalancerClientAutoConfiguration.java]
-- **depends-on-unknown: genai-service→vets-service layer 1 (http-client) perTryTimeout, vets-service deadline**
+- **depends-on-unknown: vets-service deadline**
 
 ### INFO PLM-A4 api-gateway→customers-service
 

@@ -25,6 +25,14 @@
 
 - library: istio
   versions: "1.31"
+  parameter: timeout
+  value: unlimited            # HTTPRoute.timeout: "Timeout for HTTP requests, default is disabled."
+  unit: duration
+  source: https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRoute
+  verified_by: doc
+
+- library: istio
+  versions: "1.31"
   parameter: retries.perTryTimeout
   value: route timeout        # route `timeout` default is none, so no per-try timeout
   unit: duration

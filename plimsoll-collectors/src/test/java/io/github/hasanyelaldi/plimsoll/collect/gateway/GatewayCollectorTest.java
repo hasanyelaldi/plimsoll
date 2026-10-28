@@ -14,6 +14,7 @@ import io.github.hasanyelaldi.plimsoll.collect.spring.RequestMappingScanner;
 import io.github.hasanyelaldi.plimsoll.collect.spring.RequestMappingScanner.Mapping;
 import io.github.hasanyelaldi.plimsoll.collect.spring.SpringProperties;
 import io.github.hasanyelaldi.plimsoll.io.InvalidSpecException;
+import io.github.hasanyelaldi.plimsoll.model.Durations;
 import io.github.hasanyelaldi.plimsoll.model.Edge;
 import io.github.hasanyelaldi.plimsoll.model.Layer;
 import io.github.hasanyelaldi.plimsoll.model.RetryPolicy;
@@ -117,15 +118,20 @@ class GatewayCollectorTest {
             assertThat(retry.totalAttempts().evidence())
                     .contains("retries 1 + 1", "src/main/resources/application.yml:18", "default-filters[1]");
             assertThat(retry.retryOn().value()).containsExactlyInAnyOrder("status SERVICE_UNAVAILABLE",
-                    "series SERVER_ERROR", "java.io.IOException", "java.util.concurrent.TimeoutException",
+                    "series SERVER_ERROR", "java.io.IOException", "org.springframework.cloud.gateway.support.TimeoutException",
                     "method POST");
             assertThat(retry.retryOn().source()).isEqualTo(Source.LIBRARY_DEFAULT);
             assertThat(retry.initialBackoff().value()).isEqualTo(Duration.ZERO);
             assertThat(retry.initialBackoff().source()).isEqualTo(Source.LIBRARY_DEFAULT);
             assertThat(retry.jitter().value()).isFalse();
-            assertThat(retry.perTryTimeout().source()).isEqualTo(Source.UNKNOWN);
-            assertThat(layer.overallTimeout().source()).isEqualTo(Source.UNKNOWN);
-            assertThat(layer.overallTimeout().evidence()).contains("unlimited");
+            assertThat(retry.perTryTimeout().value()).isEqualTo(Durations.UNLIMITED);
+            assertThat(retry.perTryTimeout().source()).isEqualTo(Source.LIBRARY_DEFAULT);
+            assertThat(retry.perTryTimeout().evidence()).startsWith(
+                    "spring.cloud.gateway.server.webflux.httpclient.response-timeout not set; spring-cloud-gateway "
+                            + "5.0.0, 5.0.3 default (verified by oracle)");
+            assertThat(layer.overallTimeout().value()).isEqualTo(Durations.UNLIMITED);
+            assertThat(layer.overallTimeout().source()).isEqualTo(Source.LIBRARY_DEFAULT);
+            assertThat(layer.overallTimeout().evidence()).contains("timeout not set", "(verified by doc)");
         }
     }
 
@@ -348,7 +354,7 @@ class GatewayCollectorTest {
         assertThat(retry.totalAttempts().evidence())
                 .contains("retries not set", "spring-cloud-gateway 5.0.0, 5.0.3 default (verified by oracle)");
         assertThat(retry.retryOn().value()).containsExactlyInAnyOrder("series SERVER_ERROR", "java.io.IOException",
-                "java.util.concurrent.TimeoutException", "method GET");
+                "org.springframework.cloud.gateway.support.TimeoutException", "method GET");
     }
 
     @Test
@@ -422,6 +428,66 @@ class GatewayCollectorTest {
         Layer layer = only(r);
         assertThat(layer.retry().perTryTimeout().value()).isEqualTo(Duration.ofSeconds(2));
         assertThat(layer.retry().perTryTimeout().evidence()).contains("application.yml:1");
+    }
+
+    /** A route like route(...) with metadata. */
+    private static String routeWithMetadata(String metadata, String filters) {
+        return """
+                spring.cloud.gateway.server.webflux.httpclient.response-timeout: 2s
+                spring.cloud.gateway.server.webflux.routes:
+                  - id: a
+                    uri: lb://a-service
+                    predicates: [ "Path=/api/a/**" ]
+                    metadata:
+                """ + metadata.indent(6) + "    filters:\n" + filters.indent(6);
+    }
+
+    @Test
+    void routeMetadataResponseTimeoutIsInMillisAndOverridesTheGlobalOne() {
+        Val<Duration> perTry = only(collect(routeWithMetadata("response-timeout: 500", "- name: Retry")))
+                .retry().perTryTimeout();
+        assertThat(perTry).isEqualTo(Val.explicit(Duration.ofMillis(500),
+                "application.yml:7 (metadata.response-timeout of route a, in milliseconds)"));
+    }
+
+    @Test
+    void negativeRouteMetadataSwitchesTheResponseTimeoutOff() {
+        Val<Duration> perTry = only(collect(routeWithMetadata("response-timeout: -1", "- name: Retry")))
+                .retry().perTryTimeout();
+        assertThat(perTry.value()).isEqualTo(Durations.UNLIMITED);
+        assertThat(perTry.source()).isEqualTo(Source.EXPLICIT);
+        assertThat(perTry.evidence()).contains("a negative value switches the response timeout off");
+    }
+
+    @Test
+    void routeMetadataThatIsNotANumberFallsBackToTheGlobalTimeout() {
+        GatewayCollector.Result r = collect(routeWithMetadata("response-timeout: 5s", "- name: Retry"));
+        assertThat(only(r).retry().perTryTimeout().value()).isEqualTo(Duration.ofSeconds(2));
+        assertThat(r.notes()).contains("application.yml:7: metadata.response-timeout of route a is not a number of "
+                + "milliseconds (5s); the gateway ignores it and uses "
+                + "spring.cloud.gateway.server.webflux.httpclient.response-timeout");
+    }
+
+    @Test
+    void connectTimeoutsAreNotedNotModelled() {
+        GatewayCollector.Result r = collect("spring.cloud.gateway.server.webflux.httpclient.connect-timeout: 1000\n"
+                + routeWithMetadata("connect-timeout: 200", "- name: Retry"));
+        assertThat(only(r).retry().perTryTimeout().value()).isEqualTo(Duration.ofSeconds(2));
+        assertThat(r.notes()).contains(
+                "application.yml:1: spring.cloud.gateway.server.webflux.httpclient.connect-timeout bounds connection "
+                        + "setup only, not a try; not modelled",
+                "application.yml:8: metadata.connect-timeout of route a bounds connection setup only, not a try; "
+                        + "not modelled");
+    }
+
+    @Test
+    void retryExceptionsWithoutTheGatewayTimeoutAreNoted() {
+        GatewayCollector.Result r = collect("spring.cloud.gateway.server.webflux.httpclient.response-timeout: 2s\n"
+                + route("- { name: Retry, args: { exceptions: java.io.IOException } }"));
+        assertThat(r.notes()).anyMatch(n -> n.contains("exceptions leave out "
+                + "org.springframework.cloud.gateway.support.TimeoutException, so a try that hits the response timeout"));
+        assertThat(collect(route("- { name: Retry, args: { exceptions: java.io.IOException } }")).notes())
+                .noneMatch(n -> n.contains("exceptions leave out"));
     }
 
     @Test

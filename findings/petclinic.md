@@ -8,7 +8,7 @@ Issue #9. Testbed choice: ADR 0005. The full generated report is in [`petclinic-
 | --- | --- |
 | spring-petclinic-microservices | `1d76b00d683e86b62867a6bf59530f8ab301244f` (7 Oct 2026), Spring Boot 4.0.1, Spring Cloud 2025.1.0 (Gateway 5.0.0) |
 | spring-petclinic-microservices-config | `323993ce2519c6d02df63e08bf4458d123d3b611` (2 May 2026), read by hand only |
-| Plimsoll | `3851edd` (main after #35); report regenerated after #23 (PLM-C1, Coverage section) and after #37 (client calls in code), same command |
+| Plimsoll | `3851edd` (main after #35); report regenerated after #23 (PLM-C1, Coverage section) after #37 (client calls in code) and after #38 (unlimited timeouts, ADR 0011), same command |
 
 ```bash
 git clone https://github.com/spring-petclinic/spring-petclinic-microservices.git
@@ -42,8 +42,8 @@ After #37: **3 error, 5 warn, 16 info.** The graph has one entry (`api-gateway`)
 | WARN | C1 | api-gateway | Spring Cloud CircuitBreaker (programmatic) detected, not modelled |
 | WARN | C1 | genai-service | Spring AI retry detected, not modelled |
 | INFO | A1 | customers-service, vets-service, visits-service | at least ×3 (fanout of a code edge `UNKNOWN`) |
-| INFO | A2a | the three retried route edges | cannot evaluate (per-try timeout, gateway deadline `UNKNOWN`) |
-| INFO | A2b | all seven edges | cannot evaluate (per-try timeout, callee deadline `UNKNOWN`) |
+| INFO | A2a | the three retried route edges | cannot evaluate (gateway deadline `UNKNOWN`) |
+| INFO | A2b | all seven edges | cannot evaluate (callee deadline `UNKNOWN`) |
 | INFO | A4 | the three retried route edges | no jitter |
 
 ### Edges found in code (#37)
@@ -71,16 +71,18 @@ All four edges come from one `Retry` default filter (`spring-petclinic-api-gatew
 | `jitter` | false | `LIBRARY_DEFAULT` | Gateway 5.0.0 Retry docs |
 | `entry` (api-gateway) | true | ADR 0009 | a Gateway with routes is an entry |
 | `fanout` (gateway routes) | 1 | ADR 0009 | a gateway route has fanout 1 |
+| `perTryTimeout` (gateway routes) | unlimited | `LIBRARY_DEFAULT` | `httpclient.response-timeout` and route `metadata.response-timeout` not set; gateway 5.0.x has no default (`GatewayTimeoutOracleTest`, ADR 0011) |
+| `perTryTimeout` (code edges) | unlimited | `LIBRARY_DEFAULT` | `WebClient.builder()` with Reactor Netty sets no response timeout (`HttpClientTimeoutOracleTest`) |
+| Retry `timeout` (overall) | unlimited | `LIBRARY_DEFAULT` | Retry `timeout` not set; gateway Retry docs |
 
 ### What stayed `UNKNOWN`
 
 | Value | Why |
 | --- | --- |
-| `perTryTimeout` on every gateway edge | `spring.cloud.gateway.server.webflux.httpclient.response-timeout` is not set and the KB has no sourced default for it (#38) |
 | `deadline` of every service | no `edges-hint.yaml` anywhere; ADR 0009 takes deadlines only from hints |
 | TimeLimiter of `defaultCircuitBreaker` and `genaiCircuitBreaker` | set in code (10 s in `ApiGatewayApplication.java:88`), not read (#18) |
 
-Because both A2 inputs are `UNKNOWN`, A2a and A2b give only "cannot evaluate" INFO findings. With a deadline hint per service and #38 they would become real checks.
+Since #38 the per-try timeouts are known (unlimited), so the deadlines are the only missing A2 inputs and A2a and A2b name only them. What-if, not part of the report above: with just `deadline: 10s` in an `edges-hint.yaml` for api-gateway, A2a reports `WARN budget unlimited > deadline 10 s, 0 of 2 tries fit (no per-try timeout)` on the three retried routes (3 error, 8 warn, 13 info). That is the real behaviour: a try that hangs is never cut short by the gateway's HTTP client, so the `Retry` filter cannot run; only the 10 s TimeLimiter of `defaultCircuitBreaker` ends it, and that timeout is not retried (#31).
 
 ## Hand check
 
@@ -92,7 +94,7 @@ Each finding was checked against the petclinic sources at the pinned commit and 
 | A3 on customers, genai, visits | true positive, with a nuance | The filter retries POST on `503` and on the default exceptions `IOException` and `TimeoutException`. A `503` usually means the request was not processed, but a POST that fails with an `IOException` after it was sent can be applied twice (duplicate owner, pet, visit). For genai, a retried `POST /chatclient` also repeats a paid LLM call. A3 does not yet say which trigger makes the retry unsafe (comment on #24). |
 | A3 absent on vets | correct | vets-service has no POST; the Retry filter does not apply to its GETs. |
 | A4 zero backoff, no jitter | true positive | No `backoff` arguments on the filter; the config repository does not override them. |
-| A2a / A2b INFO | correct to stay silent | No deadline or response timeout is configured anywhere. |
+| A2a / A2b INFO | correct to stay silent | No deadline is configured anywhere; the response timeouts are known to be absent (#38). |
 | C1 on api-gateway and genai-service | true positive | `ReactiveResilience4JCircuitBreakerFactory` in `ApiGatewayApplication.java:85` and `ApiGatewayController.java:44` (#18); a Spring AI model starter in `spring-petclinic-genai-service/pom.xml:27` (#19). |
 | Sources not read: config server, profile documents, `profiles.active`, `creds.yaml` | harmless | The skipped `docker` documents only import the config server; the config repository has no retry, timeout or breaker settings. |
 
@@ -103,7 +105,6 @@ No false positives were found.
 | Gap | Where in petclinic | Follow-up |
 | --- | --- | --- |
 | Calls whose host is computed at run time are notes, not edges | genai → customers (`AIDataProvider`, `DiscoveryClient`, incl. two POSTs) | — (by design in #37) |
-| Gateway HTTP client timeouts | `response-timeout` and `connect-timeout` defaults | #38 |
 | Programmatic Spring Cloud CircuitBreaker and its 10 s TimeLimiter | `ApiGatewayApplication.java:85-88`, `ApiGatewayController` (`getOwnerDetails` breaker) | #18 |
 | Breakers in the model | `CircuitBreaker` default filter and `genaiCircuitBreaker` with fallbacks; the order is known since #31 (listed before `Retry`, so it wraps all tries, and a timeout is not retried) | #22 |
 | Spring AI retry to the LLM provider | genai-service (`spring.ai.retry.*` not set, so the Spring AI defaults apply) | #19 |

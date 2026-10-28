@@ -15,6 +15,9 @@ import java.util.List;
  * <p>With several layers the per-try timeout is the smallest known one: that layer gives up first.
  * UNKNOWN per-try timeouts on other layers, or unknown attempt counts that could change the severity, are
  * named in the finding.
+ *
+ * <p>An unlimited per-try timeout (ADR 0011) never gives up before the callee does, so it gives no finding; a
+ * finite per-try timeout on another layer of the edge still does.
  */
 final class AbandonedWorkRule {
 

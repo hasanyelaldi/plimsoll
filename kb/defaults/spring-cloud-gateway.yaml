@@ -40,10 +40,11 @@
 - library: spring-cloud-gateway
   versions: "5.0.0, 5.0.3"
   parameter: retry.exceptions
-  value: java.io.IOException,java.util.concurrent.TimeoutException
-  unit: exceptions
-  source: https://docs.spring.io/spring-cloud-gateway/reference/spring-cloud-gateway-server-webflux/gatewayfilter-factories/retry-factory.html
-  verified_by: doc
+  value: java.io.IOException,org.springframework.cloud.gateway.support.TimeoutException
+  unit: exceptions            # the docs say TimeoutException without a package; the source imports the gateway's
+                              # own class, which the response timeout throws (GatewayRetryOracleTest#responseTimeoutOfATryIsRetried)
+  source: https://github.com/spring-cloud/spring-cloud-gateway/blob/v5.0.3/spring-cloud-gateway-server-webflux/src/main/java/org/springframework/cloud/gateway/filter/factory/RetryGatewayFilterFactory.java
+  verified_by: oracle
 
 - library: spring-cloud-gateway
   versions: "5.0.0, 5.0.3"
@@ -84,3 +85,29 @@
   unit: duration
   source: https://docs.spring.io/spring-cloud-gateway/reference/spring-cloud-gateway-server-webflux/gatewayfilter-factories/retry-factory.html
   verified_by: doc
+
+# Gateway HTTP client timeouts (HttpClientProperties, NettyRoutingFilter; identical in 5.0.0 and 5.0.3).
+# verified_by: oracle -> GatewayTimeoutOracleTest asks the real NettyRoutingFilter for the timeout of each route.
+- library: spring-cloud-gateway
+  versions: "5.0.0, 5.0.3"
+  parameter: httpclient.response-timeout
+  value: unlimited            # no default; NettyRoutingFilter applies a timeout only when one is set
+  unit: duration              # bounds each try: an expired try fails with gateway TimeoutException (504), which Retry repeats
+  source: https://github.com/spring-cloud/spring-cloud-gateway/blob/v5.0.3/spring-cloud-gateway-server-webflux/src/main/java/org/springframework/cloud/gateway/config/HttpClientProperties.java
+  verified_by: oracle
+
+- library: spring-cloud-gateway
+  versions: "5.0.0, 5.0.3"
+  parameter: route.metadata.response-timeout
+  value: global               # absent or not a number: httpclient.response-timeout; a number: milliseconds; negative: none
+  unit: milliseconds
+  source: https://github.com/spring-cloud/spring-cloud-gateway/blob/v5.0.3/spring-cloud-gateway-server-webflux/src/main/java/org/springframework/cloud/gateway/filter/NettyRoutingFilter.java
+  verified_by: oracle
+
+- library: spring-cloud-gateway
+  versions: "5.0.0, 5.0.3"
+  parameter: httpclient.connect-timeout
+  value: reactor-netty default # not set by the gateway; Reactor Netty's own default applies (30 s per the property doc)
+  unit: milliseconds          # bounds connection setup only, not a try; not modelled
+  source: https://github.com/spring-cloud/spring-cloud-gateway/blob/v5.0.3/spring-cloud-gateway-server-webflux/src/main/java/org/springframework/cloud/gateway/config/HttpClientProperties.java
+  verified_by: oracle

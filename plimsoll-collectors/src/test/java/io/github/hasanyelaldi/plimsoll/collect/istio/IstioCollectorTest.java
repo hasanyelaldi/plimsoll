@@ -8,6 +8,7 @@ import io.github.hasanyelaldi.plimsoll.collect.istio.IstioCollector.Result;
 import io.github.hasanyelaldi.plimsoll.collect.istio.IstioCollector.Route;
 import io.github.hasanyelaldi.plimsoll.collect.kb.DefaultsKb;
 import io.github.hasanyelaldi.plimsoll.io.InvalidSpecException;
+import io.github.hasanyelaldi.plimsoll.model.Durations;
 import io.github.hasanyelaldi.plimsoll.model.Layer;
 import io.github.hasanyelaldi.plimsoll.model.RetryPolicy;
 import io.github.hasanyelaldi.plimsoll.model.Source;
@@ -86,16 +87,19 @@ class IstioCollectorTest {
         Val<Duration> perTry = route("payments", "http[1]").layer().retry().perTryTimeout();
         assertThat(perTry.value()).isEqualTo(Duration.ofMillis(1500));
         assertThat(perTry.source()).isEqualTo(Source.LIBRARY_DEFAULT);
-        assertThat(perTry.evidence()).startsWith("route timeout " + VS + ":43, no retries at " + VS + ":43");
+        assertThat(perTry.evidence()).startsWith("the route timeout (" + VS + ":43); perTryTimeout: no retries at " + VS + ":43");
     }
 
     @Test
     void noRouteTimeoutMeansNoPerTryTimeout() {
         Layer layer = route("payments", "http[0]").layer();
-        assertThat(layer.overallTimeout().source()).isEqualTo(Source.UNKNOWN);
-        assertThat(layer.overallTimeout().evidence()).contains("(Istio default: disabled)");
-        assertThat(layer.retry().perTryTimeout().source()).isEqualTo(Source.UNKNOWN);
-        assertThat(layer.retry().perTryTimeout().evidence()).startsWith("no per-try timeout: ");
+        assertThat(layer.overallTimeout().value()).isEqualTo(Durations.UNLIMITED);
+        assertThat(layer.overallTimeout().source()).isEqualTo(Source.LIBRARY_DEFAULT);
+        assertThat(layer.overallTimeout().evidence()).startsWith("no route timeout at ")
+                .contains("istio 1.31 default (verified by doc)");
+        assertThat(layer.retry().perTryTimeout().value()).isEqualTo(Durations.UNLIMITED);
+        assertThat(layer.retry().perTryTimeout().source()).isEqualTo(Source.LIBRARY_DEFAULT);
+        assertThat(layer.retry().perTryTimeout().evidence()).startsWith("the route timeout (no route timeout at ");
     }
 
     @Test

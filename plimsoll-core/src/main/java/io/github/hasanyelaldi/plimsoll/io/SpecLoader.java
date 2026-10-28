@@ -156,13 +156,13 @@ public final class SpecLoader {
 
         RetryPolicy retry = new RetryPolicy(
                 total,
-                duration(m, "perTryTimeout"),
+                timeout(m, "perTryTimeout"),
                 duration(m, "backoff"),
                 multiplier,
                 duration(m, "maxBackoff"),
                 booleanVal(m, "jitter"),
                 retryOn(m));
-        return new Layer(kind, retry, duration(m, "overallTimeout"));
+        return new Layer(kind, retry, timeout(m, "overallTimeout"));
     }
 
     private Val<Set<String>> retryOn(MapNode m) {
@@ -187,6 +187,18 @@ public final class SpecLoader {
         String text = scalar(e, key, JsonToken.VALUE_STRING, "a duration string such as 300ms or 1s").text();
         Duration d = Durations.parse(text).orElseThrow(() ->
                 error(e.keyLine(), "'" + key + "': invalid duration '" + text + "' (use e.g. 300ms, 1s, 2m)"));
+        return Val.explicit(d, at(e.keyLine()));
+    }
+
+    /** A duration, or {@code unlimited} for no timeout (ADR 0011). */
+    private Val<Duration> timeout(MapNode m, String key) {
+        Entry e = m.entries().get(key);
+        if (e == null) {
+            return Val.unknown(absent(key, m));
+        }
+        String text = scalar(e, key, JsonToken.VALUE_STRING, "a duration string such as 300ms or 1s, or unlimited").text();
+        Duration d = Durations.parseTimeout(text).orElseThrow(() ->
+                error(e.keyLine(), "'" + key + "': invalid timeout '" + text + "' (use e.g. 300ms, 1s, 2m or unlimited)"));
         return Val.explicit(d, at(e.keyLine()));
     }
 

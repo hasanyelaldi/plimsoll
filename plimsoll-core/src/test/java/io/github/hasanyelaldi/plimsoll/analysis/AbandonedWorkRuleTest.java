@@ -76,4 +76,19 @@ class AbandonedWorkRuleTest {
         assertThat(f.get(0).detail()).isEqualTo("callee deadline 2 s > per-try 1 s");
         assertThat(f.get(0).unknowns()).containsExactly("a→b layer 1 (generic) totalAttempts");
     }
+
+    @Test
+    void unlimitedPerTryTimeoutNeverAbandonsTheCallee() {
+        assertThat(a2b("2s", "{ kind: generic, totalAttempts: 3, perTryTimeout: unlimited }")).isEmpty();
+    }
+
+    @Test
+    void finitePerTryTimeoutOnAnotherLayerStillCounts() {
+        List<Finding> f = a2b("2s", "{ kind: resilience4j, maxAttempts: 2, perTryTimeout: 1s }, "
+                + "{ kind: http-client, totalAttempts: 1, perTryTimeout: unlimited }");
+        assertThat(f).singleElement().satisfies(x -> {
+            assertThat(x.severity()).isEqualTo(Severity.WARN);
+            assertThat(x.detail()).isEqualTo("layer 1 (resilience4j): callee deadline 2 s > per-try 1 s");
+        });
+    }
 }

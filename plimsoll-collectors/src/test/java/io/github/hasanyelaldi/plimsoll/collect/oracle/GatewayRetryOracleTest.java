@@ -22,6 +22,7 @@ import org.springframework.cloud.circuitbreaker.resilience4j.Resilience4JConfigB
 import org.springframework.cloud.client.circuitbreaker.Customizer;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.cloud.gateway.support.ServerWebExchangeUtils;
+import org.springframework.cloud.gateway.support.TimeoutException;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -39,6 +40,7 @@ import org.springframework.http.server.reactive.HttpHandler;
 import org.springframework.http.server.reactive.SslInfo;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
+import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.server.adapter.WebHttpHandlerBuilder;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -47,7 +49,8 @@ import reactor.core.publisher.Mono;
  * Oracle for the Spring Cloud Gateway (WebFlux) {@code Retry} filter and its order with {@code CircuitBreaker}, as
  * spring-petclinic-microservices configures them. The real gateway handles each request in memory: no server, no
  * socket. A global filter just before the routing filter stands in for the upstream; it counts every try and
- * answers with a status, fails with an IOException, or never answers.
+ * answers with a status, fails with an IOException, fails as the routing filter does when its response timeout
+ * expires, or never answers.
  *
  * <p>No sleeps: backoff is off by default, and the 20 ms TimeLimiter timeouts are the only waiting.
  */
@@ -60,7 +63,7 @@ class GatewayRetryOracleTest {
     static final String[] GATEWAY_OFF = {"spring.cloud.gateway.server.webflux.enabled=false",
             "spring.cloud.circuitbreaker.resilience4j.enabled=false"};
 
-    enum Answer { STATUS, IO_ERROR, HANG }
+    enum Answer { STATUS, IO_ERROR, RESPONSE_TIMEOUT, HANG }
 
     /** The upstream: runs once per try, before {@code NettyRoutingFilter}, and marks the exchange as routed. */
     static final class Upstream implements GlobalFilter, Ordered {
@@ -79,6 +82,9 @@ class GatewayRetryOracleTest {
                     yield chain.filter(exchange);
                 }
                 case IO_ERROR -> Mono.error(new IOException("connection reset"));
+                // what NettyRoutingFilter emits when httpclient.response-timeout expires (NettyRoutingFilter.java:192-199)
+                case RESPONSE_TIMEOUT -> Mono.error(new ResponseStatusException(HttpStatus.GATEWAY_TIMEOUT,
+                        "Response took longer than timeout", new TimeoutException("Response took longer than timeout")));
                 case HANG -> Mono.never();
             };
         }
@@ -186,6 +192,21 @@ class GatewayRetryOracleTest {
         assertThat(send(HttpMethod.POST, Answer.STATUS, HttpStatus.NOT_FOUND, petclinic).tries()).isEqualTo(1);
         assertThat(send(HttpMethod.GET, Answer.STATUS, HttpStatus.SERVICE_UNAVAILABLE, petclinic).tries())
                 .isEqualTo(1);
+    }
+
+    /**
+     * A try that hits the HTTP client's response timeout fails with a 504 whose cause is the gateway's
+     * {@code TimeoutException}, one of Retry's default exceptions, so the response timeout bounds each try.
+     */
+    @Test
+    void responseTimeoutOfATryIsRetried() {
+        Outcome o = send(HttpMethod.GET, Answer.RESPONSE_TIMEOUT, null, "filters[0].name=Retry");
+        assertThat(o.tries()).isEqualTo(4);
+        assertThat(o.status()).isEqualTo(HttpStatus.GATEWAY_TIMEOUT);
+        assertThat(send(HttpMethod.POST, Answer.RESPONSE_TIMEOUT, null, "filters[0].name=Retry", "filters[0].args.retries=1",
+                "filters[0].args.methods=POST").tries()).isEqualTo(2);
+        assertThat(send(HttpMethod.GET, Answer.RESPONSE_TIMEOUT, null, "filters[0].name=Retry",
+                "filters[0].args.exceptions=java.io.IOException").tries()).isEqualTo(1);
     }
 
     // ---- CircuitBreaker and Retry ----------------------------------------
