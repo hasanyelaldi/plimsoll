@@ -24,6 +24,16 @@ class DurationsTest {
     }
 
     @Test
+    void unlimitedIsATimeoutOnly() {
+        assertThat(Durations.parseTimeout("unlimited")).contains(Durations.UNLIMITED);
+        assertThat(Durations.parseTimeout("300ms")).contains(Duration.ofMillis(300));
+        assertThat(Durations.parse("unlimited")).isEmpty();
+        assertThat(Durations.format(Durations.UNLIMITED)).isEqualTo("unlimited");
+        assertThat(Durations.UNLIMITED).isGreaterThan(Duration.ofDays(365_000));
+        assertThat(Durations.isUnlimited(Duration.ofDays(1))).isFalse();
+    }
+
+    @Test
     void formatsLikeTheReports() {
         assertThat(Durations.format(Duration.ofMillis(800))).isEqualTo("800 ms");
         assertThat(Durations.format(Duration.ofSeconds(3))).isEqualTo("3 s");

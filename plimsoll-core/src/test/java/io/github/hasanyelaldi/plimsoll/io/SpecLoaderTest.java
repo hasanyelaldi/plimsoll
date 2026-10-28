@@ -114,7 +114,9 @@ class SpecLoaderTest {
         assertInvalid(HEAD + "edges:\n  - { from: a, to: b, layers: [ { kind: istio, maxAttempts: 3 } ] }\n", "does not apply to kind 'istio'");
         assertInvalid(HEAD + "edges:\n  - { from: a, to: b, layers: [ { kind: generic, totalAttempts: 0 } ] }\n", "at least 1");
         assertInvalid(HEAD + "edges:\n  - { from: a, to: b, layers: [ { kind: generic, perTryTimeout: 300 } ] }\n", "must be a duration string");
-        assertInvalid(HEAD + "edges:\n  - { from: a, to: b, layers: [ { kind: generic, perTryTimeout: 3h } ] }\n", "invalid duration '3h'");
+        assertInvalid(HEAD + "edges:\n  - { from: a, to: b, layers: [ { kind: generic, perTryTimeout: 3h } ] }\n", "invalid timeout '3h'");
+        assertInvalid("services:\n  a: { entry: true, deadline: unlimited }\n", "invalid duration 'unlimited'");
+        assertInvalid(HEAD + "edges:\n  - { from: a, to: b, layers: [ { kind: generic, backoff: unlimited } ] }\n", "invalid duration 'unlimited'");
         assertInvalid(HEAD + "edges:\n  - { from: a, to: b, layers: [ { kind: generic, multiplier: 0.5 } ] }\n", "finite number >= 1");
         assertInvalid(HEAD + "edges:\n  - { from: a, to: b, fanout: 0 }\n", "at least 1");
         assertInvalid("services:\n  a: { entry: true }\n  a: { entry: true }\n", "duplicate key 'a'");

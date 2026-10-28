@@ -179,4 +179,27 @@ class RetryBudgetRuleTest {
         // two tries: one backoff, the initial one; W_2 = 2.1s exactly
         assertThat(a2aUnknownMultiplier("3S", 2)).isEmpty();
     }
+
+    @Test
+    void unlimitedPerTryTimeoutLetsNoTryFit() {
+        List<Finding> f = a2a(spec("3s", "{ kind: generic, totalAttempts: 3, perTryTimeout: unlimited, backoff: 0ms }"));
+        assertThat(f).singleElement().satisfies(x -> {
+            assertThat(x.severity()).isEqualTo(Severity.WARN);
+            assertThat(x.detail()).isEqualTo("budget unlimited > deadline 3 s, 0 of 3 tries fit (no per-try timeout)");
+            assertThat(x.dependsOnUnknown()).isFalse();
+            assertThat(x.values()).filteredOn(v -> v.name().endsWith("perTryTimeout")).singleElement()
+                    .satisfies(v -> assertThat(v.display()).isEqualTo("unlimited"));
+        });
+    }
+
+    @Test
+    void unlimitedPerTryTimeoutWithoutRetriesOrWithoutADeadline() {
+        assertThat(a2a(spec("3s", "{ kind: generic, totalAttempts: 1, perTryTimeout: unlimited }"))).isEmpty();
+        List<Finding> f = a2a("services: { a: { entry: true }, b: {} }\n"
+                + "edges:\n  - { from: a, to: b, layers: [ { kind: generic, totalAttempts: 2, perTryTimeout: unlimited } ] }\n");
+        assertThat(f).singleElement().satisfies(x -> {
+            assertThat(x.severity()).isEqualTo(Severity.INFO);
+            assertThat(x.detail()).isEqualTo("cannot evaluate: a deadline UNKNOWN");
+        });
+    }
 }

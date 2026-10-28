@@ -20,6 +20,9 @@ import java.util.List;
  * rule cannot run (INFO). A missing initial backoff is taken as zero and a missing multiplier as 1 (it is
  * never below 1), which makes W a lower bound; a missing maxBackoff with a growing backoff is taken as no cap,
  * which makes W an upper bound. The wording says which.
+ *
+ * <p>An unlimited per-try timeout (ADR 0011) makes every {@code W_k} unlimited: one try that hangs can use the
+ * whole deadline, so 0 of n tries fit and the retries never run.
  */
 final class RetryBudgetRule {
 
@@ -65,6 +68,14 @@ final class RetryBudgetRule {
         }
 
         int n = p.totalAttempts().value();
+        String deadlineText = Durations.format(caller.deadline().value());
+        if (Durations.isUnlimited(p.perTryTimeout().value())) {
+            out.add(new Finding(ID, Severity.WARN, edge.location(),
+                    prefix + "budget unlimited > deadline " + deadlineText + ", 0 of " + n
+                            + " tries fit (no per-try timeout)",
+                    values, List.of()));
+            return;
+        }
         double perTry = p.perTryTimeout().value().toNanos();
         double deadline = caller.deadline().value().toNanos();
         boolean multiplierUnknown = !p.multiplier().isKnown();
@@ -93,7 +104,6 @@ final class RetryBudgetRule {
         }
 
         String budgetText = Durations.format(toDuration(budget));
-        String deadlineText = Durations.format(caller.deadline().value());
         List<String> unknowns = new ArrayList<>();
         if (lowerBound) {
             if (initialUnknown) {

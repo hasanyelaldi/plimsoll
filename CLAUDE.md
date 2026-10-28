@@ -48,7 +48,7 @@ plimsoll-collectors/  read real config into the model: Spring Boot properties, R
 plimsoll-cli/     picocli entry point: `plimsoll analyze <spec-or-dir>` (a directory is collected; a Coverage section lists the files read per service, the layer kinds searched and found per edge, and the configuration it did not read (config imports and config server, profile documents and activations, other config files, placeholders under collected prefixes) under Sources not read; then collector notes sorted in a Notes section; several repositories are analysed by checking them out side by side under one directory, ADR 0010)
 examples/         hand-written specs; checkout.yaml is the canonical demo and acceptance test
 findings/         runs on real testbeds (pinned commit, generated report, hand check, gaps); petclinic.md for #9, trainticket.md for #28
-docs/adr/         decisions in MADR format (0001–0010 below)
+docs/adr/         decisions in MADR format (0001–0011 below)
 kb/defaults/      library defaults knowledge base, one YAML file per library
 kb/detectors/     patterns of mechanisms no collector models (PLM-C1); `Detector` in `…collect.detect`
 ```
@@ -102,7 +102,7 @@ Exit codes: `0` no finding at or above `--fail-on` (default `ERROR`), `1` otherw
 
 ## Spec format and acceptance test
 
-Durations are strings (`300ms`, `1s`). In a hand-written spec an absent `multiplier` means fixed backoff (1.0) and an absent `fanout` means 1; any other absent field is `UNKNOWN`.
+Durations are strings (`300ms`, `1s`); `perTryTimeout` and `overallTimeout` also take `unlimited` for a timeout that does not exist (ADR 0011). In a hand-written spec an absent `multiplier` means fixed backoff (1.0) and an absent `fanout` means 1; any other absent field is `UNKNOWN`.
 
 In a collected graph (ADR 0009): `deadline` comes only from `deadline:` in the service's own `edges-hint.yaml`, never from its callers' or its own outbound timeouts, else `UNKNOWN`; a Spring Cloud Gateway with routes is an entry unless its hint says `entry: false`; `fanout` comes from the hint method entry, else `UNKNOWN` (A1 counts it as 1 and tags `depends-on-unknown`), and a gateway route has fanout 1.
 
@@ -186,6 +186,7 @@ Seed entries, all `verified_by: none` until checked against primary sources:
 - 0008 HTTP method idempotency (RFC 9110) is a `LIBRARY_DEFAULT`.
 - 0009 Deadline, entry and fanout in collected graphs.
 - 0010 Several repositories: check them out side by side and analyse the parent directory; fragments + merge parked (#40).
+- 0011 An absent timeout is the known value `unlimited` (sourced), not `UNKNOWN`; A2a: 0 of n tries fit, A2b: no finding.
 
 ## Related work (cite it, do not duplicate it)
 
