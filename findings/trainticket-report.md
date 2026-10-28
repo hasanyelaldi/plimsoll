@@ -14,7 +14,7 @@ Limit: 10
 | ts-admin-travel-service | ×3 |
 | ts-admin-user-service | ×3 |
 | ts-assurance-service | ×3 |
-| ts-auth-service | ×6 |
+| ts-auth-service | ×3 |
 | ts-avatar-service | ×3 |
 | ts-basic-service | ×3 |
 | ts-cancel-service | ×3 |
@@ -58,8 +58,8 @@ Limit: 10
 | ERROR | PLM-A3 | ts-gateway-service→ts-admin-travel-service | non-idempotent call retried, 3 tries |
 | ERROR | PLM-A3 | ts-gateway-service→ts-admin-user-service | non-idempotent call retried, 3 tries |
 | ERROR | PLM-A3 | ts-gateway-service→ts-assurance-service | non-idempotent call retried, 3 tries |
-| ERROR | PLM-A3 | ts-gateway-service→ts-auth-service | non-idempotent call retried, 3 tries |
-| ERROR | PLM-A3 | ts-gateway-service→ts-auth-service | non-idempotent call retried, 3 tries |
+| ERROR | PLM-A3 | ts-gateway-service→ts-auth-service (/api/v1/auth/**) | non-idempotent call retried, 3 tries |
+| ERROR | PLM-A3 | ts-gateway-service→ts-auth-service (/api/v1/users/**) | non-idempotent call retried, 3 tries |
 | ERROR | PLM-A3 | ts-gateway-service→ts-basic-service | non-idempotent call retried, 3 tries |
 | ERROR | PLM-A3 | ts-gateway-service→ts-config-service | non-idempotent call retried, 3 tries |
 | ERROR | PLM-A3 | ts-gateway-service→ts-consign-price-service | non-idempotent call retried, 3 tries |
@@ -92,8 +92,8 @@ Limit: 10
 | INFO | PLM-A2a | ts-gateway-service→ts-admin-travel-service | layer 2 (istio): cannot evaluate: ts-gateway-service deadline UNKNOWN |
 | INFO | PLM-A2a | ts-gateway-service→ts-admin-user-service | layer 2 (istio): cannot evaluate: ts-gateway-service deadline UNKNOWN |
 | INFO | PLM-A2a | ts-gateway-service→ts-assurance-service | layer 2 (istio): cannot evaluate: ts-gateway-service deadline UNKNOWN |
-| INFO | PLM-A2a | ts-gateway-service→ts-auth-service | layer 2 (istio): cannot evaluate: ts-gateway-service deadline UNKNOWN |
-| INFO | PLM-A2a | ts-gateway-service→ts-auth-service | layer 2 (istio): cannot evaluate: ts-gateway-service deadline UNKNOWN |
+| INFO | PLM-A2a | ts-gateway-service→ts-auth-service (/api/v1/auth/**) | layer 2 (istio): cannot evaluate: ts-gateway-service deadline UNKNOWN |
+| INFO | PLM-A2a | ts-gateway-service→ts-auth-service (/api/v1/users/**) | layer 2 (istio): cannot evaluate: ts-gateway-service deadline UNKNOWN |
 | INFO | PLM-A2a | ts-gateway-service→ts-avatar-service | layer 2 (istio): cannot evaluate: ts-gateway-service deadline UNKNOWN |
 | INFO | PLM-A2a | ts-gateway-service→ts-basic-service | layer 2 (istio): cannot evaluate: ts-gateway-service deadline UNKNOWN |
 | INFO | PLM-A2a | ts-gateway-service→ts-cancel-service | layer 2 (istio): cannot evaluate: ts-gateway-service deadline UNKNOWN |
@@ -131,8 +131,8 @@ Limit: 10
 | INFO | PLM-A2b | ts-gateway-service→ts-admin-travel-service | cannot evaluate: ts-admin-travel-service deadline UNKNOWN |
 | INFO | PLM-A2b | ts-gateway-service→ts-admin-user-service | cannot evaluate: ts-admin-user-service deadline UNKNOWN |
 | INFO | PLM-A2b | ts-gateway-service→ts-assurance-service | cannot evaluate: ts-assurance-service deadline UNKNOWN |
-| INFO | PLM-A2b | ts-gateway-service→ts-auth-service | cannot evaluate: ts-auth-service deadline UNKNOWN |
-| INFO | PLM-A2b | ts-gateway-service→ts-auth-service | cannot evaluate: ts-auth-service deadline UNKNOWN |
+| INFO | PLM-A2b | ts-gateway-service→ts-auth-service (/api/v1/auth/**) | cannot evaluate: ts-auth-service deadline UNKNOWN |
+| INFO | PLM-A2b | ts-gateway-service→ts-auth-service (/api/v1/users/**) | cannot evaluate: ts-auth-service deadline UNKNOWN |
 | INFO | PLM-A2b | ts-gateway-service→ts-avatar-service | cannot evaluate: ts-avatar-service deadline UNKNOWN |
 | INFO | PLM-A2b | ts-gateway-service→ts-basic-service | cannot evaluate: ts-basic-service deadline UNKNOWN |
 | INFO | PLM-A2b | ts-gateway-service→ts-cancel-service | cannot evaluate: ts-cancel-service deadline UNKNOWN |
@@ -203,17 +203,17 @@ Limit: 10
 - ts-gateway-service→ts-assurance-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route assurance (ts-gateway-service/src/main/resources/application.yml:41) or in default-filters]
 - ts-gateway-service→ts-assurance-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
 
-### ERROR PLM-A3 ts-gateway-service→ts-auth-service
+### ERROR PLM-A3 ts-gateway-service→ts-auth-service (/api/v1/auth/**)
 
-- ts-gateway-service→ts-auth-service idempotent = false [LIBRARY_DEFAULT: POST (ts-auth-service /api/v1/auth, ts-auth-service/src/main/java/auth/controller/AuthController.java:36); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
-- ts-gateway-service→ts-auth-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route auth (ts-gateway-service/src/main/resources/application.yml:46) or in default-filters]
-- ts-gateway-service→ts-auth-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
+- ts-gateway-service→ts-auth-service (/api/v1/auth/**) idempotent = false [LIBRARY_DEFAULT: POST (ts-auth-service /api/v1/auth, ts-auth-service/src/main/java/auth/controller/AuthController.java:36); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
+- ts-gateway-service→ts-auth-service (/api/v1/auth/**) layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route auth (ts-gateway-service/src/main/resources/application.yml:46) or in default-filters]
+- ts-gateway-service→ts-auth-service (/api/v1/auth/**) layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
 
-### ERROR PLM-A3 ts-gateway-service→ts-auth-service
+### ERROR PLM-A3 ts-gateway-service→ts-auth-service (/api/v1/users/**)
 
-- ts-gateway-service→ts-auth-service idempotent = false [LIBRARY_DEFAULT: POST (ts-auth-service /api/v1/users/login, ts-auth-service/src/main/java/auth/controller/UserController.java:41); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
-- ts-gateway-service→ts-auth-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route auth-user (ts-gateway-service/src/main/resources/application.yml:51) or in default-filters]
-- ts-gateway-service→ts-auth-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
+- ts-gateway-service→ts-auth-service (/api/v1/users/**) idempotent = false [LIBRARY_DEFAULT: POST (ts-auth-service /api/v1/users/login, ts-auth-service/src/main/java/auth/controller/UserController.java:41); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
+- ts-gateway-service→ts-auth-service (/api/v1/users/**) layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route auth-user (ts-gateway-service/src/main/resources/application.yml:51) or in default-filters]
+- ts-gateway-service→ts-auth-service (/api/v1/users/**) layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
 
 ### ERROR PLM-A3 ts-gateway-service→ts-basic-service
 
@@ -431,23 +431,23 @@ Limit: 10
 - ts-gateway-service deadline = UNKNOWN [UNKNOWN: ts-gateway-service has no edges hint; set 'deadline:' in the edges-hint.yaml of ts-gateway-service (ADR 0009)]
 - **depends-on-unknown: ts-gateway-service deadline**
 
-### INFO PLM-A2a ts-gateway-service→ts-auth-service
+### INFO PLM-A2a ts-gateway-service→ts-auth-service (/api/v1/auth/**)
 
-- ts-gateway-service→ts-auth-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
-- ts-gateway-service→ts-auth-service layer 2 (istio) perTryTimeout = unlimited [LIBRARY_DEFAULT: the route timeout (no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRoute); perTryTimeout: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry]
-- ts-gateway-service→ts-auth-service layer 2 (istio) backoff = 25 ms [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry]
-- ts-gateway-service→ts-auth-service layer 2 (istio) multiplier = UNKNOWN [UNKNOWN: Envoy back-off is fully jittered exponential; no fixed multiplier]
-- ts-gateway-service→ts-auth-service layer 2 (istio) maxBackoff = UNKNOWN [UNKNOWN: Envoy back-off is fully jittered exponential; no fixed cap on the minimum wait]
+- ts-gateway-service→ts-auth-service (/api/v1/auth/**) layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
+- ts-gateway-service→ts-auth-service (/api/v1/auth/**) layer 2 (istio) perTryTimeout = unlimited [LIBRARY_DEFAULT: the route timeout (no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRoute); perTryTimeout: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry]
+- ts-gateway-service→ts-auth-service (/api/v1/auth/**) layer 2 (istio) backoff = 25 ms [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry]
+- ts-gateway-service→ts-auth-service (/api/v1/auth/**) layer 2 (istio) multiplier = UNKNOWN [UNKNOWN: Envoy back-off is fully jittered exponential; no fixed multiplier]
+- ts-gateway-service→ts-auth-service (/api/v1/auth/**) layer 2 (istio) maxBackoff = UNKNOWN [UNKNOWN: Envoy back-off is fully jittered exponential; no fixed cap on the minimum wait]
 - ts-gateway-service deadline = UNKNOWN [UNKNOWN: ts-gateway-service has no edges hint; set 'deadline:' in the edges-hint.yaml of ts-gateway-service (ADR 0009)]
 - **depends-on-unknown: ts-gateway-service deadline**
 
-### INFO PLM-A2a ts-gateway-service→ts-auth-service
+### INFO PLM-A2a ts-gateway-service→ts-auth-service (/api/v1/users/**)
 
-- ts-gateway-service→ts-auth-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
-- ts-gateway-service→ts-auth-service layer 2 (istio) perTryTimeout = unlimited [LIBRARY_DEFAULT: the route timeout (no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRoute); perTryTimeout: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry]
-- ts-gateway-service→ts-auth-service layer 2 (istio) backoff = 25 ms [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry]
-- ts-gateway-service→ts-auth-service layer 2 (istio) multiplier = UNKNOWN [UNKNOWN: Envoy back-off is fully jittered exponential; no fixed multiplier]
-- ts-gateway-service→ts-auth-service layer 2 (istio) maxBackoff = UNKNOWN [UNKNOWN: Envoy back-off is fully jittered exponential; no fixed cap on the minimum wait]
+- ts-gateway-service→ts-auth-service (/api/v1/users/**) layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
+- ts-gateway-service→ts-auth-service (/api/v1/users/**) layer 2 (istio) perTryTimeout = unlimited [LIBRARY_DEFAULT: the route timeout (no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRoute); perTryTimeout: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry]
+- ts-gateway-service→ts-auth-service (/api/v1/users/**) layer 2 (istio) backoff = 25 ms [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry]
+- ts-gateway-service→ts-auth-service (/api/v1/users/**) layer 2 (istio) multiplier = UNKNOWN [UNKNOWN: Envoy back-off is fully jittered exponential; no fixed multiplier]
+- ts-gateway-service→ts-auth-service (/api/v1/users/**) layer 2 (istio) maxBackoff = UNKNOWN [UNKNOWN: Envoy back-off is fully jittered exponential; no fixed cap on the minimum wait]
 - ts-gateway-service deadline = UNKNOWN [UNKNOWN: ts-gateway-service has no edges hint; set 'deadline:' in the edges-hint.yaml of ts-gateway-service (ADR 0009)]
 - **depends-on-unknown: ts-gateway-service deadline**
 
@@ -815,22 +815,22 @@ Limit: 10
 - ts-gateway-service→ts-assurance-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
 - **depends-on-unknown: ts-assurance-service deadline**
 
-### INFO PLM-A2b ts-gateway-service→ts-auth-service
+### INFO PLM-A2b ts-gateway-service→ts-auth-service (/api/v1/auth/**)
 
 - ts-auth-service deadline = UNKNOWN [UNKNOWN: ts-auth-service has no edges hint; set 'deadline:' in the edges-hint.yaml of ts-auth-service (ADR 0009)]
-- ts-gateway-service→ts-auth-service layer 1 (spring-cloud-gateway) perTryTimeout = unlimited [LIBRARY_DEFAULT: spring.cloud.gateway.httpclient.response-timeout not set; spring-cloud-gateway 5.0.0, 5.0.3 default (verified by oracle), https://github.com/spring-cloud/spring-cloud-gateway/blob/v5.0.3/spring-cloud-gateway-server-webflux/src/main/java/org/springframework/cloud/gateway/config/HttpClientProperties.java]
-- ts-gateway-service→ts-auth-service layer 2 (istio) perTryTimeout = unlimited [LIBRARY_DEFAULT: the route timeout (no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRoute); perTryTimeout: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry]
-- ts-gateway-service→ts-auth-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route auth (ts-gateway-service/src/main/resources/application.yml:46) or in default-filters]
-- ts-gateway-service→ts-auth-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
+- ts-gateway-service→ts-auth-service (/api/v1/auth/**) layer 1 (spring-cloud-gateway) perTryTimeout = unlimited [LIBRARY_DEFAULT: spring.cloud.gateway.httpclient.response-timeout not set; spring-cloud-gateway 5.0.0, 5.0.3 default (verified by oracle), https://github.com/spring-cloud/spring-cloud-gateway/blob/v5.0.3/spring-cloud-gateway-server-webflux/src/main/java/org/springframework/cloud/gateway/config/HttpClientProperties.java]
+- ts-gateway-service→ts-auth-service (/api/v1/auth/**) layer 2 (istio) perTryTimeout = unlimited [LIBRARY_DEFAULT: the route timeout (no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRoute); perTryTimeout: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry]
+- ts-gateway-service→ts-auth-service (/api/v1/auth/**) layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route auth (ts-gateway-service/src/main/resources/application.yml:46) or in default-filters]
+- ts-gateway-service→ts-auth-service (/api/v1/auth/**) layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
 - **depends-on-unknown: ts-auth-service deadline**
 
-### INFO PLM-A2b ts-gateway-service→ts-auth-service
+### INFO PLM-A2b ts-gateway-service→ts-auth-service (/api/v1/users/**)
 
 - ts-auth-service deadline = UNKNOWN [UNKNOWN: ts-auth-service has no edges hint; set 'deadline:' in the edges-hint.yaml of ts-auth-service (ADR 0009)]
-- ts-gateway-service→ts-auth-service layer 1 (spring-cloud-gateway) perTryTimeout = unlimited [LIBRARY_DEFAULT: spring.cloud.gateway.httpclient.response-timeout not set; spring-cloud-gateway 5.0.0, 5.0.3 default (verified by oracle), https://github.com/spring-cloud/spring-cloud-gateway/blob/v5.0.3/spring-cloud-gateway-server-webflux/src/main/java/org/springframework/cloud/gateway/config/HttpClientProperties.java]
-- ts-gateway-service→ts-auth-service layer 2 (istio) perTryTimeout = unlimited [LIBRARY_DEFAULT: the route timeout (no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRoute); perTryTimeout: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry]
-- ts-gateway-service→ts-auth-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route auth-user (ts-gateway-service/src/main/resources/application.yml:51) or in default-filters]
-- ts-gateway-service→ts-auth-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
+- ts-gateway-service→ts-auth-service (/api/v1/users/**) layer 1 (spring-cloud-gateway) perTryTimeout = unlimited [LIBRARY_DEFAULT: spring.cloud.gateway.httpclient.response-timeout not set; spring-cloud-gateway 5.0.0, 5.0.3 default (verified by oracle), https://github.com/spring-cloud/spring-cloud-gateway/blob/v5.0.3/spring-cloud-gateway-server-webflux/src/main/java/org/springframework/cloud/gateway/config/HttpClientProperties.java]
+- ts-gateway-service→ts-auth-service (/api/v1/users/**) layer 2 (istio) perTryTimeout = unlimited [LIBRARY_DEFAULT: the route timeout (no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRoute); perTryTimeout: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry]
+- ts-gateway-service→ts-auth-service (/api/v1/users/**) layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route auth-user (ts-gateway-service/src/main/resources/application.yml:51) or in default-filters]
+- ts-gateway-service→ts-auth-service (/api/v1/users/**) layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
 - **depends-on-unknown: ts-auth-service deadline**
 
 ### INFO PLM-A2b ts-gateway-service→ts-avatar-service
