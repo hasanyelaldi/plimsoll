@@ -9,6 +9,7 @@ import io.github.hasanyelaldi.plimsoll.io.YamlTree.ListNode;
 import io.github.hasanyelaldi.plimsoll.io.YamlTree.MapNode;
 import io.github.hasanyelaldi.plimsoll.io.YamlTree.Node;
 import io.github.hasanyelaldi.plimsoll.io.YamlTree.Scalar;
+import io.github.hasanyelaldi.plimsoll.model.Durations;
 import io.github.hasanyelaldi.plimsoll.model.Layer;
 import io.github.hasanyelaldi.plimsoll.model.RetryPolicy;
 import io.github.hasanyelaldi.plimsoll.model.Source;
@@ -126,7 +127,7 @@ public final class IstioCollector {
                 c.document(doc);
             }
         }
-        Layer meshDefault = c.layer(Val.unknown("no VirtualService (Istio default: no timeout)"), null, null,
+        Layer meshDefault = c.layer(c.routeTimeout("no VirtualService for the host"), null, null,
                 "no VirtualService for the host");
         return new Result(c.routes, c.outliers, meshDefault, c.notes);
     }
@@ -221,7 +222,7 @@ public final class IstioCollector {
     private Layer layer(MapNode route) {
         Entry timeoutEntry = route.entries().get("timeout");
         Val<Duration> routeTimeout = timeoutEntry == null
-                ? Val.unknown("no route timeout at " + at(route.line()) + " (Istio default: disabled)")
+                ? routeTimeout("no route timeout at " + at(route.line()))
                 : Val.explicit(duration(timeoutEntry), at(timeoutEntry.keyLine()));
 
         Entry retriesEntry = route.entries().get("retries");
@@ -261,6 +262,12 @@ public final class IstioCollector {
         return new Layer("istio", retry, routeTimeout);
     }
 
+    /** The route timeout Istio applies when none is set: none (ADR 0011), from the knowledge base. */
+    private Val<Duration> routeTimeout(String absent) {
+        return kb.defaultOr(KB, "timeout", t -> Durations.parseTimeout(t).orElseGet(() -> parseDuration(t, "kb")),
+                absent);
+    }
+
     /** Istio: per-try timeout defaults to the route timeout, which defaults to none. */
     private Val<Duration> perTryTimeout(MapNode retries, String absent, Val<Duration> routeTimeout) {
         Entry e = retries == null ? null : retries.entries().get("perTryTimeout");
@@ -276,8 +283,8 @@ public final class IstioCollector {
             return Val.unknown("no per-try timeout: " + absent + " and " + routeTimeout.evidence() + "; "
                     + rule.get().evidence());
         }
-        return new Val<>(routeTimeout.value(), Source.LIBRARY_DEFAULT, "route timeout " + routeTimeout.evidence()
-                + ", " + absent + "; " + rule.get().evidence());
+        return new Val<>(routeTimeout.value(), Source.LIBRARY_DEFAULT, "the route timeout (" + routeTimeout.evidence()
+                + "); perTryTimeout: " + absent + "; " + rule.get().evidence());
     }
 
     private <T> Val<T> field(MapNode retries, String key, Function<Entry, T> parse, Supplier<Val<T>> fallback) {

@@ -13,6 +13,7 @@ import io.github.hasanyelaldi.plimsoll.model.RetryPolicy;
 import io.github.hasanyelaldi.plimsoll.model.Source;
 import io.github.hasanyelaldi.plimsoll.model.Val;
 import io.github.hasanyelaldi.plimsoll.collect.http.ClientCallScanner.ClientCall;
+import io.github.hasanyelaldi.plimsoll.model.Durations;
 import io.github.hasanyelaldi.plimsoll.model.Edge;
 import java.time.Duration;
 import java.util.List;
@@ -58,10 +59,11 @@ class HttpClientCollectorTest {
     @Test
     void webClientHasNoResponseTimeout() {
         Layer layer = webClient(collect("server.port: 8080"));
-        assertThat(layer.retry().perTryTimeout().source()).isEqualTo(Source.UNKNOWN);
+        assertThat(layer.retry().perTryTimeout().value()).isEqualTo(Durations.UNLIMITED);
+        assertThat(layer.retry().perTryTimeout().source()).isEqualTo(Source.LIBRARY_DEFAULT);
         assertThat(layer.retry().perTryTimeout().evidence())
-                .contains("no response timeout", "spring-web 7.0.2, 7.0.9 default (verified by oracle)");
-        assertThat(layer.overallTimeout().source()).isEqualTo(Source.UNKNOWN);
+                .contains("response timeout of WebClient.builder()", "spring-web 7.0.2, 7.0.9 default (verified by oracle)");
+        assertThat(layer.overallTimeout().value()).isEqualTo(Durations.UNLIMITED);
     }
 
     @Test

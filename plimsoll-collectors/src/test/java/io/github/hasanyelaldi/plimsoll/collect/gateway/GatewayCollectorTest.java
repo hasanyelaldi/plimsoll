@@ -129,8 +129,9 @@ class GatewayCollectorTest {
             assertThat(retry.perTryTimeout().evidence()).startsWith(
                     "spring.cloud.gateway.server.webflux.httpclient.response-timeout not set; spring-cloud-gateway "
                             + "5.0.0, 5.0.3 default (verified by oracle)");
-            assertThat(layer.overallTimeout().source()).isEqualTo(Source.UNKNOWN);
-            assertThat(layer.overallTimeout().evidence()).contains("unlimited");
+            assertThat(layer.overallTimeout().value()).isEqualTo(Durations.UNLIMITED);
+            assertThat(layer.overallTimeout().source()).isEqualTo(Source.LIBRARY_DEFAULT);
+            assertThat(layer.overallTimeout().evidence()).contains("timeout not set", "(verified by doc)");
         }
     }
 

@@ -599,8 +599,7 @@ public final class GatewayCollector {
         if (timeout != null) {
             overall = timeout.isPlaceholder() ? placeholder(timeout) : Val.explicit(duration(timeout), timeout.evidence());
         } else {
-            overall = Val.unknown(filter + ": timeout not set, so the retry sequence is unlimited"
-                    + kb.lookup(KB, "retry.timeout").map(e -> "; " + e.evidence()).orElse(""));
+            overall = kb.defaultOr(KB, "retry.timeout", GatewayCollector::kbTimeout, filter + ": timeout not set");
         }
 
         RetryPolicy retry = new RetryPolicy(attempts, perTry, initial, multiplier, maxBackoff, jitter,

@@ -5,7 +5,7 @@
 - library: spring-web
   versions: "7.0.2, 7.0.9"
   parameter: webclient-builder.reactor-netty.response-timeout
-  value: none                 # ReactorClientHttpConnector() sets no response timeout
+  value: unlimited            # ReactorClientHttpConnector() sets no response timeout
   unit: duration
   source: https://github.com/spring-projects/spring-framework/blob/v7.0.9/spring-web/src/main/java/org/springframework/http/client/reactive/ReactorClientHttpConnector.java
   verified_by: oracle
