@@ -26,6 +26,12 @@ import org.jgrapht.traverse.TopologicalOrderIterator;
  * {@code v}, where {@code E} is the product of {@code totalAttempts} over the edge's layers. In topological
  * order this sums every path, so diamonds are counted once per path.
  *
+ * <p>Edges from one service with the same {@link Edge#choice()} are alternatives: one request takes at most one of
+ * them (ADR 0012). Per target {@code v}, the calls one request to {@code u} causes on {@code v} are
+ * {@code R_v(u) = Σ E·fanout·R_v(to)} over the other edges of {@code u} plus, per choice, the largest
+ * {@code E·fanout·R_v(to)} among its edges; {@code R_v(v) = 1} and {@code L(v) = R_v(entry)}. Without choices this
+ * is the sum above. Each service gets its own worst choice, so every {@code L(v)} is still an upper bound.
+ *
  * <p>A cycle reachable from an entry makes the bound infinite: {@code ERROR UNBOUNDED}. Every service
  * reachable from such a cycle is unbounded too; the rest is still computed exactly.
  *
@@ -184,17 +190,14 @@ final class AmplificationRule {
         List<String> topo = new ArrayList<>();
         new TopologicalOrderIterator<>(dag).forEachRemaining(topo::add);
 
-        Map<String, BigInteger> load = new TreeMap<>();
         Map<String, Set<String>> unknowns = new TreeMap<>();
         for (String v : sub) {
-            load.put(v, v.equals(entry) ? BigInteger.ONE : BigInteger.ZERO);
             unknowns.put(v, new TreeSet<>());
         }
         for (String u : topo) {
             for (int i : new TreeSet<>(dag.outgoingEdgesOf(u))) {
                 Edge e = edges.get(i);
                 String v = dag.getEdgeTarget(i);
-                load.merge(v, load.get(u).multiply(attempts(e)).multiply(fanout(e)), BigInteger::add);
                 unknowns.get(v).addAll(unknowns.get(u));
                 unknowns.get(v).addAll(Attempts.unknownAttempts(e));
                 if (!e.fanout().isKnown()) {
@@ -202,7 +205,73 @@ final class AmplificationRule {
                 }
             }
         }
+        Map<String, BigInteger> load = new TreeMap<>();
+        for (String v : sub) {
+            load.put(v, perRequest(v, dag, topo, edges).get(entry));
+        }
         return new Run(entry, dag, topo, load, unknowns);
+    }
+
+    /** {@code R_v(u)} for every {@code u} of the DAG: calls on {@code v} per request to {@code u}. */
+    private static Map<String, BigInteger> perRequest(String v, Graph<String, Integer> dag, List<String> topo,
+            List<Edge> edges) {
+        Map<String, BigInteger> r = new TreeMap<>();
+        for (int k = topo.size() - 1; k >= 0; k--) {
+            String u = topo.get(k);
+            if (u.equals(v)) {
+                r.put(u, BigInteger.ONE);
+                continue;
+            }
+            BigInteger sum = BigInteger.ZERO;
+            Map<String, BigInteger> best = new TreeMap<>();
+            for (int i : new TreeSet<>(dag.outgoingEdgesOf(u))) {
+                Edge e = edges.get(i);
+                BigInteger calls = weight(e).multiply(r.get(dag.getEdgeTarget(i)));
+                if (e.choice() == null) {
+                    sum = sum.add(calls);
+                } else {
+                    best.merge(e.choice().value(), calls, BigInteger::max);
+                }
+            }
+            for (BigInteger b : best.values()) {
+                sum = sum.add(b);
+            }
+            r.put(u, sum);
+        }
+        return r;
+    }
+
+    /**
+     * The edges that make {@code L(v)}: every edge that reaches {@code v}, except that of each choice only the
+     * alternative with the most calls on {@code v} is kept, the first in edge order on a tie.
+     */
+    private static Set<Integer> chosen(String v, Run run, List<Edge> edges) {
+        Map<String, BigInteger> r = perRequest(v, run.dag(), run.topo(), edges);
+        Set<Integer> out = new TreeSet<>();
+        for (String u : run.topo()) {
+            Map<String, Integer> bestEdge = new TreeMap<>();
+            Map<String, BigInteger> bestCalls = new TreeMap<>();
+            for (int i : new TreeSet<>(run.dag().outgoingEdgesOf(u))) {
+                Edge e = edges.get(i);
+                BigInteger calls = weight(e).multiply(r.get(run.dag().getEdgeTarget(i)));
+                if (calls.signum() == 0) {
+                    continue;
+                }
+                if (e.choice() == null) {
+                    out.add(i);
+                } else if (!bestCalls.containsKey(e.choice().value())
+                        || calls.compareTo(bestCalls.get(e.choice().value())) > 0) {
+                    bestCalls.put(e.choice().value(), calls);
+                    bestEdge.put(e.choice().value(), i);
+                }
+            }
+            out.addAll(bestEdge.values());
+        }
+        return out;
+    }
+
+    private static BigInteger weight(Edge e) {
+        return attempts(e).multiply(fanout(e));
     }
 
     /** Product of the known totalAttempts of the edge's layers; UNKNOWN counts as 1. */
@@ -229,8 +298,19 @@ final class AmplificationRule {
 
     private static Finding loadFinding(String v, Run run, List<Edge> edges, AnalysisOptions options, Severity severity) {
         Set<String> ancestors = walk(Set.of(v), run.dag(), true, x -> true);
+        Set<Integer> chosen = chosen(v, run, edges);
+        Map<String, BigInteger> along = new TreeMap<>();
+        along.put(run.entry(), BigInteger.ONE);
+        for (String u : run.topo()) {
+            for (int i : new TreeSet<>(run.dag().outgoingEdgesOf(u))) {
+                if (chosen.contains(i) && along.containsKey(u)) {
+                    along.merge(run.dag().getEdgeTarget(i), along.get(u).multiply(weight(edges.get(i))),
+                            BigInteger::add);
+                }
+            }
+        }
         List<String> contributors = run.topo().stream()
-                .filter(s -> ancestors.contains(s) && !s.equals(v) && !s.equals(run.entry()))
+                .filter(s -> along.containsKey(s) && !s.equals(v) && !s.equals(run.entry()))
                 .toList();
         boolean lowerBound = !run.unknowns().get(v).isEmpty();
 
@@ -238,11 +318,14 @@ final class AmplificationRule {
         if (!contributors.isEmpty()) {
             detail.append(" (");
             for (int i = 0; i < contributors.size(); i++) {
-                detail.append(i == 0 ? "" : ", ").append(contributors.get(i)).append(" ×").append(run.load().get(contributors.get(i)));
+                detail.append(i == 0 ? "" : ", ").append(contributors.get(i)).append(" ×").append(along.get(contributors.get(i)));
             }
             detail.append(')');
         }
         detail.append(", limit ").append(options.maxAmplification());
+        for (String alternatives : alternatives(v, run, edges)) {
+            detail.append("; ").append(alternatives);
+        }
         if (severity == Severity.INFO) {
             detail.append("; the real value may be higher");
         }
@@ -254,6 +337,27 @@ final class AmplificationRule {
             }
         }
         return new Finding(ID, severity, v, detail.toString(), values, List.copyOf(run.unknowns().get(v)));
+    }
+
+    /** "max over 2 alternatives of routes of gw", per choice of which at least two edges reach {@code v}. */
+    private static List<String> alternatives(String v, Run run, List<Edge> edges) {
+        Set<String> ancestors = walk(Set.of(v), run.dag(), true, x -> true);
+        List<String> out = new ArrayList<>();
+        for (String u : run.topo()) {
+            Map<String, Integer> reaching = new TreeMap<>();
+            for (int i : new TreeSet<>(run.dag().outgoingEdgesOf(u))) {
+                Edge e = edges.get(i);
+                if (e.choice() != null && ancestors.contains(u) && ancestors.contains(run.dag().getEdgeTarget(i))) {
+                    reaching.merge(e.choice().value(), 1, Integer::sum);
+                }
+            }
+            reaching.forEach((choice, n) -> {
+                if (n > 1) {
+                    out.add("max over " + n + " alternatives of " + choice);
+                }
+            });
+        }
+        return out;
     }
 
     private static Finding unboundedFinding(
@@ -288,6 +392,9 @@ final class AmplificationRule {
         }
         if (!e.fanout().isKnown() || e.fanout().value() > 1) {
             values.add(UsedValue.of(fanoutName(e), e.fanout()));
+        }
+        if (e.choice() != null) {
+            values.add(UsedValue.of(e.location() + " choice", e.choice()));
         }
         return values;
     }

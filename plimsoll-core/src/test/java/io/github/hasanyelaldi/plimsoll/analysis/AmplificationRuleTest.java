@@ -238,4 +238,79 @@ class AmplificationRuleTest {
         assertThat(f.detail()).startsWith("at least ×20");
         assertThat(f.unknowns()).containsExactly("b→c layer 1 (generic) totalAttempts");
     }
+
+    // ---- alternatives of one routing decision (ADR 0012) -------------------
+
+    @Test
+    void routesOfOneChoiceToOneCalleeTakeTheMaxNotTheSum() {
+        AnalysisResult r = analyze("""
+                services:
+                  gw: { entry: true }
+                  auth: {}
+                edges:
+                  - { from: gw, to: auth, operation: /auth/**, choice: routes, layers: [ { kind: istio, attempts: 2 } ] }
+                  - { from: gw, to: auth, operation: /users/**, choice: routes, layers: [ { kind: istio, attempts: 2 } ] }
+                """, new AnalysisOptions(2));
+        assertThat(load(r, "auth")).isEqualTo(n(3));
+        Finding f = findings(r, "PLM-A1").get(0);
+        assertThat(f.detail()).isEqualTo("×3, limit 2; max over 2 alternatives of routes");
+        assertThat(f.values()).extracting(UsedValue::name).contains("gw→auth choice");
+        assertThat(f.values()).filteredOn(v -> v.name().equals("gw→auth choice")).first()
+                .satisfies(v -> assertThat(v.evidence()).isEqualTo("spec.yaml:5"));
+    }
+
+    @Test
+    void eachServiceGetsItsWorstAlternativeAndOtherEdgesStillAdd() {
+        // per request to gw: route a (x3) or route b (x2) then b->a (x2) = 4; plus the free edge gw->a x1
+        AnalysisResult r = analyze("""
+                services:
+                  gw: { entry: true }
+                  a: {}
+                  b: {}
+                edges:
+                  - { from: gw, to: a, choice: routes, layers: [ { kind: generic, totalAttempts: 3 } ] }
+                  - { from: gw, to: b, choice: routes, layers: [ { kind: generic, totalAttempts: 2 } ] }
+                  - { from: b, to: a, layers: [ { kind: generic, totalAttempts: 2 } ] }
+                  - { from: gw, to: a, operation: audit }
+                """, new AnalysisOptions(4));
+        assertThat(load(r, "a")).isEqualTo(n(5));
+        assertThat(load(r, "b")).isEqualTo(n(2));
+        assertThat(findings(r, "PLM-A1")).singleElement().extracting(Finding::detail)
+                .isEqualTo("×5 (b ×2), limit 4; max over 2 alternatives of routes");
+    }
+
+    @Test
+    void choicesAreKeyedByTheCallerSoTheSameNameElsewhereIsAnotherDecision() {
+        AnalysisResult r = analyze("""
+                services:
+                  gw: { entry: true }
+                  x: {}
+                  y: {}
+                edges:
+                  - { from: gw, to: x, choice: r, layers: [ { kind: generic, totalAttempts: 2 } ] }
+                  - { from: gw, to: y, choice: r, layers: [ { kind: generic, totalAttempts: 2 } ] }
+                  - { from: x, to: y, choice: r, layers: [ { kind: generic, totalAttempts: 3 } ] }
+                """);
+        // y: route x then x->y (2 x 3 = 6) beats route y (2)
+        assertThat(load(r, "y")).isEqualTo(n(6));
+        assertThat(load(r, "x")).isEqualTo(n(2));
+    }
+
+    @Test
+    void anUnknownAlternativeThatIsNotTakenStillMakesTheMaxALowerBound() {
+        AnalysisResult r = analyze("""
+                services:
+                  gw: { entry: true }
+                  a: {}
+                edges:
+                  - { from: gw, to: a, choice: routes, layers: [ { kind: generic, totalAttempts: 3 } ] }
+                  - { from: gw, to: a, operation: other, choice: routes, layers: [ { kind: generic } ] }
+                """);
+        assertThat(load(r, "a")).isEqualTo(n(3));
+        assertThat(findings(r, "PLM-A1")).singleElement().satisfies(f -> {
+            assertThat(f.severity()).isEqualTo(Severity.INFO);
+            assertThat(f.detail()).startsWith("at least ×3, limit 10; max over 2 alternatives of routes");
+            assertThat(f.unknowns()).containsExactly("gw→a layer 1 (generic) totalAttempts");
+        });
+    }
 }
