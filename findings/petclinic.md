@@ -8,7 +8,7 @@ Issue #9. Testbed choice: ADR 0005. The full generated report is in [`petclinic-
 | --- | --- |
 | spring-petclinic-microservices | `1d76b00d683e86b62867a6bf59530f8ab301244f` (7 Oct 2026), Spring Boot 4.0.1, Spring Cloud 2025.1.0 (Gateway 5.0.0) |
 | spring-petclinic-microservices-config | `323993ce2519c6d02df63e08bf4458d123d3b611` (2 May 2026), read by hand only |
-| Plimsoll | `3851edd` (main after #35); report regenerated after #23 (PLM-C1, Coverage section) after #37 (client calls in code) and after #38 (unlimited timeouts, ADR 0011), same command |
+| Plimsoll | `3851edd` (main after #35); report regenerated after #23 (PLM-C1, Coverage section) after #37 (client calls in code), #38 (unlimited timeouts, ADR 0011) and #48 (alternative routes, ADR 0012), same command |
 
 ```bash
 git clone https://github.com/spring-petclinic/spring-petclinic-microservices.git
@@ -28,7 +28,7 @@ After #37: **3 error, 5 warn, 16 info.** The graph has one entry (`api-gateway`)
 | api-gateway | ×1 |
 | customers-service | at least ×3 |
 | genai-service | ×2 |
-| vets-service | at least ×3 |
+| vets-service | at least ×2 |
 | visits-service | at least ×3 |
 
 "At least": the edges found in code have no fanout (ADR 0009: fanout comes only from a hint), so A1 counts them as 1 and reports INFO with `depends-on-unknown` instead of a plain number.
@@ -41,7 +41,8 @@ After #37: **3 error, 5 warn, 16 info.** The graph has one entry (`api-gateway`)
 | WARN | A4 | api-gateway→customers-service, genai-service, visits-service | zero backoff |
 | WARN | C1 | api-gateway | Spring Cloud CircuitBreaker (programmatic) detected, not modelled |
 | WARN | C1 | genai-service | Spring AI retry detected, not modelled |
-| INFO | A1 | customers-service, vets-service, visits-service | at least ×3 (fanout of a code edge `UNKNOWN`) |
+| INFO | A1 | customers-service, visits-service | at least ×3 (fanout of a code edge `UNKNOWN`) |
+| INFO | A1 | vets-service | at least ×2 (genai-service ×2); max over 2 alternatives of routes of api-gateway |
 | INFO | A2a | the three retried route edges | cannot evaluate (gateway deadline `UNKNOWN`) |
 | INFO | A2b | all seven edges | cannot evaluate (callee deadline `UNKNOWN`) |
 | INFO | A4 | the three retried route edges | no jitter |
@@ -118,8 +119,8 @@ Not gaps: Spring Cloud LoadBalancer retries stay off (`spring.cloud.loadbalancer
 
 | Value | Why it is higher than the real per-request bound | Follow-up |
 | --- | --- | --- |
-| customers-service, visits-service at least ×3 | A1 sums the gateway route (×2, POST retried) and the composite `GET /api/gateway/owners/{id}` path (×1) as if one gateway request took both. Each request takes one of them, so the real bound is ×2. | #48 (alternatives within one entry) |
-| vets-service at least ×3 | genai-service→vets-service runs once at startup (`@EventListener` on `ApplicationStartedEvent`), not per request; without it vets-service is ×1. | #54 (`later`) |
+| customers-service, visits-service at least ×3 | Since #48 the gateway routes are alternatives (ADR 0012), but the composite `GET /api/gateway/owners/{id}` path (×1) comes from the gateway's own controller, not a route, and is still added to the route (×2, POST retried). Each request takes one of them, so the real bound is ×2. | #58 (`later`) |
+| vets-service at least ×2 | Was ×3 before #48 (vets route ×1 plus genai route ×2 summed); now the max of the two routes. genai-service→vets-service runs once at startup (`@EventListener` on `ApplicationStartedEvent`), not per request; without it vets-service is ×1. | #54 (`later`) |
 
 Both are upper bounds that stay safe (never lower than the real value); no false positive at WARN or ERROR follows from them, since A1 stays below the limit of 10.
 

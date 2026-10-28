@@ -29,13 +29,13 @@ final class AbandonedWorkRule {
         List<Finding> findings = new ArrayList<>();
         for (Edge edge : graph.edges()) {
             if (!edge.layers().isEmpty()) {
-                evaluateEdge(edge, graph.services().get(edge.to()), findings);
+                evaluateEdge(edge, graph.location(edge), graph.services().get(edge.to()), findings);
             }
         }
         return findings;
     }
 
-    private static void evaluateEdge(Edge edge, Service callee, List<Finding> out) {
+    private static void evaluateEdge(Edge edge, String where, Service callee, List<Finding> out) {
         List<UsedValue> values = new ArrayList<>();
         values.add(UsedValue.of(callee.name() + " deadline", callee.deadline(), Durations::format));
 
@@ -43,15 +43,15 @@ final class AbandonedWorkRule {
         List<String> unknownPerTry = new ArrayList<>();
         for (int i = 0; i < edge.layers().size(); i++) {
             var perTry = edge.layers().get(i).retry().perTryTimeout();
-            values.add(UsedValue.of(Attempts.layerName(edge, i) + " perTryTimeout", perTry, Durations::format));
+            values.add(UsedValue.of(Attempts.layerName(where, edge, i) + " perTryTimeout", perTry, Durations::format));
             if (!perTry.isKnown()) {
-                unknownPerTry.add(Attempts.layerName(edge, i) + " perTryTimeout");
+                unknownPerTry.add(Attempts.layerName(where, edge, i) + " perTryTimeout");
             } else if (shortest < 0 || perTry.value().compareTo(edge.layers().get(shortest).retry().perTryTimeout().value()) < 0) {
                 shortest = i;
             }
         }
         for (int i = 0; i < edge.layers().size(); i++) {
-            values.add(UsedValue.of(Attempts.layerName(edge, i) + " totalAttempts", edge.layers().get(i).retry().totalAttempts()));
+            values.add(UsedValue.of(Attempts.layerName(where, edge, i) + " totalAttempts", edge.layers().get(i).retry().totalAttempts()));
         }
 
         List<String> missing = new ArrayList<>();
@@ -62,7 +62,7 @@ final class AbandonedWorkRule {
             missing.addAll(unknownPerTry);
         }
         if (!missing.isEmpty()) {
-            out.add(Attempts.cannotEvaluate(ID, edge.location(), "", values, missing));
+            out.add(Attempts.cannotEvaluate(ID, where, "", values, missing));
             return;
         }
 
@@ -73,9 +73,9 @@ final class AbandonedWorkRule {
         boolean retries = Attempts.edgeRetries(edge);
         List<String> unknowns = new ArrayList<>(unknownPerTry);
         if (!retries) {
-            unknowns.addAll(Attempts.unknownAttempts(edge));
+            unknowns.addAll(Attempts.unknownAttempts(where, edge));
         }
-        out.add(new Finding(ID, retries ? Severity.WARN : Severity.INFO, edge.location(),
+        out.add(new Finding(ID, retries ? Severity.WARN : Severity.INFO, where,
                 Attempts.layerPrefix(edge, shortest) + "callee deadline " + Durations.format(callee.deadline().value())
                         + " > per-try " + Durations.format(perTry),
                 values, unknowns));

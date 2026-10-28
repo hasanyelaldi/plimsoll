@@ -21,6 +21,7 @@ import org.springframework.cloud.circuitbreaker.resilience4j.ReactiveResilience4
 import org.springframework.cloud.circuitbreaker.resilience4j.Resilience4JConfigBuilder;
 import org.springframework.cloud.client.circuitbreaker.Customizer;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
+import org.springframework.cloud.gateway.route.Route;
 import org.springframework.cloud.gateway.support.ServerWebExchangeUtils;
 import org.springframework.cloud.gateway.support.TimeoutException;
 import org.springframework.context.ConfigurableApplicationContext;
@@ -68,6 +69,7 @@ class GatewayRetryOracleTest {
     /** The upstream: runs once per try, before {@code NettyRoutingFilter}, and marks the exchange as routed. */
     static final class Upstream implements GlobalFilter, Ordered {
         final AtomicInteger tries = new AtomicInteger();
+        final List<String> routes = new ArrayList<>();
         Answer answer = Answer.STATUS;
         HttpStatus status = HttpStatus.SERVICE_UNAVAILABLE;
 
@@ -75,6 +77,8 @@ class GatewayRetryOracleTest {
         public Mono<Void> filter(org.springframework.web.server.ServerWebExchange exchange,
                 org.springframework.cloud.gateway.filter.GatewayFilterChain chain) {
             tries.incrementAndGet();
+            Route route = exchange.getAttribute(ServerWebExchangeUtils.GATEWAY_ROUTE_ATTR);
+            routes.add(route == null ? "none" : route.getId());
             ServerWebExchangeUtils.setAlreadyRouted(exchange);
             return switch (answer) {
                 case STATUS -> {
@@ -112,22 +116,29 @@ class GatewayRetryOracleTest {
         }
     }
 
-    private record Outcome(int tries, HttpStatus status) {}
+    private record Outcome(int tries, HttpStatus status, List<String> routes) {}
 
     /**
      * @param filters the route's filters, outermost first, as {@code filters[i].…=…} property suffixes
      */
     private static Outcome send(HttpMethod method, Answer answer, HttpStatus status, String... filters) {
         List<String> props = new ArrayList<>(List.of(
-                "spring.main.banner-mode=off",
-                "spring.config.location=optional:classpath:none.yml",
-                "spring.cloud.compatibility-verifier.enabled=false",
                 "spring.cloud.gateway.server.webflux.routes[0].id=backend",
                 "spring.cloud.gateway.server.webflux.routes[0].uri=http://backend.invalid:8080",
                 "spring.cloud.gateway.server.webflux.routes[0].predicates[0]=Path=/api/**"));
         for (String f : filters) {
             props.add("spring.cloud.gateway.server.webflux.routes[0]." + f);
         }
+        return send(props, method, answer, status);
+    }
+
+    /** @param routes the gateway's route properties */
+    private static Outcome send(List<String> routes, HttpMethod method, Answer answer, HttpStatus status) {
+        List<String> props = new ArrayList<>(List.of(
+                "spring.main.banner-mode=off",
+                "spring.config.location=optional:classpath:none.yml",
+                "spring.cloud.compatibility-verifier.enabled=false"));
+        props.addAll(routes);
         try (ConfigurableApplicationContext context = new SpringApplicationBuilder(App.class)
                 .web(WebApplicationType.REACTIVE)
                 .contextFactory(ApplicationContextFactory.ofContextClass(
@@ -141,7 +152,8 @@ class GatewayRetryOracleTest {
             Response response = new Response();
             handler.handle(new Request(method, URI.create("http://gateway/api/owners/1")), response)
                     .block(Duration.ofSeconds(10));
-            return new Outcome(upstream.tries.get(), HttpStatus.resolve(response.getStatusCode().value()));
+            return new Outcome(upstream.tries.get(), HttpStatus.resolve(response.getStatusCode().value()),
+                    List.copyOf(upstream.routes));
         }
     }
 
@@ -207,6 +219,22 @@ class GatewayRetryOracleTest {
                 "filters[0].args.methods=POST").tries()).isEqualTo(2);
         assertThat(send(HttpMethod.GET, Answer.RESPONSE_TIMEOUT, null, "filters[0].name=Retry",
                 "filters[0].args.exceptions=java.io.IOException").tries()).isEqualTo(1);
+    }
+
+    // ---- routes are alternatives (ADR 0012) -------------------------------
+
+    /** Two routes match the request; it takes only the first, so the routes of a gateway are alternatives. */
+    @Test
+    void aRequestTakesOnlyTheFirstMatchingRoute() {
+        String r = "spring.cloud.gateway.server.webflux.routes";
+        Outcome o = send(List.of(
+                r + "[0].id=first", r + "[0].uri=http://first.invalid:8080", r + "[0].predicates[0]=Path=/api/**",
+                r + "[0].filters[0]=Retry=1",
+                r + "[1].id=second", r + "[1].uri=http://second.invalid:8080", r + "[1].predicates[0]=Path=/api/owners/**",
+                r + "[1].filters[0]=Retry=1"),
+                HttpMethod.GET, Answer.STATUS, HttpStatus.SERVICE_UNAVAILABLE);
+        assertThat(o.routes()).containsExactly("first", "first");
+        assertThat(o.tries()).isEqualTo(2);
     }
 
     // ---- CircuitBreaker and Retry ----------------------------------------

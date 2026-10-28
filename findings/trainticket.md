@@ -29,7 +29,7 @@ The first run, before #46, named every callee `${..._HOST:ts-...}` after the unr
 
 | Rule | Count | Detail |
 | --- | --- | --- |
-| A1 | none above the limit | ×3 on 37 callees, ×6 on `ts-auth-service`, ×1 on the gateway |
+| A1 | none above the limit | ×3 on 38 callees (`ts-auth-service` ×6 before #48), ×1 on the gateway |
 | A3 `ERROR` | 34 | POST routes retried 3 times by the Istio default |
 | A2a `INFO` | 39 | cannot evaluate: gateway deadline `UNKNOWN` (per-try timeouts are unlimited since #38) |
 | A2b `INFO` | 39 | cannot evaluate: callee deadline `UNKNOWN` |
@@ -69,7 +69,7 @@ Checked against the TrainTicket sources and manifests at the pinned commit.
 | Istio default on every callee | correct for the input, but see the deployment caveat | `virtual-services-fault.yaml` routes only `ts-voucher-service`, which no collected edge calls. `trainticket-gateway.yaml` binds the ingress gateway only and is skipped (it does not apply to mesh traffic). No manifest sets `retries`, `timeout` or `outlierDetection`. |
 | A3 on 34 POST routes | true positive in form, low risk in practice | POSTs do get up to 3 tries under the Istio default. But the default retries only on `connect-failure` and `refused-stream`, both before the upstream processes the request, and on `unavailable` and `cancelled`, gRPC statuses a REST call does not return. A duplicate side effect is therefore unlikely. A3 does not look at `retryOn` yet (comment on #24). |
 | A1 ×3 per callee | correct | 1 (gateway) × 3 (Istio) per route. |
-| A1 ×6 on `ts-auth-service` | overstated | Two routes (`auth`, `auth-user`) go to it. A request matches only one route, so the bound is ×3 (#48). The two A3 findings on these routes have the same location and cannot be told apart in the report (#48). |
+| A1 on `ts-auth-service` | correct since #48 | Two routes (`auth`, `auth-user`) go to it. A request takes only the first matching route (oracle), so the routes are alternatives and A1 reports ×3, "max over 2 alternatives of routes of ts-gateway-service" (ADR 0012). Before #48 it summed them to ×6. The two A3 findings are now located `ts-gateway-service→ts-auth-service (/api/v1/auth/**)` and `(/api/v1/users/**)`. |
 | A2a / A2b `INFO` | correct to stay silent | No deadline is configured anywhere; the timeouts are known to be absent (#38). |
 | C1 none | correct | No Resilience4j, Spring Retry, Feign, Hystrix or other listed mechanism in the poms or the code. |
 
@@ -87,5 +87,5 @@ Checked against the TrainTicket sources and manifests at the pinned commit.
 ## Takeaways
 
 - The Istio collector works end to end on real manifests. It skips gateway-bound VirtualServices, notes namespace-less short hosts and routes no edge calls, and applies the sourced mesh default everywhere else.
-- The run found a real collector bug (placeholders in route URIs, #46), now fixed, and an A1 modelling flaw with alternative routes (#48).
+- The run found a real collector bug (placeholders in route URIs, #46), now fixed, and an A1 modelling flaw with alternative routes (#48), now fixed by ADR 0012.
 - The largest risk on a real repository is not the math but the input: several deployment variants in one repository (#49), and library versions other than the ones the KB was checked against (#51).

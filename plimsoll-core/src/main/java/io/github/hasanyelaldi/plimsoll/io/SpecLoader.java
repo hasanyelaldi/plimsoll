@@ -37,7 +37,8 @@ public final class SpecLoader {
 
     private static final Set<String> TOP_KEYS = Set.of("services", "edges");
     private static final Set<String> SERVICE_KEYS = Set.of("entry", "deadline");
-    private static final Set<String> EDGE_KEYS = Set.of("from", "to", "operation", "idempotent", "fanout", "layers");
+    private static final Set<String> EDGE_KEYS = Set.of("from", "to", "operation", "idempotent", "fanout", "layers",
+            "choice");
     private static final Set<String> LAYER_KEYS = Set.of(
             "kind", "maxAttempts", "attempts", "totalAttempts", "perTryTimeout", "backoff", "multiplier",
             "maxBackoff", "jitter", "retryOn", "overallTimeout");
@@ -120,7 +121,9 @@ public final class SpecLoader {
                 layers.add(layer(map(n, "layer")));
             }
         }
-        return new Edge(from, to, op == null ? null : string(op, "operation"), booleanVal(m, "idempotent"), fanout, layers);
+        Entry choice = m.entries().get("choice");
+        return new Edge(from, to, op == null ? null : string(op, "operation"), booleanVal(m, "idempotent"), fanout,
+                layers, choice == null ? null : Val.explicit(string(choice, "choice"), at(choice.keyLine())));
     }
 
     private Layer layer(MapNode m) {

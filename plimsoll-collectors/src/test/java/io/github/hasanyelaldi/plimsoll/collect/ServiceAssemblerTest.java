@@ -107,7 +107,8 @@ class ServiceAssemblerTest {
         ServiceAssembler.Result r = ServiceAssembler.assemble(edges, List.of(gateway, customers), List.of());
         AnalysisResult a = Analyzer.analyze(r.graph(), AnalysisOptions.defaults());
         Finding f = findings(a, "PLM-A2b").stream()
-                .filter(x -> x.location().equals("api-gateway→customers-service") && x.severity() == Severity.WARN)
+                .filter(x -> x.location().equals("api-gateway→customers-service (GET /owners/{id})")
+                        && x.severity() == Severity.WARN)
                 .findFirst().orElseThrow();
         assertThat(f.detail()).isEqualTo("callee deadline 2 s > per-try 800 ms");
         assertThat(f.values()).anySatisfy(v -> {

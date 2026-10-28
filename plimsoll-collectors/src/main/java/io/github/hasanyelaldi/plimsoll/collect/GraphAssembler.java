@@ -103,7 +103,7 @@ public final class GraphAssembler {
     private static Edge withLayer(Edge e, Layer inner) {
         List<Layer> layers = new ArrayList<>(e.layers());
         layers.add(inner);
-        return new Edge(e.from(), e.to(), e.operation(), e.idempotent(), e.fanout(), layers);
+        return new Edge(e.from(), e.to(), e.operation(), e.idempotent(), e.fanout(), layers, e.choice());
     }
 
     private static Layer merged(String to, List<Route> routes) {

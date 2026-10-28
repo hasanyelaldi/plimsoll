@@ -2,6 +2,7 @@ package io.github.hasanyelaldi.plimsoll.analysis;
 
 import io.github.hasanyelaldi.plimsoll.model.Edge;
 import io.github.hasanyelaldi.plimsoll.model.Layer;
+import io.github.hasanyelaldi.plimsoll.model.ServiceGraph;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -10,9 +11,13 @@ final class Attempts {
 
     private Attempts() {}
 
-    /** {@code gateway→orders layer 1 (resilience4j)}; layers are numbered from 1, outermost first. */
-    static String layerName(Edge edge, int index) {
-        return edge.location() + " layer " + (index + 1) + " (" + edge.layers().get(index).kind() + ")";
+    /**
+     * {@code gateway→orders layer 1 (resilience4j)}; layers are numbered from 1, outermost first.
+     *
+     * @param where the edge's location in its graph ({@link ServiceGraph#location})
+     */
+    static String layerName(String where, Edge edge, int index) {
+        return where + " layer " + (index + 1) + " (" + edge.layers().get(index).kind() + ")";
     }
 
     static boolean known(Layer layer) {
@@ -28,11 +33,11 @@ final class Attempts {
     }
 
     /** Names of totalAttempts values on this edge that are UNKNOWN. */
-    static List<String> unknownAttempts(Edge edge) {
+    static List<String> unknownAttempts(String where, Edge edge) {
         List<String> names = new ArrayList<>();
         for (int i = 0; i < edge.layers().size(); i++) {
             if (!known(edge.layers().get(i))) {
-                names.add(layerName(edge, i) + " totalAttempts");
+                names.add(layerName(where, edge, i) + " totalAttempts");
             }
         }
         return names;

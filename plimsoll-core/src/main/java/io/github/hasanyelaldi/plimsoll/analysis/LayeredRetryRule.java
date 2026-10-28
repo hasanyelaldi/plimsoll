@@ -36,7 +36,7 @@ final class LayeredRetryRule {
     static List<Finding> evaluate(ServiceGraph graph) {
         List<Finding> findings = new ArrayList<>();
         for (Edge edge : graph.edges()) {
-            evaluateEdge(edge, findings);
+            evaluateEdge(edge, graph.location(edge), findings);
         }
         evaluatePaths(graph, findings);
         return findings;
@@ -44,7 +44,7 @@ final class LayeredRetryRule {
 
     // ---- one edge, several layers -------------------------------------------------
 
-    private static void evaluateEdge(Edge edge, List<Finding> out) {
+    private static void evaluateEdge(Edge edge, String where, List<Finding> out) {
         List<String> retrying = new ArrayList<>();
         long product = 1;
         for (Layer layer : edge.layers()) {
@@ -57,10 +57,10 @@ final class LayeredRetryRule {
         if (retrying.size() < 2) {
             return;
         }
-        out.add(new Finding(ID, Severity.WARN, edge.location(),
+        out.add(new Finding(ID, Severity.WARN, where,
                 "retries in " + retrying.size() + " layers of one edge (" + String.join(", ", retrying)
                         + "), ×" + product + " per call",
-                attemptValues(edge), Attempts.unknownAttempts(edge)));
+                attemptValues(where, edge), Attempts.unknownAttempts(where, edge)));
     }
 
     // ---- one path, several edges ----------------------------------------------------
@@ -82,7 +82,7 @@ final class LayeredRetryRule {
             boolean inside = stretches.stream()
                     .anyMatch(other -> other.size() > stretch.size() && Collections.indexOfSubList(other, stretch) >= 0);
             if (!inside) {
-                Finding f = pathFinding(stretch, graph.edges());
+                Finding f = pathFinding(stretch, graph);
                 byLocation.putIfAbsent(f.location(), f);
             }
         }
@@ -115,7 +115,8 @@ final class LayeredRetryRule {
         }
     }
 
-    private static Finding pathFinding(List<Integer> stretch, List<Edge> edges) {
+    private static Finding pathFinding(List<Integer> stretch, ServiceGraph graph) {
+        List<Edge> edges = graph.edges();
         StringBuilder location = new StringBuilder(edges.get(stretch.get(0)).from());
         List<UsedValue> values = new ArrayList<>();
         List<String> unknowns = new ArrayList<>();
@@ -123,8 +124,8 @@ final class LayeredRetryRule {
         for (int i : stretch) {
             Edge e = edges.get(i);
             location.append('→').append(e.to());
-            values.addAll(attemptValues(e));
-            unknowns.addAll(Attempts.unknownAttempts(e));
+            values.addAll(attemptValues(graph.location(e), e));
+            unknowns.addAll(Attempts.unknownAttempts(graph.location(e), e));
             if (Attempts.edgeRetries(e)) {
                 retrying++;
             }
@@ -133,10 +134,10 @@ final class LayeredRetryRule {
                 "retries on " + retrying + " edges of one path", values, unknowns);
     }
 
-    private static List<UsedValue> attemptValues(Edge edge) {
+    private static List<UsedValue> attemptValues(String where, Edge edge) {
         List<UsedValue> values = new ArrayList<>();
         for (int i = 0; i < edge.layers().size(); i++) {
-            values.add(UsedValue.of(Attempts.layerName(edge, i) + " totalAttempts", edge.layers().get(i).retry().totalAttempts()));
+            values.add(UsedValue.of(Attempts.layerName(where, edge, i) + " totalAttempts", edge.layers().get(i).retry().totalAttempts()));
         }
         return values;
     }
