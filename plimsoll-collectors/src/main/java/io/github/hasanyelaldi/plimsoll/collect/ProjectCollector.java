@@ -2,6 +2,7 @@ package io.github.hasanyelaldi.plimsoll.collect;
 
 import io.github.hasanyelaldi.plimsoll.collect.detect.Detector;
 import io.github.hasanyelaldi.plimsoll.collect.gateway.GatewayCollector;
+import io.github.hasanyelaldi.plimsoll.collect.http.ClientCallScanner;
 import io.github.hasanyelaldi.plimsoll.collect.http.HttpClientCollector;
 import io.github.hasanyelaldi.plimsoll.collect.http.HttpClientCollector.EdgeKey;
 import io.github.hasanyelaldi.plimsoll.collect.istio.IstioCollector;
@@ -49,7 +50,9 @@ import java.util.TreeSet;
  *       two modules with one name, are invalid input.
  *   <li>Every module's request mappings are scanned, so that gateway routes reach the operations of their callees.
  *       A module with a hint gets the Resilience4j and HTTP client collectors; a module that configures gateway
- *       routes or default filters gets the Spring Cloud Gateway collector.
+ *       routes or default filters gets the Spring Cloud Gateway collector. Every module's code is also searched
+ *       for load-balanced HTTP requests to the other services ({@link HttpClientCollector#discover}); the hint wins
+ *       for the methods it names.
  *   <li>An <b>Istio manifest</b> is a {@code .yaml} / {@code .yml} file outside the modules' {@code src} directories
  *       that mentions {@code networking.istio.io/}. Other YAML (Helm templates, Compose files) is not parsed. Without
  *       such a file the graph has no mesh.
@@ -58,8 +61,8 @@ import java.util.TreeSet;
  * <p>Every module is also searched for mechanisms no collector models ({@link Detector}); they become PLM-C1. Its
  * configuration that was not read (profiles, imports, other config files) is listed in {@link Result#unreadSources()}.
  * {@link Result#coverage()} also says, per service, which files were read and, per edge, which layer kinds were
- * searched for: Resilience4j and the HTTP client on edges from an edges hint, Spring Cloud Gateway on gateway
- * routes, and Istio on every edge when the directory has Istio manifests.
+ * searched for: Resilience4j and the HTTP client on edges from an edges hint, the HTTP client on edges found in
+ * code, Spring Cloud Gateway on gateway routes, and Istio on every edge when the directory has Istio manifests.
  *
  * <p>File names in evidence and notes are relative to the directory; a module's notes start with its service name.
  * Hidden directories, {@code target}, {@code build} and {@code node_modules} are skipped. Modules and manifests
@@ -163,6 +166,13 @@ public final class ProjectCollector {
                 gateway.edges().forEach(e -> searched.add(List.of("spring-cloud-gateway")));
                 gateway.notes().forEach(n -> notes.add(m.name() + ": " + n));
             }
+            HttpClientCollector.Discovered found = HttpClientCollector.discover(m.name(),
+                    ClientCallScanner.scan(root, m.root().resolve("src/main/java")), modules.keySet(), m.hint(),
+                    m.props(), kb);
+            edges.addAll(found.edges());
+            found.edges().forEach(e -> searched.add(List.of("http-client")));
+            httpLayers.putAll(found.http().layers());
+            found.http().notes().forEach(n -> notes.add(m.name() + ": " + n));
         }
 
         IstioCollector.Result istio = null;
