@@ -9,6 +9,7 @@ import io.github.hasanyelaldi.plimsoll.collect.spring.SpringProperties;
 import io.github.hasanyelaldi.plimsoll.collect.spring.SpringProperties.Property;
 import io.github.hasanyelaldi.plimsoll.collect.spring.RequestMappingScanner.Mapping;
 import io.github.hasanyelaldi.plimsoll.io.InvalidSpecException;
+import io.github.hasanyelaldi.plimsoll.model.Durations;
 import io.github.hasanyelaldi.plimsoll.model.Edge;
 import io.github.hasanyelaldi.plimsoll.model.Layer;
 import io.github.hasanyelaldi.plimsoll.model.RetryPolicy;
@@ -40,8 +41,10 @@ import java.util.regex.Pattern;
  *
  * <p>Retry counts retries only: {@code totalAttempts = retries + 1}. Its {@code methods}, {@code statuses},
  * {@code series} and {@code exceptions} go into {@code retryOn} as {@code method POST}, {@code status ...},
- * {@code series ...} and exception class names. The per-try timeout is the gateway HTTP client's {@code response-timeout}; the Retry {@code timeout} bounds the
- * whole retry sequence, so it is the layer's overall timeout.
+ * {@code series ...} and exception class names. The per-try timeout is the gateway HTTP client's response timeout,
+ * global or per route, unlimited when neither is set (ADR 0011); a try that hits it fails with the gateway's
+ * {@code TimeoutException}, which Retry repeats by default. The Retry {@code timeout} bounds the whole retry
+ * sequence, so it is the layer's overall timeout.
  *
  * <p>When the callee's request mappings are given, the route's operations are the mappings its {@code Path}
  * predicates reach after {@code StripPrefix} (and its {@code Method} predicate, if any, allows). A Retry filter then
@@ -64,6 +67,7 @@ public final class GatewayCollector {
     private static final String[] PREFIX = {"spring", "cloud", "gateway", "server", "webflux"};
     private static final String[] LEGACY_PREFIX = {"spring", "cloud", "gateway"};
     private static final String LB = "lb://";
+    private static final String GATEWAY_TIMEOUT = "org.springframework.cloud.gateway.support.TimeoutException";
     private static final Pattern PLACEHOLDER = Pattern.compile("\\$\\{([^}:]*)(?::([^}]*))?}");
     private static final Set<String> PATH_REWRITES = Set.of("RewritePath", "PrefixPath", "SetPath");
 
@@ -531,6 +535,14 @@ public final class GatewayCollector {
     // ---- Retry -----------------------------------------------------------
 
     private Layer retryLayer(Filter f, Val<Duration> perTry) {
+        Property exceptions = f.args().get("exceptions");
+        if (exceptions != null && !exceptions.isPlaceholder() && perTry.isKnown()
+                && !Durations.isUnlimited(perTry.value())
+                && exceptions.values().stream().noneMatch(e -> e.strip().equals(GATEWAY_TIMEOUT))) {
+            notes.add(exceptions.evidence() + ": Retry (" + f.where() + ") exceptions leave out " + GATEWAY_TIMEOUT
+                    + ", so a try that hits the response timeout (" + perTry.evidence() + ") ends the request "
+                    + "without a retry; the per-try budget is an upper bound");
+        }
         String filter = "Retry (" + f.where() + ", " + f.evidence() + ")";
         for (String arg : f.args().keySet()) {
             if (!RETRY_ARGS.contains(arg)) {
@@ -637,21 +649,56 @@ public final class GatewayCollector {
         return kb.defaultOr(KB, "retry.methods", v -> Set.copyOf(split(v)), "methods not set");
     }
 
-    /** The gateway HTTP client's response timeout, which bounds each try. */
+    /**
+     * The gateway HTTP client's response timeout, which bounds each try, as {@code NettyRoutingFilter} picks it
+     * ({@code GatewayTimeoutOracleTest}): the route's {@code metadata.response-timeout} in milliseconds, where a
+     * negative value means none and a value that is not a number is ignored; else
+     * {@code httpclient.response-timeout}; else none (ADR 0011). A connect timeout bounds only connection setup and
+     * is noted, not modelled.
+     */
     private Val<Duration> responseTimeout(String id, String[] route) {
+        String name = String.join(".", path(prefix, "httpclient", "response-timeout"));
+        for (String connect : List.of(String.join(".", path(prefix, "httpclient", "connect-timeout")),
+                "metadata.connect-timeout of route " + id)) {
+            Optional<Property> c = connect.startsWith("metadata")
+                    ? props.get(path(route, "metadata", "connect-timeout"))
+                    : props.get(path(prefix, "httpclient", "connect-timeout"));
+            c.ifPresent(p -> notes.add(p.evidence() + ": " + connect + " bounds connection setup only, not a "
+                    + "try; not modelled"));
+        }
         Optional<Property> perRoute = props.get(path(route, "metadata", "response-timeout"));
         if (perRoute.isPresent()) {
-            notes.add(perRoute.get().evidence() + ": per-route response-timeout of " + id + " is not modelled");
-            return Val.unknown("per-route response-timeout of " + id + " is not modelled ("
-                    + perRoute.get().evidence() + ")");
+            Property p = perRoute.get();
+            if (p.isPlaceholder()) {
+                return placeholder(p);
+            }
+            Optional<Long> millis = millis(p);
+            if (millis.isPresent() && millis.get() < 0) {
+                return Val.explicit(Durations.UNLIMITED, p.evidence() + " (metadata.response-timeout of route " + id
+                        + " is " + millis.get() + "; a negative value switches the response timeout off)");
+            }
+            if (millis.isPresent()) {
+                return Val.explicit(Duration.ofMillis(millis.get()), p.evidence()
+                        + " (metadata.response-timeout of route " + id + ", in milliseconds)");
+            }
+            notes.add(p.evidence() + ": metadata.response-timeout of route " + id + " is not a number of "
+                    + "milliseconds (" + p.text() + "); the gateway ignores it and uses " + name);
         }
-        String name = String.join(".", path(prefix, "httpclient", "response-timeout"));
         Optional<Property> global = props.get(path(prefix, "httpclient", "response-timeout"));
-        if (global.isEmpty()) {
-            return Val.unknown(name + " not set; no verified " + KB + " default for it");
+        if (global.isPresent()) {
+            return global.get().isPlaceholder() ? placeholder(global.get())
+                    : Val.explicit(duration(global.get()), global.get().evidence() + " (" + name + ")");
         }
-        return global.get().isPlaceholder() ? placeholder(global.get())
-                : Val.explicit(duration(global.get()), global.get().evidence() + " (" + name + ")");
+        return kb.defaultOr(KB, "httpclient.response-timeout", GatewayCollector::kbTimeout, name + " not set");
+    }
+
+    /** A metadata value as {@code NettyRoutingFilter#getLong} reads it, or empty when it is not a number. */
+    private static Optional<Long> millis(Property p) {
+        try {
+            return p.text() == null ? Optional.empty() : Optional.of(Long.parseLong(p.text().strip()));
+        } catch (NumberFormatException e) {
+            return Optional.empty();
+        }
     }
 
     // ---- values ----------------------------------------------------------
@@ -743,6 +790,10 @@ public final class GatewayCollector {
     private static Duration duration(Property p) {
         return SpringDurations.parse(scalar(p)).filter(d -> !d.isNegative())
                 .orElseThrow(() -> invalid(p, "a duration such as 100ms"));
+    }
+
+    private static Duration kbTimeout(String text) {
+        return Durations.parseTimeout(text).orElseGet(() -> kbDuration(text));
     }
 
     private static Duration kbDuration(String text) {
