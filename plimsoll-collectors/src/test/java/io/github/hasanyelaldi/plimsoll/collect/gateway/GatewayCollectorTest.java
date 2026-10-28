@@ -136,6 +136,16 @@ class GatewayCollectorTest {
     }
 
     @Test
+    void routesOfOneGatewayAreAlternativesOfOneChoice() {
+        GatewayCollector.Result r = GatewayCollector.collect(PETCLINIC);
+        assertThat(r.edges()).allSatisfy(e -> {
+            assertThat(e.choice().value()).isEqualTo("routes of api-gateway");
+            assertThat(e.choice().evidence()).startsWith("src/main/resources/application.yml:")
+                    .endsWith(": a request takes the first route whose predicates match (ADR 0012)");
+        });
+    }
+
+    @Test
     void petclinicBreakersAreNotedWithTheirVerifiedOrder() {
         GatewayCollector.Result r = GatewayCollector.collect(PETCLINIC);
         assertThat(r.notes())

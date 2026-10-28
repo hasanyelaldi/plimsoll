@@ -55,6 +55,9 @@ import java.util.regex.Pattern;
  * other than literal segments with an optional trailing {@code /**} leave the operations, and so idempotency,
  * UNKNOWN. An {@code operations} entry of the gateway's {@code edges-hint.yaml} overrides an operation's idempotency.
  *
+ * <p>The routes of one gateway are alternatives: a request takes the first route whose predicates match, so every
+ * edge carries the choice {@code routes of <gateway>} (ADR 0012, checked by {@code GatewayRetryOracleTest}).
+ *
  * <p>CircuitBreaker filters are noted, not modelled. Filters run in the order they are listed, default-filters first,
  * so a CircuitBreaker listed before Retry wraps all tries and one listed after it wraps each try. Either way a
  * TimeLimiter timeout ends the request after that try: the breaker turns it into a 504, which Retry does not repeat.
@@ -330,7 +333,9 @@ public final class GatewayCollector {
         List<String> patterns = patterns(route);
         String operation = patterns.isEmpty() ? "route " + id : String.join(",", patterns);
         Val<Integer> fanout = Val.explicit(1, "route " + id + " (" + evidenceOf(route) + ") forwards each request it matches once");
-        return new Edge(service, to, operation, idempotent, fanout, layers);
+        Val<String> choice = Val.explicit("routes of " + service, evidenceOf(path(prefix, "routes"))
+                + ": a request takes the first route whose predicates match (ADR 0012)");
+        return new Edge(service, to, operation, idempotent, fanout, layers, choice);
     }
 
     /** The callee's mappings that the route reaches, or UNKNOWN saying why they cannot be told. */
