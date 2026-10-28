@@ -25,27 +25,27 @@ final class BackoffHygieneRule {
         for (Edge edge : graph.edges()) {
             for (int i = 0; i < edge.layers().size(); i++) {
                 if (Attempts.retries(edge.layers().get(i))) {
-                    evaluateLayer(edge, i, findings);
+                    evaluateLayer(edge, graph.location(edge), i, findings);
                 }
             }
         }
         return findings;
     }
 
-    private static void evaluateLayer(Edge edge, int index, List<Finding> out) {
+    private static void evaluateLayer(Edge edge, String where, int index, List<Finding> out) {
         Layer layer = edge.layers().get(index);
-        String name = Attempts.layerName(edge, index);
+        String name = Attempts.layerName(where, edge, index);
         String prefix = Attempts.layerPrefix(edge, index);
         UsedValue attempts = UsedValue.of(name + " totalAttempts", layer.retry().totalAttempts());
 
         var backoff = layer.retry().initialBackoff();
         if (backoff.isKnown() && backoff.value().isZero()) {
-            out.add(new Finding(ID, Severity.WARN, edge.location(), prefix + "zero backoff",
+            out.add(new Finding(ID, Severity.WARN, where, prefix + "zero backoff",
                     List.of(attempts, UsedValue.of(name + " backoff", backoff, Durations::format)), List.of()));
         }
         var jitter = layer.retry().jitter();
         if (jitter.isKnown() && !jitter.value()) {
-            out.add(new Finding(ID, Severity.INFO, edge.location(), prefix + "no jitter",
+            out.add(new Finding(ID, Severity.INFO, where, prefix + "no jitter",
                     List.of(attempts, UsedValue.of(name + " jitter", jitter)), List.of()));
         }
     }

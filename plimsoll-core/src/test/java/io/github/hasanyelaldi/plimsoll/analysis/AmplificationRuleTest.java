@@ -254,8 +254,9 @@ class AmplificationRuleTest {
         assertThat(load(r, "auth")).isEqualTo(n(3));
         Finding f = findings(r, "PLM-A1").get(0);
         assertThat(f.detail()).isEqualTo("×3, limit 2; max over 2 alternatives of routes");
-        assertThat(f.values()).extracting(UsedValue::name).contains("gw→auth choice");
-        assertThat(f.values()).filteredOn(v -> v.name().equals("gw→auth choice")).first()
+        assertThat(f.values()).extracting(UsedValue::name).contains("gw→auth (/auth/**) choice",
+                "gw→auth (/users/**) choice");
+        assertThat(f.values()).filteredOn(v -> v.name().equals("gw→auth (/auth/**) choice")).first()
                 .satisfies(v -> assertThat(v.evidence()).isEqualTo("spec.yaml:5"));
     }
 
@@ -310,7 +311,7 @@ class AmplificationRuleTest {
         assertThat(findings(r, "PLM-A1")).singleElement().satisfies(f -> {
             assertThat(f.severity()).isEqualTo(Severity.INFO);
             assertThat(f.detail()).startsWith("at least ×3, limit 10; max over 2 alternatives of routes");
-            assertThat(f.unknowns()).containsExactly("gw→a layer 1 (generic) totalAttempts");
+            assertThat(f.unknowns()).containsExactly("gw→a (other) layer 1 (generic) totalAttempts");
         });
     }
 }

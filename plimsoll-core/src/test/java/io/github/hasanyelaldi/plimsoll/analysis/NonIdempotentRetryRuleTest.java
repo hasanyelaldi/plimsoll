@@ -67,4 +67,19 @@ class NonIdempotentRetryRuleTest {
         assertThat(f.get(0).detail()).isEqualTo("non-idempotent call retried, at least 2 tries");
         assertThat(f.get(0).unknowns()).containsExactly("a→b layer 1 (generic) totalAttempts");
     }
+
+    @Test
+    void edgesThatShareCallerAndCalleeAreLocatedWithTheirOperation() {
+        List<Finding> f = findings(analyze("""
+                services: { gw: { entry: true }, auth: {}, other: {} }
+                edges:
+                  - { from: gw, to: auth, operation: POST /login, idempotent: false, layers: [ { kind: istio, attempts: 2 } ] }
+                  - { from: gw, to: auth, operation: POST /users, idempotent: false, layers: [ { kind: istio, attempts: 2 } ] }
+                  - { from: gw, to: other, operation: POST /x, idempotent: false, layers: [ { kind: istio, attempts: 2 } ] }
+                """), "PLM-A3");
+        assertThat(f).extracting(Finding::location)
+                .containsExactly("gw→auth (POST /login)", "gw→auth (POST /users)", "gw→other");
+        assertThat(f.get(0).values()).extracting(UsedValue::name)
+                .containsExactly("gw→auth (POST /login) idempotent", "gw→auth (POST /login) layer 1 (istio) totalAttempts");
+    }
 }

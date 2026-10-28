@@ -24,30 +24,30 @@ final class NonIdempotentRetryRule {
         List<Finding> findings = new ArrayList<>();
         for (Edge edge : graph.edges()) {
             if (edge.idempotent().isKnown() && !edge.idempotent().value()) {
-                evaluateEdge(edge, findings);
+                evaluateEdge(edge, graph.location(edge), findings);
             }
         }
         return findings;
     }
 
-    private static void evaluateEdge(Edge edge, List<Finding> out) {
+    private static void evaluateEdge(Edge edge, String where, List<Finding> out) {
         List<UsedValue> values = new ArrayList<>();
-        values.add(UsedValue.of(edge.location() + " idempotent", edge.idempotent()));
+        values.add(UsedValue.of(where + " idempotent", edge.idempotent()));
         long tries = 1;
         for (int i = 0; i < edge.layers().size(); i++) {
             Layer layer = edge.layers().get(i);
-            values.add(UsedValue.of(Attempts.layerName(edge, i) + " totalAttempts", layer.retry().totalAttempts()));
+            values.add(UsedValue.of(Attempts.layerName(where, edge, i) + " totalAttempts", layer.retry().totalAttempts()));
             if (Attempts.known(layer)) {
                 tries = Math.multiplyExact(tries, layer.retry().totalAttempts().value());
             }
         }
-        List<String> unknowns = Attempts.unknownAttempts(edge);
+        List<String> unknowns = Attempts.unknownAttempts(where, edge);
         if (Attempts.edgeRetries(edge)) {
-            out.add(new Finding(ID, Severity.ERROR, edge.location(),
+            out.add(new Finding(ID, Severity.ERROR, where,
                     "non-idempotent call retried, " + (unknowns.isEmpty() ? "" : "at least ") + tries + " tries",
                     values, unknowns));
         } else if (!unknowns.isEmpty()) {
-            out.add(Attempts.cannotEvaluate(ID, edge.location(), "", values, unknowns));
+            out.add(Attempts.cannotEvaluate(ID, where, "", values, unknowns));
         }
     }
 }

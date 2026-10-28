@@ -87,7 +87,7 @@ class GraphAssemblerTest {
         // getOwner 3 x 4 + syncLookup 1 x 4 + plain 4
         assertThat(load(r, "customers-service")).isEqualTo(BigInteger.valueOf(20));
         assertThat(r.findings()).filteredOn(f -> f.ruleId().equals("PLM-A5")
-                        && f.location().equals("api-gateway→customers-service"))
+                        && f.location().equals("api-gateway→customers-service (GET /owners/{id})"))
                 .extracting(Finding::severity, Finding::detail)
                 .containsExactly(org.assertj.core.groups.Tuple.tuple(Severity.WARN,
                         "retries in 2 layers of one edge (resilience4j ×3, istio ×4), ×12 per call"));
@@ -109,7 +109,7 @@ class GraphAssemblerTest {
         // getOwner 3 x 2 x 4 + syncLookup 1 x 4 + plain 1 x 4
         assertThat(load(a, "customers-service")).isEqualTo(BigInteger.valueOf(32));
         assertThat(a.findings()).filteredOn(f -> f.ruleId().equals("PLM-A5")
-                        && f.location().equals("api-gateway→customers-service"))
+                        && f.location().equals("api-gateway→customers-service (GET /owners/{id})"))
                 .extracting(Finding::detail)
                 .containsExactly("retries in 3 layers of one edge (resilience4j ×3, http-client ×2, istio ×4), ×24 per call");
     }

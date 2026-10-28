@@ -70,7 +70,7 @@ final class AmplificationRule {
         cycles.forEach(cyclic::addAll);
         Set<String> unbounded = walk(cyclic, all, false, v -> true);
         for (Set<String> cycle : cycles) {
-            findings.add(unboundedFinding(cycle, all, edges, entries, unbounded));
+            findings.add(unboundedFinding(cycle, all, graph, entries, unbounded));
         }
 
         // Exact loads for everything else, one pass per entry.
@@ -85,7 +85,7 @@ final class AmplificationRule {
             if (unbounded.contains(entry)) {
                 continue;
             }
-            Run run = run(entry, all, edges, unbounded);
+            Run run = run(entry, all, graph, unbounded);
             for (var e : run.load().entrySet()) {
                 Run current = best.get(e.getKey());
                 if (current == null || e.getValue().compareTo(current.load().get(e.getKey())) > 0) {
@@ -105,9 +105,9 @@ final class AmplificationRule {
             BigInteger value = run.load().get(v);
             services.add(new ServiceAmplification(v, run.entry(), value, false, unknown));
             if (value.compareTo(BigInteger.valueOf(options.maxAmplification())) > 0) {
-                findings.add(loadFinding(v, run, edges, options, Severity.ERROR));
+                findings.add(loadFinding(v, run, graph, options, Severity.ERROR));
             } else if (!unknown.isEmpty()) {
-                findings.add(loadFinding(v, run, edges, options, Severity.INFO));
+                findings.add(loadFinding(v, run, graph, options, Severity.INFO));
             }
         }
         return new Outcome(services, findings);
@@ -178,7 +178,8 @@ final class AmplificationRule {
 
     // ---- computation --------------------------------------------------------
 
-    private static Run run(String entry, Graph<String, Integer> all, List<Edge> edges, Set<String> unbounded) {
+    private static Run run(String entry, Graph<String, Integer> all, ServiceGraph graph, Set<String> unbounded) {
+        List<Edge> edges = graph.edges();
         Set<String> sub = walk(Set.of(entry), all, false, v -> !unbounded.contains(v));
         Graph<String, Integer> dag = new DirectedPseudograph<>(Integer.class);
         sub.forEach(dag::addVertex);
@@ -199,9 +200,9 @@ final class AmplificationRule {
                 Edge e = edges.get(i);
                 String v = dag.getEdgeTarget(i);
                 unknowns.get(v).addAll(unknowns.get(u));
-                unknowns.get(v).addAll(Attempts.unknownAttempts(e));
+                unknowns.get(v).addAll(Attempts.unknownAttempts(graph.location(e), e));
                 if (!e.fanout().isKnown()) {
-                    unknowns.get(v).add(fanoutName(e));
+                    unknowns.get(v).add(fanoutName(graph, e));
                 }
             }
         }
@@ -290,13 +291,15 @@ final class AmplificationRule {
         return e.fanout().isKnown() ? BigInteger.valueOf(e.fanout().value()) : BigInteger.ONE;
     }
 
-    private static String fanoutName(Edge e) {
-        return e.location() + " fanout";
+    private static String fanoutName(ServiceGraph graph, Edge e) {
+        return graph.location(e) + " fanout";
     }
 
     // ---- findings -------------------------------------------------------------
 
-    private static Finding loadFinding(String v, Run run, List<Edge> edges, AnalysisOptions options, Severity severity) {
+    private static Finding loadFinding(String v, Run run, ServiceGraph graph, AnalysisOptions options,
+            Severity severity) {
+        List<Edge> edges = graph.edges();
         Set<String> ancestors = walk(Set.of(v), run.dag(), true, x -> true);
         Set<Integer> chosen = chosen(v, run, edges);
         Map<String, BigInteger> along = new TreeMap<>();
@@ -333,7 +336,7 @@ final class AmplificationRule {
         List<UsedValue> values = new ArrayList<>();
         for (int i : new TreeSet<>(run.dag().edgeSet())) {
             if (ancestors.contains(run.dag().getEdgeSource(i)) && ancestors.contains(run.dag().getEdgeTarget(i))) {
-                values.addAll(edgeValues(edges.get(i)));
+                values.addAll(edgeValues(graph, edges.get(i)));
             }
         }
         return new Finding(ID, severity, v, detail.toString(), values, List.copyOf(run.unknowns().get(v)));
@@ -361,7 +364,9 @@ final class AmplificationRule {
     }
 
     private static Finding unboundedFinding(
-            Set<String> cycle, Graph<String, Integer> all, List<Edge> edges, List<String> entries, Set<String> unbounded) {
+            Set<String> cycle, Graph<String, Integer> all, ServiceGraph graph, List<String> entries,
+            Set<String> unbounded) {
+        List<Edge> edges = graph.edges();
         List<String> reachedFrom = entries.stream()
                 .filter(en -> walk(Set.of(en), all, false, v -> true).containsAll(cycle))
                 .toList();
@@ -373,7 +378,7 @@ final class AmplificationRule {
         List<UsedValue> values = new ArrayList<>();
         for (int i : new TreeSet<>(all.edgeSet())) {
             if (cycle.contains(all.getEdgeSource(i)) && cycle.contains(all.getEdgeTarget(i))) {
-                values.addAll(edgeValues(edges.get(i)));
+                values.addAll(edgeValues(graph, edges.get(i)));
             }
         }
         List<String> unknowns = new ArrayList<>();
@@ -385,16 +390,17 @@ final class AmplificationRule {
         return new Finding(ID, Severity.ERROR, String.join(", ", cycle), detail, values, unknowns);
     }
 
-    private static List<UsedValue> edgeValues(Edge e) {
+    private static List<UsedValue> edgeValues(ServiceGraph graph, Edge e) {
+        String where = graph.location(e);
         List<UsedValue> values = new ArrayList<>();
         for (int i = 0; i < e.layers().size(); i++) {
-            values.add(UsedValue.of(Attempts.layerName(e, i) + " totalAttempts", e.layers().get(i).retry().totalAttempts()));
+            values.add(UsedValue.of(Attempts.layerName(where, e, i) + " totalAttempts", e.layers().get(i).retry().totalAttempts()));
         }
         if (!e.fanout().isKnown() || e.fanout().value() > 1) {
-            values.add(UsedValue.of(fanoutName(e), e.fanout()));
+            values.add(UsedValue.of(fanoutName(graph, e), e.fanout()));
         }
         if (e.choice() != null) {
-            values.add(UsedValue.of(e.location() + " choice", e.choice()));
+            values.add(UsedValue.of(where + " choice", e.choice()));
         }
         return values;
     }

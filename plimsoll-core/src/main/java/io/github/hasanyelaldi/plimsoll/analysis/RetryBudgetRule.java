@@ -35,16 +35,16 @@ final class RetryBudgetRule {
         for (Edge edge : graph.edges()) {
             Service caller = graph.services().get(edge.from());
             for (int i = 0; i < edge.layers().size(); i++) {
-                evaluateLayer(edge, i, caller, findings);
+                evaluateLayer(edge, graph.location(edge), i, caller, findings);
             }
         }
         return findings;
     }
 
-    private static void evaluateLayer(Edge edge, int index, Service caller, List<Finding> out) {
+    private static void evaluateLayer(Edge edge, String where, int index, Service caller, List<Finding> out) {
         Layer layer = edge.layers().get(index);
         RetryPolicy p = layer.retry();
-        String name = Attempts.layerName(edge, index);
+        String name = Attempts.layerName(where, edge, index);
         String prefix = Attempts.layerPrefix(edge, index);
 
         List<UsedValue> values = new ArrayList<>();
@@ -63,14 +63,14 @@ final class RetryBudgetRule {
         require(p.perTryTimeout(), name + " perTryTimeout", missing);
         require(caller.deadline(), caller.name() + " deadline", missing);
         if (!missing.isEmpty()) {
-            out.add(Attempts.cannotEvaluate(ID, edge.location(), prefix, values, missing));
+            out.add(Attempts.cannotEvaluate(ID, where, prefix, values, missing));
             return;
         }
 
         int n = p.totalAttempts().value();
         String deadlineText = Durations.format(caller.deadline().value());
         if (Durations.isUnlimited(p.perTryTimeout().value())) {
-            out.add(new Finding(ID, Severity.WARN, edge.location(),
+            out.add(new Finding(ID, Severity.WARN, where,
                     prefix + "budget unlimited > deadline " + deadlineText + ", 0 of " + n
                             + " tries fit (no per-try timeout)",
                     values, List.of()));
@@ -113,12 +113,12 @@ final class RetryBudgetRule {
                 unknowns.add(name + " multiplier");
             }
             if (budget > deadline) {
-                out.add(new Finding(ID, Severity.WARN, edge.location(),
+                out.add(new Finding(ID, Severity.WARN, where,
                         prefix + "budget at least " + budgetText + " > deadline " + deadlineText
                                 + ", at most " + fit + " of " + n + " tries fit",
                         values, unknowns));
             } else {
-                out.add(new Finding(ID, Severity.INFO, edge.location(),
+                out.add(new Finding(ID, Severity.INFO, where,
                         prefix + "budget at least " + budgetText + " <= deadline " + deadlineText
                                 + "; " + (initialUnknown ? "backoff" : "multiplier") + " UNKNOWN, cannot confirm that "
                                 + n + " tries fit",
@@ -127,13 +127,13 @@ final class RetryBudgetRule {
         } else if (capUnknown) {
             if (budget > deadline) {
                 unknowns.add(name + " maxBackoff");
-                out.add(new Finding(ID, Severity.INFO, edge.location(),
+                out.add(new Finding(ID, Severity.INFO, where,
                         prefix + "budget at most " + budgetText + " > deadline " + deadlineText
                                 + " unless maxBackoff caps the backoff; maxBackoff UNKNOWN",
                         values, unknowns));
             }
         } else if (budget > deadline) {
-            out.add(new Finding(ID, Severity.WARN, edge.location(),
+            out.add(new Finding(ID, Severity.WARN, where,
                     prefix + "budget " + budgetText + " > deadline " + deadlineText
                             + ", " + fit + " of " + n + " tries fit",
                     values, unknowns));
