@@ -22,6 +22,6 @@ public enum ReportFormat {
         return render(result, specName, options, Collected.SPEC);
     }
 
-    /** @param collected coverage and notes of the graph; {@link Collected#NONE} for a spec */
+    /** @param collected coverage and notes of the graph; {@link Collected#SPEC} for a spec */
     public abstract String render(AnalysisResult result, String specName, AnalysisOptions options, Collected collected);
 }
