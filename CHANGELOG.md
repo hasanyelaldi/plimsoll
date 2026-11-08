@@ -4,7 +4,7 @@ All notable changes to Plimsoll are listed here. The format follows [Keep a Chan
 and versions follow [Semantic Versioning](https://semver.org/spec/v2.0.0.html). Before 1.0, a minor version may change
 the report format and the rules.
 
-## [0.1.0] - unreleased
+## [0.1.0] - 2026-11-08
 
 First release: static analysis of retry, timeout and amplification settings across a service graph, from a
 hand-written spec or from the configuration of a directory of services.
@@ -71,4 +71,4 @@ Library defaults are in `kb/defaults/`, one file per library, each entry with it
 - Java 21, Maven multi-module build, CI on every push and pull request (#1).
 - `release` profile for Maven Central through the Central Portal (#64).
 
-[0.1.0]: https://github.com/hasanyelaldi/plimsoll/milestone/1?closed=1
+[0.1.0]: https://github.com/hasanyelaldi/plimsoll/releases/tag/v0.1.0
