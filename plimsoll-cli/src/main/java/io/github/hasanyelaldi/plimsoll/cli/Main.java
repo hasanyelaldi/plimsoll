@@ -10,7 +10,7 @@ import picocli.CommandLine.Command;
 @Command(
         name = "plimsoll",
         mixinStandardHelpOptions = true,
-        version = "plimsoll 0.1.0",
+        version = "plimsoll 0.1.1-SNAPSHOT",
         description = "Finds where retry, timeout and circuit-breaker settings across a service graph go past safe limits.",
         subcommands = AnalyzeCommand.class)
 public final class Main {
