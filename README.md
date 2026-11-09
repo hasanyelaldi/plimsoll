@@ -1,6 +1,10 @@
+<img src="site/logo.svg" alt="" width="96" height="96">
+
 # Plimsoll
 
 > Every ship has a Plimsoll line. Your service graph should too.
+
+**Project page:** [hasanyelaldi.github.io/plimsoll](https://hasanyelaldi.github.io/plimsoll/)
 
 Plimsoll finds where retry, timeout and circuit-breaker settings across a service graph go past safe limits. It reads the real configuration (Java code, Spring YAML, Istio manifests), builds the call graph, and reports problems such as a ×27 retry storm three hops down or a retry budget that cannot fit in the caller's deadline.
 

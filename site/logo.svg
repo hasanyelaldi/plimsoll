@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+  <title>Plimsoll</title>
+  <style>
+    .ink { fill: #17242F } .ring { stroke: #17242F } .red { fill: #B0282C } .sea { fill: #2C6E73 }
+    @media (prefers-color-scheme: dark) {
+      .ink { fill: #E3E9E7 } .ring { stroke: #E3E9E7 } .red { fill: #E5484D } .sea { fill: #4E9A9C }
+    }
+  </style>
+  <!-- The load-line mark, with three rising columns inside it; the third goes past the line. -->
+  <clipPath id="inside"><circle cx="60" cy="60" r="30.5"/></clipPath>
+  <g clip-path="url(#inside)">
+    <rect class="sea" x="38" y="75" width="11" height="5"/>
+    <rect class="sea" x="52" y="66" width="11" height="14"/>
+    <rect class="red" x="66" y="20" width="11" height="60"/>
+    <rect class="ink" x="20" y="80" width="80" height="20"/>
+  </g>
+  <circle class="ring" cx="60" cy="60" r="35" fill="none" stroke-width="9"/>
+  <rect class="ink" x="6" y="55" width="108" height="10"/>
+  <rect class="red" x="66" y="12" width="11" height="43"/>
+</svg>

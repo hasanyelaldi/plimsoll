@@ -1,0 +1,221 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Plimsoll</title>
+  <meta name="description" content="Plimsoll finds where retry, timeout and circuit-breaker settings across a service graph go past safe limits, from real configuration.">
+  <link rel="icon" href="logo.svg" type="image/svg+xml">
+  <link rel="preload" href="fonts/big-shoulders.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="masthead">
+    <a class="brand" href="./">
+      <svg class="logo" viewBox="0 0 120 120" width="40" height="40" aria-hidden="true">
+        <clipPath id="logo-inside"><circle cx="60" cy="60" r="30.5"/></clipPath>
+        <g clip-path="url(#logo-inside)">
+          <rect class="sea" x="38" y="75" width="11" height="5"/>
+          <rect class="sea" x="52" y="66" width="11" height="14"/>
+          <rect class="red" x="66" y="20" width="11" height="60"/>
+          <rect class="ink" x="20" y="80" width="80" height="20"/>
+        </g>
+        <circle class="ring" cx="60" cy="60" r="35" fill="none" stroke-width="9"/>
+        <rect class="ink" x="6" y="55" width="108" height="10"/>
+        <rect class="red" x="66" y="12" width="11" height="43"/>
+      </svg>
+      <span>Plimsoll</span>
+    </a>
+    <nav aria-label="Page">
+      <a href="#rules">Rules</a>
+      <a href="#install">Install</a>
+      <a href="https://github.com/hasanyelaldi/plimsoll">GitHub</a>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero">
+      <h1>Every ship has a Plimsoll line.</h1>
+      <p class="tagline">Your service graph should too.</p>
+      <p class="lede">Plimsoll reads the retry, timeout and circuit-breaker settings of your services from real configuration (Java code, Spring YAML, Istio manifests), builds the call graph, and shows where they go past safe limits.</p>
+      <p class="actions">
+        <a class="button" href="#install">Install Plimsoll</a>
+        <a class="button quiet" href="https://github.com/hasanyelaldi/plimsoll">Read the source</a>
+      </p>
+    </section>
+
+    <section class="hull" aria-labelledby="hull-title">
+      <div class="hull-inner">
+        <h2 id="hull-title">Retries multiply</h2>
+        <p>Each service in this checkout flow retries three times. Looked at one at a time, every setting is reasonable. When the last service is down, the tries multiply along the chain, and one request at the entry becomes a flood at the bottom.</p>
+        <figure class="chart">
+          <svg viewBox="0 0 720 360" role="img" aria-labelledby="chart-title chart-desc">
+            <title id="chart-title">Requests per entry request in the checkout example</title>
+            <desc id="chart-desc">gateway calls orders, orders calls payments, payments calls ledger, and each hop retries three times. The columns show how many requests reach each service when every try fails, against the amplification limit.</desc>
+            <line class="keel" x1="36" y1="280" x2="700" y2="280"/>
+            <g class="bar" data-service="gateway" data-amp="1">
+              <rect class="water" x="150" y="272" width="84" height="8"/>
+              <text class="value" x="192" y="320">×1</text>
+              <text class="name" x="192" y="350">gateway</text>
+            </g>
+            <g class="bar" data-service="orders" data-amp="3">
+              <rect class="water" x="290" y="256" width="84" height="24"/>
+              <text class="value" x="332" y="320">×3</text>
+              <text class="name" x="332" y="350">orders</text>
+            </g>
+            <g class="bar" data-service="payments" data-amp="9">
+              <rect class="water" x="430" y="208" width="84" height="72"/>
+              <text class="value" x="472" y="320">×9</text>
+              <text class="name" x="472" y="350">payments</text>
+            </g>
+            <g class="bar over" data-service="ledger" data-amp="27">
+              <rect class="water" x="570" y="200" width="84" height="80"/>
+              <rect class="overload" x="570" y="64" width="84" height="136"/>
+              <text class="value" x="612" y="320">×27</text>
+              <text class="name" x="612" y="350">ledger</text>
+            </g>
+            <g class="limit" data-limit="10">
+              <circle cx="72" cy="200" r="24"/>
+              <rect x="36" y="197" width="664" height="6"/>
+              <text x="108" y="184">limit ×10</text>
+            </g>
+          </svg>
+          <figcaption>The columns are the A1 amplification of <code>examples/checkout.yaml</code>, as the report below prints it: an upper bound, with every try failing. A test keeps the chart and the report identical to the tool's output.</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="band" id="report">
+      <div class="text">
+        <h2>From configuration to evidence</h2>
+        <p>Every number in a report is computed by deterministic code. Every value it used says where it came from: <code>file:line</code> in your configuration, or the library documentation for a default. Reports are meant to be attached to architecture decision records.</p>
+      </div>
+      <figure class="log">
+        <figcaption><code>plimsoll analyze examples/checkout.yaml</code></figcaption>
+<pre class="report" id="checkout-report" tabindex="0">Plimsoll analysis of checkout.yaml
+
+Amplification per service (limit 10)
+  gateway   ×1
+  ledger    ×27
+  orders    ×3
+  payments  ×9
+
+Findings
+  ERROR  PLM-A1   ledger  ×27 (orders ×3, payments ×9), limit 10
+          gateway→orders layer 1 (resilience4j) totalAttempts = 3 [EXPLICIT: checkout.yaml:9 (maxAttempts)]
+          orders→payments layer 1 (istio) totalAttempts = 3 [EXPLICIT: checkout.yaml:11 (attempts 2 + 1)]
+          payments→ledger layer 1 (resilience4j) totalAttempts = 3 [EXPLICIT: checkout.yaml:13 (maxAttempts)]
+  ERROR  PLM-A3   orders→payments  non-idempotent call retried, 3 tries
+          orders→payments idempotent = false [EXPLICIT: checkout.yaml:10]
+          orders→payments layer 1 (istio) totalAttempts = 3 [EXPLICIT: checkout.yaml:11 (attempts 2 + 1)]
+  WARN   PLM-A2a  gateway→orders  budget 3.2 s &gt; deadline 3 s, 2 of 3 tries fit
+          gateway→orders layer 1 (resilience4j) totalAttempts = 3 [EXPLICIT: checkout.yaml:9 (maxAttempts)]
+          gateway→orders layer 1 (resilience4j) perTryTimeout = 1 s [EXPLICIT: checkout.yaml:9]
+          gateway→orders layer 1 (resilience4j) backoff = 100 ms [EXPLICIT: checkout.yaml:9]
+          gateway→orders layer 1 (resilience4j) multiplier = 1.0 [EXPLICIT: 'multiplier' absent (checkout.yaml:9), spec default 1.0 (fixed backoff)]
+          gateway→orders layer 1 (resilience4j) maxBackoff = UNKNOWN [UNKNOWN: 'maxBackoff' absent (checkout.yaml:9)]
+          gateway deadline = 3 s [EXPLICIT: checkout.yaml:3]
+  WARN   PLM-A2a  orders→payments  budget 2.45 s &gt; deadline 2 s, 2 of 3 tries fit
+          orders→payments layer 1 (istio) totalAttempts = 3 [EXPLICIT: checkout.yaml:11 (attempts 2 + 1)]
+          orders→payments layer 1 (istio) perTryTimeout = 800 ms [EXPLICIT: checkout.yaml:11]
+          orders→payments layer 1 (istio) backoff = 25 ms [EXPLICIT: checkout.yaml:11]
+          orders→payments layer 1 (istio) multiplier = 1.0 [EXPLICIT: 'multiplier' absent (checkout.yaml:11), spec default 1.0 (fixed backoff)]
+          orders→payments layer 1 (istio) maxBackoff = UNKNOWN [UNKNOWN: 'maxBackoff' absent (checkout.yaml:11)]
+          orders deadline = 2 s [EXPLICIT: checkout.yaml:4]
+  WARN   PLM-A2b  gateway→orders  callee deadline 2 s &gt; per-try 1 s
+          orders deadline = 2 s [EXPLICIT: checkout.yaml:4]
+          gateway→orders layer 1 (resilience4j) perTryTimeout = 1 s [EXPLICIT: checkout.yaml:9]
+          gateway→orders layer 1 (resilience4j) totalAttempts = 3 [EXPLICIT: checkout.yaml:9 (maxAttempts)]
+  WARN   PLM-A2b  orders→payments  callee deadline 2 s &gt; per-try 800 ms
+          payments deadline = 2 s [EXPLICIT: checkout.yaml:5]
+          orders→payments layer 1 (istio) perTryTimeout = 800 ms [EXPLICIT: checkout.yaml:11]
+          orders→payments layer 1 (istio) totalAttempts = 3 [EXPLICIT: checkout.yaml:11 (attempts 2 + 1)]
+  WARN   PLM-A2b  payments→ledger  callee deadline 500 ms &gt; per-try 300 ms
+          ledger deadline = 500 ms [EXPLICIT: checkout.yaml:6]
+          payments→ledger layer 1 (resilience4j) perTryTimeout = 300 ms [EXPLICIT: checkout.yaml:13]
+          payments→ledger layer 1 (resilience4j) totalAttempts = 3 [EXPLICIT: checkout.yaml:13 (maxAttempts)]
+  WARN   PLM-A4   payments→ledger  zero backoff
+          payments→ledger layer 1 (resilience4j) totalAttempts = 3 [EXPLICIT: checkout.yaml:13 (maxAttempts)]
+          payments→ledger layer 1 (resilience4j) backoff = 0 ms [EXPLICIT: checkout.yaml:13]
+  WARN   PLM-A5   gateway→orders→payments→ledger  retries on 3 edges of one path
+          gateway→orders layer 1 (resilience4j) totalAttempts = 3 [EXPLICIT: checkout.yaml:9 (maxAttempts)]
+          orders→payments layer 1 (istio) totalAttempts = 3 [EXPLICIT: checkout.yaml:11 (attempts 2 + 1)]
+          payments→ledger layer 1 (resilience4j) totalAttempts = 3 [EXPLICIT: checkout.yaml:13 (maxAttempts)]
+  INFO   PLM-A4   gateway→orders  no jitter
+          gateway→orders layer 1 (resilience4j) totalAttempts = 3 [EXPLICIT: checkout.yaml:9 (maxAttempts)]
+          gateway→orders layer 1 (resilience4j) jitter = false [EXPLICIT: checkout.yaml:9]
+  INFO   PLM-A4   payments→ledger  no jitter
+          payments→ledger layer 1 (resilience4j) totalAttempts = 3 [EXPLICIT: checkout.yaml:13 (maxAttempts)]
+          payments→ledger layer 1 (resilience4j) jitter = false [EXPLICIT: checkout.yaml:13]
+
+Coverage
+  Source: hand-written spec; every layer is taken as written, nothing was collected
+
+Summary: 2 error, 7 warn, 2 info
+</pre>
+      </figure>
+    </section>
+
+    <section class="band" id="rules">
+      <div class="text">
+        <h2>What it checks</h2>
+        <p>Seven rules, each finding listing the values it used and their source.</p>
+      </div>
+      <dl class="rules">
+        <div><dt><span class="id">A1</span> Amplification</dt><dd>Requests one entry request can cause at each service, if every try fails. Attempts multiply along a path and add up across paths; of alternative routes, the largest counts. A cycle is unbounded.</dd></div>
+        <div><dt><span class="id">A2a</span> Retry budget</dt><dd>All tries and backoffs of a call against the caller's deadline, and how many tries actually fit.</dd></div>
+        <div><dt><span class="id">A2b</span> Abandoned work</dt><dd>The callee may work longer than the caller waits for one try, so it keeps working after the caller gave up.</dd></div>
+        <div><dt><span class="id">A3</span> Non-idempotent retry</dt><dd>A call that is not idempotent, such as a <code>POST</code>, is retried.</dd></div>
+        <div><dt><span class="id">A4</span> Backoff hygiene</dt><dd>Retries with zero backoff, or without jitter.</dd></div>
+        <div><dt><span class="id">A5</span> Layered retries</dt><dd>One call retried by several layers, or one path with retries on several calls.</dd></div>
+        <div><dt><span class="id">C1</span> Not modelled</dt><dd>A retry, timeout or breaker mechanism found in the code that Plimsoll does not model yet, named with <code>file:line</code>.</dd></div>
+      </dl>
+    </section>
+
+    <section class="band pair" id="sources">
+      <div>
+        <h2>Read from real configuration</h2>
+        <p>Point it at a directory of services and it collects:</p>
+        <ul>
+          <li><strong>Resilience4j</strong> retries and time limiters, from <code>application.yml</code> and annotations</li>
+          <li><strong>Spring Cloud Gateway</strong> routes, <code>Retry</code> filters and response timeouts</li>
+          <li><strong>HTTP clients</strong>: WebClient, RestClient and RestTemplate calls through Spring Cloud LoadBalancer</li>
+          <li><strong>Istio</strong> <code>VirtualService</code> and <code>DestinationRule</code>, including Istio's implicit default retries</li>
+        </ul>
+        <p>Whatever it could not read is listed in the report's Coverage section.</p>
+      </div>
+      <div>
+        <h2>Checked against the real libraries</h2>
+        <p>Libraries count differently: Resilience4j's <code>maxAttempts</code> includes the first call, Istio's <code>attempts</code> does not. Plimsoll turns every layer into total attempts, and oracle tests run the real libraries to confirm each behaviour it relies on.</p>
+        <p>A default without a sourced entry in its knowledge base is reported as <code>UNKNOWN</code>, never guessed.</p>
+      </div>
+    </section>
+
+    <section class="band" id="install">
+      <div class="text">
+        <h2>Install</h2>
+        <p>Plimsoll needs Java 21. Download the jar from <a href="https://github.com/hasanyelaldi/plimsoll/releases/latest">the latest release</a> or from Maven Central, and point it at a spec file or a repository:</p>
+      </div>
+<pre class="code">curl -fLo plimsoll.jar https://repo1.maven.org/maven2/io/github/hasanyelaldi/plimsoll-cli/0.1.0/plimsoll-cli-0.1.0.jar
+java -jar plimsoll.jar analyze path/to/spec-or-repo</pre>
+      <p class="note">It exits with <code>1</code> when a finding reaches <code>--fail-on</code> (<code>ERROR</code> by default), so it can gate a build. Read the <a href="https://github.com/hasanyelaldi/plimsoll#known-limitations">known limitations</a> before you trust a report.</p>
+    </section>
+
+    <section class="band" id="testbeds">
+      <div class="text">
+        <h2>Tried on real systems</h2>
+        <p>Each run is pinned to a commit, and every finding is checked by hand: <a href="https://github.com/hasanyelaldi/plimsoll/blob/main/findings/petclinic.md">spring-petclinic-microservices</a> and <a href="https://github.com/hasanyelaldi/plimsoll/blob/main/findings/trainticket.md">TrainTicket</a>.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer">
+    <p>Plimsoll is open source under the Apache-2.0 license.</p>
+    <p class="links">
+      <a href="https://github.com/hasanyelaldi/plimsoll">Source</a>
+      <a href="https://github.com/hasanyelaldi/plimsoll/blob/main/CHANGELOG.md">Changelog</a>
+      <a href="https://github.com/hasanyelaldi/plimsoll/tree/main/docs/adr">Decision records</a>
+    </p>
+  </footer>
+</body>
+</html>
