@@ -145,6 +145,15 @@ class MainTest {
     }
 
     @Test
+    void versionIsTheProjectVersion() {
+        String expected = System.getProperty("plimsoll.expectedVersion");
+        assertThat(expected).as("plimsoll.expectedVersion, set by surefire from the POM").isNotBlank();
+        Result r = run("--version");
+        assertThat(r.exit()).isZero();
+        assertThat(r.out()).isEqualTo("plimsoll " + expected + "\n").doesNotContain("${");
+    }
+
+    @Test
     void maxAmpBelowOneIsInvalid() throws IOException {
         Result r = run("analyze", spec("clean.yaml", CLEAN), "--max-amp", "0");
         assertThat(r.exit()).isEqualTo(2);
