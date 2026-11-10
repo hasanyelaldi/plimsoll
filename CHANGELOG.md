@@ -6,6 +6,10 @@ the report format and the rules.
 
 ## [Unreleased]
 
+### Build
+
+- `plimsoll --version` prints the project version from the POM instead of a hard-coded string (#73).
+
 ## [0.1.0] - 2026-11-08
 
 First release: static analysis of retry, timeout and amplification settings across a service graph, from a

@@ -2,15 +2,18 @@ package io.github.hasanyelaldi.plimsoll.cli;
 
 import java.io.FileDescriptor;
 import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
+import java.util.Properties;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 
 @Command(
         name = "plimsoll",
         mixinStandardHelpOptions = true,
-        version = "plimsoll 0.1.1-SNAPSHOT",
+        versionProvider = Main.Version.class,
         description = "Finds where retry, timeout and circuit-breaker settings across a service graph go past safe limits.",
         subcommands = AnalyzeCommand.class)
 public final class Main {
@@ -33,5 +36,20 @@ public final class Main {
         cmd.setOut(out);
         cmd.setErr(err);
         return cmd.execute(args);
+    }
+
+    /** The project version, filled into {@code version.properties} at build time so it never drifts from the POM. */
+    static final class Version implements CommandLine.IVersionProvider {
+        @Override
+        public String[] getVersion() throws IOException {
+            Properties p = new Properties();
+            try (InputStream in = Main.class.getResourceAsStream("version.properties")) {
+                if (in == null) {
+                    throw new IOException("version.properties is missing from the jar");
+                }
+                p.load(in);
+            }
+            return new String[] {"plimsoll " + p.getProperty("version")};
+        }
     }
 }
