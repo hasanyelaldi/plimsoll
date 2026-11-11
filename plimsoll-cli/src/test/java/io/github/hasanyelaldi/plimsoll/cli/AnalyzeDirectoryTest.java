@@ -2,10 +2,13 @@ package io.github.hasanyelaldi.plimsoll.cli;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.io.UncheckedIOException;
+import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
@@ -83,11 +86,26 @@ class AnalyzeDirectoryTest {
 
     @Test
     void reportIsByteIdenticalAcrossRuns() {
-        for (String format : new String[] {"text", "markdown"}) {
+        for (String format : new String[] {"text", "markdown", "sarif"}) {
             Result first = run("analyze", petclinic().toString(), "--format", format);
             assertThat(first.out()).isEqualTo(run("analyze", petclinic().toString(), "--format", format).out());
         }
         assertThat(run("analyze", petclinic().toString(), "--format", "markdown").out()).contains("\n## Notes\n\n- ");
+    }
+
+    /** ADR 0013: every SARIF result points at a line of a file that exists under the analysed directory. */
+    @Test
+    void sarifLocationsAreFilesOfTheAnalysedDirectory() throws IOException {
+        Result r = run("analyze", petclinic().toString(), "--format", "sarif");
+        JsonNode results = new ObjectMapper().readTree(r.out()).at("/runs/0/results");
+        assertThat(results).isNotEmpty();
+        for (JsonNode result : results) {
+            JsonNode location = result.at("/locations/0/physicalLocation");
+            String uri = location.at("/artifactLocation/uri").asText();
+            assertThat(petclinic().resolve(URI.create(uri).getPath())).as("%s of %s", uri, result.get("ruleId"))
+                    .isRegularFile();
+            assertThat(location.at("/region/startLine").asInt()).isPositive();
+        }
     }
 
     @Test
