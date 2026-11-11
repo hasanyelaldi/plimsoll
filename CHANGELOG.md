@@ -9,10 +9,14 @@ the report format and the rules.
 ### CLI and report
 
 - `--format=SARIF`: SARIF 2.1.0 for code scanning; a finding is placed at the first `file:line` among its values
-  (ADR 0013, #75).
+  (ADR 0013, #75). Each result has its own `primaryLocationLineHash`, so findings that share a line stay separate
+  alerts (#76).
+- GitHub Action (`uses: hasanyelaldi/plimsoll@v0.2.0`): downloads the release jar, checks its SHA-256 and signature,
+  runs the analysis and uploads SARIF to code scanning; fails on findings at or above `fail-on` after the upload (#76).
 
 ### Build
 
+- CI runs the GitHub Action on Linux and macOS (#76).
 - `plimsoll --version` prints the project version from the POM instead of a hard-coded string (#73).
 
 ## [0.1.0] - 2026-11-08

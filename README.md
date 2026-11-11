@@ -21,6 +21,28 @@ curl -fLo plimsoll.jar https://repo1.maven.org/maven2/io/github/hasanyelaldi/pli
 java -jar plimsoll.jar analyze path/to/spec-or-repo
 ```
 
+### In GitHub Actions
+
+From v0.2.0 on, the repository is also a GitHub Action. It runs `plimsoll analyze` and uploads the findings to code scanning, where they show up on the configuration lines they came from:
+
+```yaml
+on: [push, pull_request]
+jobs:
+  plimsoll:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write   # to upload to code scanning
+    steps:
+      - uses: actions/checkout@v7
+      - uses: hasanyelaldi/plimsoll@v0.2.0
+        with:
+          path: .          # a directory of services, or a spec
+          fail-on: ERROR   # fail the job on findings this severe, after the upload
+```
+
+The action downloads the jar of its own version from Maven Central and checks its SHA-256 and its signature against the release key in [`action/`](action/plimsoll-signing-key.asc) before running it. Inputs: `path`, `version`, `jar` (a local build instead of a download), `max-amp`, `fail-on`, `upload`, `category`, `sarif-file`; outputs: `sarif-file`, `exit-code`. It runs on Linux and macOS runners.
+
 The analysis and the collectors are also libraries:
 
 ```xml
