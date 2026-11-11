@@ -18,12 +18,14 @@ import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.HashMap;
 import java.util.HexFormat;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -93,8 +95,10 @@ final class SarifReport {
                 .put("text", "The analysed directory, or the directory of the spec.");
 
         ArrayNode results = run.putArray("results");
+        Map<String, Integer> seen = new HashMap<>();
         for (Finding f : r.findings()) {
-            results.add(result(f, specName, collected));
+            String key = f.ruleId() + "\n" + f.severity() + "\n" + f.location();
+            results.add(result(f, specName, collected, sha256(key) + ":" + seen.merge(key, 1, Integer::sum)));
         }
 
         ObjectNode properties = run.putObject("properties");
@@ -116,7 +120,7 @@ final class SarifReport {
         }
     }
 
-    private static ObjectNode result(Finding f, String specName, Collected collected) {
+    private static ObjectNode result(Finding f, String specName, Collected collected, String fingerprint) {
         ObjectNode result = JSON.createObjectNode();
         result.put("ruleId", f.ruleId());
         result.put("ruleIndex", ruleIndex(f.ruleId()));
@@ -139,10 +143,11 @@ final class SarifReport {
             }
         }
 
-        // Several findings can share a line (all gateway routes take the default-filters Retry), so code scanning
-        // must not tell them apart by line alone. Rule, severity and location identify a finding across runs.
-        result.putObject("partialFingerprints").put("plimsollFinding/v1",
-                sha256(f.ruleId() + "\n" + f.severity() + "\n" + f.location()));
+        // Several findings can share a line (all gateway routes take the default-filters Retry). Code scanning tells
+        // results apart only by primaryLocationLineHash and computes it from the line's text when it is absent, so
+        // findings on one line would merge. Rule, severity and location identify a finding across runs; the
+        // occurrence counts findings that share all three, e.g. A2a once per layer of an edge (ADR 0013).
+        result.putObject("partialFingerprints").put("primaryLocationLineHash", fingerprint);
 
         ObjectNode properties = result.putObject("properties");
         properties.put("location", f.location());

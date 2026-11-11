@@ -32,6 +32,11 @@ application.yml:15): retries 1 + 1; application.yml:17`). Some findings use no v
   - if neither exists the result has no location. That is valid SARIF; code scanning then does not show it.
 - **Paths:** relative to the base `SRCROOT`, which is the analysed directory or the directory of the spec. The report
   holds no absolute path, so it is the same on every machine; the uploader maps `SRCROOT` to the repository.
+- **Fingerprint:** code scanning tells results apart only by `partialFingerprints.primaryLocationLineHash`, and
+  computes it from the text of the line when it is absent. Findings that share a line (every gateway route under one
+  default-filters `Retry`) would then become one alert. The report sets it to the SHA-256 of rule id, severity and
+  location, plus `:n` where `n` counts the findings that share all three in report order (A2a reports each layer of
+  an edge), so each finding is its own alert and keeps its identity when lines move (#76).
 - **`file:line`** is a relative path ending in a file extension, then `:` and a line number. A URL never matches,
   because the path may not follow `/` or `:`.
 
@@ -41,5 +46,7 @@ application.yml:15): retries 1 + 1; application.yml:17`). Some findings use no v
   service.
 - A finding located by the fallback points at the start of a file and says nothing about that line; its message
   names the unknown value it depends on.
+- Code scanning resolves a relative path against the repository root and does not read `SRCROOT`. The GitHub Action
+  prefixes the paths with the analysed path before uploading (#76).
 - Collectors write evidence as `file:line` today. A collector that writes it differently loses its SARIF locations,
   and the test on a collected directory catches that.

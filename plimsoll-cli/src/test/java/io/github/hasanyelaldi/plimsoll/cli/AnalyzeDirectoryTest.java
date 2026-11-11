@@ -11,6 +11,7 @@ import java.io.UncheckedIOException;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.BeforeEach;
@@ -93,19 +94,25 @@ class AnalyzeDirectoryTest {
         assertThat(run("analyze", petclinic().toString(), "--format", "markdown").out()).contains("\n## Notes\n\n- ");
     }
 
-    /** ADR 0013: every SARIF result points at a line of a file that exists under the analysed directory. */
+    /**
+     * ADR 0013: every SARIF result points at a line of a file that exists under the analysed directory, and has a
+     * fingerprint of its own (gateway findings share lines; A2a reports each layer of an edge).
+     */
     @Test
     void sarifLocationsAreFilesOfTheAnalysedDirectory() throws IOException {
         Result r = run("analyze", petclinic().toString(), "--format", "sarif");
         JsonNode results = new ObjectMapper().readTree(r.out()).at("/runs/0/results");
         assertThat(results).isNotEmpty();
+        List<String> fingerprints = new ArrayList<>();
         for (JsonNode result : results) {
+            fingerprints.add(result.at("/partialFingerprints/primaryLocationLineHash").asText());
             JsonNode location = result.at("/locations/0/physicalLocation");
             String uri = location.at("/artifactLocation/uri").asText();
             assertThat(petclinic().resolve(URI.create(uri).getPath())).as("%s of %s", uri, result.get("ruleId"))
                     .isRegularFile();
             assertThat(location.at("/region/startLine").asInt()).isPositive();
         }
+        assertThat(fingerprints).doesNotHaveDuplicates();
     }
 
     @Test

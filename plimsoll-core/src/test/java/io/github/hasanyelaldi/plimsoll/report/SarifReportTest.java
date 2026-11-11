@@ -160,13 +160,17 @@ class SarifReportTest {
         UsedValue retry = new UsedValue("retries", "2", Source.EXPLICIT, "gateway/application.yml:15");
         String sarif = ReportFormat.SARIF.render(new AnalysisResult(List.of(), List.of(
                         new Finding("PLM-A3", Severity.ERROR, "gw→a", "retried", List.of(retry), List.of()),
-                        new Finding("PLM-A3", Severity.ERROR, "gw→b", "retried", List.of(retry), List.of()))),
+                        new Finding("PLM-A3", Severity.ERROR, "gw→b", "retried", List.of(retry), List.of()),
+                        new Finding("PLM-A3", Severity.ERROR, "gw→b", "retried again", List.of(retry), List.of()))),
                 "input", AnalysisOptions.defaults(), Collected.SPEC);
         List<JsonNode> results = results(sarif);
         assertThat(primary(results.get(0))).isEqualTo(primary(results.get(1)));
-        assertThat(results.get(0).at("/partialFingerprints/plimsollFinding~1v1").asText())
-                .hasSize(64)
-                .isNotEqualTo(results.get(1).at("/partialFingerprints/plimsollFinding~1v1").asText());
+        List<String> fingerprints = results.stream()
+                .map(r -> r.at("/partialFingerprints/primaryLocationLineHash").asText()).toList();
+        assertThat(fingerprints.get(0)).matches("[0-9a-f]{64}:1");
+        assertThat(fingerprints).doesNotHaveDuplicates();
+        // Same rule, severity and location: the same hash, counted.
+        assertThat(fingerprints.get(2)).isEqualTo(fingerprints.get(1).replace(":1", ":2"));
     }
 
     @Test
