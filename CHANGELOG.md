@@ -6,6 +6,11 @@ the report format and the rules.
 
 ## [Unreleased]
 
+### CLI and report
+
+- `--format=SARIF`: SARIF 2.1.0 for code scanning; a finding is placed at the first `file:line` among its values
+  (ADR 0013, #75).
+
 ### Build
 
 - `plimsoll --version` prints the project version from the POM instead of a hard-coded string (#73).
