@@ -25,7 +25,7 @@ Status: pre-v0.1, started 14 Oct 2026. License: Apache-2.0.
 ## Stack and commands
 
 Java 21, Maven multi-module build with the Maven Wrapper (`./mvnw`). All versions live as `<properties>` in the parent `pom.xml` and are managed in `<dependencyManagement>` / `<pluginManagement>`; child POMs never repeat a version.
-Libraries: picocli, Jackson (YAML), JGraphT, JavaParser (collectors), JUnit 5, AssertJ, jqwik. Resilience4j is a **test-scope** dependency only, for oracle tests, with its version in the `resilience4j.version` property so CI can run a version matrix. Use the latest stable versions. Ask before adding anything else.
+Libraries: picocli, Jackson (YAML, JSON), JGraphT, JavaParser (collectors), JUnit 5, AssertJ, jqwik, networknt json-schema-validator (test scope, SARIF schema check). Resilience4j is a **test-scope** dependency only, for oracle tests, with its version in the `resilience4j.version` property so CI can run a version matrix. Use the latest stable versions. Ask before adding anything else.
 
 The CLI module builds a single executable jar (`maven-shade-plugin`, `Main-Class` set, `finalName` = `plimsoll`).
 
@@ -48,7 +48,7 @@ plimsoll-collectors/  read real config into the model: Spring Boot properties, R
 plimsoll-cli/     picocli entry point: `plimsoll analyze <spec-or-dir>` (a directory is collected; a Coverage section lists the files read per service, the layer kinds searched and found per edge, and the configuration it did not read (config imports and config server, profile documents and activations, other config files, placeholders under collected prefixes) under Sources not read; then collector notes sorted in a Notes section; several repositories are analysed by checking them out side by side under one directory, ADR 0010)
 examples/         hand-written specs; checkout.yaml is the canonical demo and acceptance test
 findings/         runs on real testbeds (pinned commit, generated report, hand check, gaps); petclinic.md for #9, trainticket.md for #28
-docs/adr/         decisions in MADR format (0001–0012 below)
+docs/adr/         decisions in MADR format (0001–0013 below)
 kb/defaults/      library defaults knowledge base, one YAML file per library
 kb/detectors/     patterns of mechanisms no collector models (PLM-C1); `Detector` in `…collect.detect`
 ```
@@ -147,11 +147,11 @@ After the findings, a Coverage section says `Source: hand-written spec; every la
 - Oracle tests live in `plimsoll-core/src/test/java/.../oracle`. They run real Resilience4j with a failing supplier and count calls; use a fake clock or zero waits, never real sleeps.
 - No network, no LLM, no sleeping in tests.
 
-## Current milestone: v0.1 (target 15 Nov 2026)
+## Current milestone: v0.2
 
-Work comes from the issues in the [v0.1 milestone](https://github.com/hasanyelaldi/plimsoll/milestone/1), taken in issue-number order.
+v0.1.0 was released on 8 Nov 2026. v0.2 starts with Plimsoll in CI: SARIF output (#75), then the GitHub Action (#76). Other [v0.2 milestone](https://github.com/hasanyelaldi/plimsoll/milestone/2) issues wait until the maintainer picks them.
 
-Out of scope until the maintainer says otherwise: the LLM layer, OpenTelemetry ingestion (v0.2), SARIF and the GitHub Action (v0.2), an HTML report, Linkerd, queue consumers, cloud SDKs, the dynamic fault-injection harness, performance what-if (module 2).
+Out of scope until the maintainer says otherwise: the LLM layer, OpenTelemetry ingestion (v0.2, after #76), an HTML report, Linkerd, queue consumers, cloud SDKs, the dynamic fault-injection harness, performance what-if (module 2).
 
 ## Defaults knowledge base
 
@@ -188,6 +188,7 @@ Seed entries, all `verified_by: none` until checked against primary sources:
 - 0010 Several repositories: check them out side by side and analyse the parent directory; fragments + merge parked (#40).
 - 0011 An absent timeout is the known value `unlimited` (sourced), not `UNKNOWN`; A2a: 0 of n tries fit, A2b: no finding.
 - 0012 Alternative edges (`Edge.choice`, gateway routes): A1 takes the max within a choice, the sum across; edges sharing `from→to` are located with their operation.
+- 0013 SARIF locations: a finding is placed at the first `file:line` in its values' evidence (EXPLICIT first), the rest are related locations; without one, line 1 of the spec or of the service's first file read; paths relative to `SRCROOT`.
 
 ## Related work (cite it, do not duplicate it)
 

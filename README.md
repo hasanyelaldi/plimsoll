@@ -44,7 +44,8 @@ Usage: plimsoll analyze [-hV] [--fail-on=<severity>] [--format=<format>]
       <spec-or-dir>          YAML spec file, or a directory of service modules
       --fail-on=<severity>   Exit with 1 if a finding is at least this severe:
                                ERROR, WARN, INFO (default: ERROR).
-      --format=<format>      Report format: TEXT, MARKDOWN (default: TEXT).
+      --format=<format>      Report format: TEXT, MARKDOWN, SARIF (default:
+                               TEXT).
       --max-amp=<n>          A1 amplification limit (default: 10).
 ```
 
@@ -55,6 +56,8 @@ Usage: plimsoll analyze [-hV] [--fail-on=<severity>] [--format=<format>]
 | `2` | invalid input |
 
 The same input always gives a byte-identical report, so it can be committed and diffed.
+
+`--format=SARIF` writes [SARIF 2.1.0](https://docs.oasis-open.org/sarif/sarif/v2.1.0/sarif-v2.1.0.html) for GitHub code scanning and other SARIF viewers. Each finding is placed at the first `file:line` among the values it used, with the other ones as related locations. Paths are relative to the analysed directory, or to the spec's directory (`SRCROOT`) ([ADR 0013](docs/adr/0013-sarif-locations.md)).
 
 ## Two kinds of input
 
