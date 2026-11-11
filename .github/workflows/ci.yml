@@ -8,10 +8,43 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: '21'
           cache: maven
       - run: ./mvnw -B verify
+
+  # The GitHub Action (action.yml, #76) on the checkout example with the jar built here; no upload to code scanning.
+  action:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - run: ./mvnw -B -q -DskipTests package
+      - id: plimsoll
+        uses: ./
+        continue-on-error: true
+        with:
+          path: examples/checkout.yaml
+          jar: plimsoll-cli/target/plimsoll.jar
+          upload: 'false'
+      - name: The step failed on the ERROR findings, after writing the SARIF report
+        env:
+          OUTCOME: ${{ steps.plimsoll.outcome }}
+          EXIT_CODE: ${{ steps.plimsoll.outputs.exit-code }}
+          SARIF: ${{ steps.plimsoll.outputs.sarif-file }}
+        run: |
+          test "$OUTCOME" = failure
+          test "$EXIT_CODE" = 1
+          jq -e '.runs[0].results | length == 11' "$SARIF"
+          jq -e '[.runs[0].results[].locations[0].physicalLocation.artifactLocation.uri] | unique == ["examples/checkout.yaml"]' "$SARIF"
+          jq -e '[.runs[0].results[].partialFingerprints.primaryLocationLineHash] | length == (unique | length)' "$SARIF"
