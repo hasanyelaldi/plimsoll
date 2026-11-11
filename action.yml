@@ -22,7 +22,7 @@ inputs:
     description: Fail the step if a finding is at least this severe (ERROR, WARN, INFO). Findings are uploaded first.
     default: ERROR
   upload:
-    description: Upload the SARIF file to GitHub code scanning (needs `security-events: write`).
+    description: "Upload the SARIF file to GitHub code scanning (needs `security-events: write`)."
     default: 'true'
   category:
     description: Code scanning category, to keep several analyses apart.
