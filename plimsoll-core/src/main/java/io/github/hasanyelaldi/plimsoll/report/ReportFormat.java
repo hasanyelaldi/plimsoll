@@ -16,6 +16,13 @@ public enum ReportFormat {
         public String render(AnalysisResult result, String specName, AnalysisOptions options, Collected collected) {
             return MarkdownReport.render(result, specName, options, collected);
         }
+    },
+    /** SARIF 2.1.0 for code scanning; locations per ADR 0013. */
+    SARIF {
+        @Override
+        public String render(AnalysisResult result, String specName, AnalysisOptions options, Collected collected) {
+            return SarifReport.render(result, specName, options, collected);
+        }
     };
 
     public String render(AnalysisResult result, String specName, AnalysisOptions options) {
