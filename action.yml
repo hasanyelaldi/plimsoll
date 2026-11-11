@@ -1,0 +1,72 @@
+name: Plimsoll
+description: Find where retry, timeout and amplification settings across a service graph go past safe limits, as SARIF for code scanning.
+author: hasanyelaldi
+branding:
+  icon: anchor
+  color: blue
+
+inputs:
+  path:
+    description: Directory of service modules, or a YAML spec, relative to the repository root.
+    default: .
+  version:
+    description: Plimsoll release to download from Maven Central. Defaults to the tag the action is used at (v0.2.0 gives 0.2.0).
+    default: ''
+  jar:
+    description: Path to a plimsoll.jar to run instead of downloading one (for testing a build).
+    default: ''
+  max-amp:
+    description: PLM-A1 amplification limit.
+    default: '10'
+  fail-on:
+    description: Fail the step if a finding is at least this severe (ERROR, WARN, INFO). Findings are uploaded first.
+    default: ERROR
+  upload:
+    description: Upload the SARIF file to GitHub code scanning (needs `security-events: write`).
+    default: 'true'
+  category:
+    description: Code scanning category, to keep several analyses apart.
+    default: plimsoll
+  sarif-file:
+    description: Where to write the SARIF report.
+    default: plimsoll.sarif
+
+outputs:
+  sarif-file:
+    description: The SARIF report.
+    value: ${{ steps.analyze.outputs.sarif-file }}
+  exit-code:
+    description: Exit code of plimsoll analyze, 0 (nothing at or above fail-on) or 1.
+    value: ${{ steps.analyze.outputs.exit-code }}
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-java@v6
+      with:
+        distribution: temurin
+        java-version: '21'
+    - id: analyze
+      shell: bash
+      run: '"$ACTION_PATH/action/run.sh"'
+      env:
+        ACTION_PATH: ${{ github.action_path }}
+        ACTION_REF: ${{ github.action_ref }}
+        PLIMSOLL_PATH: ${{ inputs.path }}
+        PLIMSOLL_VERSION: ${{ inputs.version }}
+        PLIMSOLL_JAR: ${{ inputs.jar }}
+        MAX_AMP: ${{ inputs.max-amp }}
+        FAIL_ON: ${{ inputs.fail-on }}
+        SARIF_FILE: ${{ inputs.sarif-file }}
+    - if: inputs.upload == 'true'
+      uses: github/codeql-action/upload-sarif@v4
+      with:
+        sarif_file: ${{ steps.analyze.outputs.sarif-file }}
+        category: ${{ inputs.category }}
+    - if: steps.analyze.outputs.exit-code == '1'
+      shell: bash
+      run: |
+        echo "::error title=plimsoll::findings at or above $FAIL_ON; see the SARIF report or code scanning alerts"
+        exit 1
+      env:
+        FAIL_ON: ${{ inputs.fail-on }}
