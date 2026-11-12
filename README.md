@@ -10,20 +10,20 @@ Plimsoll finds where retry, timeout and circuit-breaker settings across a servic
 
 Every number in a report is computed by deterministic code, and every value it uses says where it came from (`file:line` or a library's documentation). Reports are meant to be attached to architecture decision records as evidence.
 
-**Status:** v0.1.0, the first release. The CLI works on hand-written specs and on Spring Boot / Spring Cloud / Istio projects; see [Known limitations](#known-limitations) before trusting a report.
+**Status:** v0.2.0: SARIF output and a GitHub Action, on top of the v0.1 analysis. The CLI works on hand-written specs and on Spring Boot / Spring Cloud / Istio projects; see [Known limitations](#known-limitations) before trusting a report.
 
 ## Install and run
 
-Requires Java 21. The CLI is one executable jar. Download it from the [v0.1.0 release](https://github.com/hasanyelaldi/plimsoll/releases/tag/v0.1.0), or from Maven Central:
+Requires Java 21. The CLI is one executable jar. Download it from the [v0.2.0 release](https://github.com/hasanyelaldi/plimsoll/releases/tag/v0.2.0), or from Maven Central:
 
 ```bash
-curl -fLo plimsoll.jar https://repo1.maven.org/maven2/io/github/hasanyelaldi/plimsoll-cli/0.1.0/plimsoll-cli-0.1.0.jar
+curl -fLo plimsoll.jar https://repo1.maven.org/maven2/io/github/hasanyelaldi/plimsoll-cli/0.2.0/plimsoll-cli-0.2.0.jar
 java -jar plimsoll.jar analyze path/to/spec-or-repo
 ```
 
 ### In GitHub Actions
 
-From v0.2.0 on, the repository is also a GitHub Action. It runs `plimsoll analyze` and uploads the findings to code scanning, where they show up on the configuration lines they came from:
+The repository is also a GitHub Action. It runs `plimsoll analyze` and uploads the findings to code scanning, where they show up on the configuration lines they came from:
 
 ```yaml
 on: [push, pull_request]
@@ -49,7 +49,7 @@ The analysis and the collectors are also libraries:
 <dependency>
   <groupId>io.github.hasanyelaldi</groupId>
   <artifactId>plimsoll-collectors</artifactId> <!-- or plimsoll-core for the model and rules only -->
-  <version>0.1.0</version>
+  <version>0.2.0</version>
 </dependency>
 ```
 

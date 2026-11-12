@@ -6,6 +6,10 @@ the report format and the rules.
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-12
+
+Plimsoll in CI: SARIF output for code scanning and a GitHub Action that runs the analysis and uploads it.
+
 ### CLI and report
 
 - `--format=SARIF`: SARIF 2.1.0 for code scanning; a finding is placed at the first `file:line` among its values
@@ -86,5 +90,6 @@ Library defaults are in `kb/defaults/`, one file per library, each entry with it
 - Java 21, Maven multi-module build, CI on every push and pull request (#1).
 - `release` profile for Maven Central through the Central Portal (#64).
 
-[Unreleased]: https://github.com/hasanyelaldi/plimsoll/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/hasanyelaldi/plimsoll/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/hasanyelaldi/plimsoll/releases/tag/v0.2.0
 [0.1.0]: https://github.com/hasanyelaldi/plimsoll/releases/tag/v0.1.0
