@@ -4,7 +4,7 @@
 
 Plimsoll finds where retry, timeout and circuit-breaker settings across a service graph go past safe limits. It computes this from real configuration (code, Spring YAML, Istio manifests), not from hand-written models. Later it will answer performance what-if questions on the same graph. Its reports are meant to be attached to ADRs as evidence.
 
-Status: pre-v0.1, started 14 Oct 2026. License: Apache-2.0.
+Status: v0.2.0 (12 Nov 2026), started 14 Oct 2026. License: Apache-2.0.
 
 ## Conventions
 
