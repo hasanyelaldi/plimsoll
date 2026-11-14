@@ -6,6 +6,11 @@ the report format and the rules.
 
 ## [Unreleased]
 
+### Build
+
+- CI also runs the GitHub Action with the last release, downloaded from Maven Central, so its SHA-256 and signature
+  checks run on Linux and macOS (#83).
+
 ## [0.2.0] - 2026-11-12
 
 Plimsoll in CI: SARIF output for code scanning and a GitHub Action that runs the analysis and uploads it.
