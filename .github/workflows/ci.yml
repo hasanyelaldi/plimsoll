@@ -16,12 +16,18 @@ jobs:
           cache: maven
       - run: ./mvnw -B verify
 
-  # The GitHub Action (action.yml, #76) on the checkout example with the jar built here; no upload to code scanning.
+  # The GitHub Action (action.yml, #76) on the checkout example; no upload to code scanning. `build` runs the jar built
+  # here; `release` downloads the last release from Maven Central and checks its SHA-256 and signature (#83). Bump
+  # RELEASE at each release; its findings on checkout.yaml must stay those asserted below.
   action:
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
+        jar: [build, release]
     runs-on: ${{ matrix.os }}
+    env:
+      RELEASE: 0.2.0
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-java@v6
@@ -29,13 +35,15 @@ jobs:
           distribution: temurin
           java-version: '21'
           cache: maven
-      - run: ./mvnw -B -q -DskipTests package
+      - if: matrix.jar == 'build'
+        run: ./mvnw -B -q -DskipTests package
       - id: plimsoll
         uses: ./
         continue-on-error: true
         with:
           path: examples/checkout.yaml
-          jar: plimsoll-cli/target/plimsoll.jar
+          jar: ${{ matrix.jar == 'build' && 'plimsoll-cli/target/plimsoll.jar' || '' }}
+          version: ${{ matrix.jar == 'release' && env.RELEASE || '' }}
           upload: 'false'
       - name: The step failed on the ERROR findings, after writing the SARIF report
         env:
