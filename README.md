@@ -43,6 +43,8 @@ jobs:
 
 The action downloads the jar of its own version from Maven Central and checks its SHA-256 and its signature against the release key in [`action/`](action/plimsoll-signing-key.asc) before running it. Inputs: `path`, `version`, `jar` (a local build instead of a download), `max-amp`, `fail-on`, `upload`, `category`, `sarif-file`; outputs: `sarif-file`, `exit-code`. It runs on Linux and macOS runners.
 
+[plimsoll-demo](https://github.com/hasanyelaldi/plimsoll-demo) runs the action on the checkout example; its Security tab shows the alerts. `upload-sarif` logs one warning per result, "Calculated fingerprint … but found existing inconsistent fingerprint value": Plimsoll sets its own fingerprint so that findings sharing a line stay separate alerts, and code scanning keeps it ([ADR 0013](docs/adr/0013-sarif-locations.md)). The warning is harmless.
+
 The analysis and the collectors are also libraries:
 
 ```xml
@@ -251,7 +253,6 @@ v0.1 gives an upper bound from static configuration. Before acting on a report, 
 - **Istio:** the mesh-wide `defaultHttpRetryPolicy` in MeshConfig is not read; when several HTTP routes of a host disagree, the differing fields are `UNKNOWN`; services are matched on the first label of the host; every callee is assumed to be in the mesh once Istio manifests are present. Ambient mode and Gateway API are not supported ([#27](https://github.com/hasanyelaldi/plimsoll/issues/27)).
 - **Configuration not read:** config server, profile-specific documents, other config files and unresolved placeholders. The Coverage section lists each one it skipped.
 - **Large graphs:** A5 enumerates simple paths, which grows exponentially on wide graphs.
-- Text and Markdown output only; SARIF and a GitHub Action are planned for v0.2.
 
 Open issues labelled [`later`](https://github.com/hasanyelaldi/plimsoll/issues?q=is%3Aopen+label%3Alater) track the rest.
 

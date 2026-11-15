@@ -14,6 +14,8 @@ import io.github.hasanyelaldi.plimsoll.analysis.Finding;
 import io.github.hasanyelaldi.plimsoll.analysis.ServiceAmplification;
 import io.github.hasanyelaldi.plimsoll.analysis.UsedValue;
 import io.github.hasanyelaldi.plimsoll.model.Source;
+import java.io.IOException;
+import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -27,6 +29,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Properties;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -64,6 +67,9 @@ final class SarifReport {
     private static final Pattern FILE_LINE = Pattern.compile(
             "(?<![\\w./:-])([\\w.-]+(?:/[\\w.{}*$-]+)*\\.[A-Za-z]\\w*):(\\d+)");
 
+    /** The project version, from the filtered {@code version.properties} (#85). */
+    static final String VERSION = version();
+
     private static final ObjectMapper JSON = new ObjectMapper();
     /** Two-space indent, {@code "key": value}, and "\n" on every platform. */
     private static final ObjectWriter WRITER = JSON.writer(new DefaultPrettyPrinter()
@@ -81,6 +87,9 @@ final class SarifReport {
 
         ObjectNode driver = run.putObject("tool").putObject("driver");
         driver.put("name", "Plimsoll");
+        // Code scanning reads semanticVersion, else version, to tell when results changed with the tool (#85).
+        driver.put("version", VERSION);
+        driver.put("semanticVersion", VERSION);
         driver.put("informationUri", "https://github.com/hasanyelaldi/plimsoll");
         ArrayNode rules = driver.putArray("rules");
         for (Rule rule : RULES) {
@@ -228,6 +237,19 @@ final class SarifReport {
         artifact.put("uri", uri(place.path()));
         artifact.put("uriBaseId", SRCROOT);
         physical.putObject("region").put("startLine", place.line());
+    }
+
+    private static String version() {
+        Properties p = new Properties();
+        try (InputStream in = SarifReport.class.getResourceAsStream("version.properties")) {
+            if (in == null) {
+                throw new IllegalStateException("version.properties is missing from plimsoll-core");
+            }
+            p.load(in);
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+        return p.getProperty("version");
     }
 
     private static String sha256(String text) {

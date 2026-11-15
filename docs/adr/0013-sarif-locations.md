@@ -48,5 +48,8 @@ application.yml:15): retries 1 + 1; application.yml:17`). Some findings use no v
   names the unknown value it depends on.
 - Code scanning resolves a relative path against the repository root and does not read `SRCROOT`. The GitHub Action
   prefixes the paths with the analysed path before uploading (#76).
+- `upload-sarif` still computes its own line hash for each result and, when it differs from Plimsoll's, logs a warning
+  and keeps Plimsoll's (`src/fingerprints.ts` in `github/codeql-action`). Every upload therefore logs one warning per
+  result; the first real upload (plimsoll-demo, #85) confirmed that the alerts keep their identity across runs.
 - Collectors write evidence as `file:line` today. A collector that writes it differently loses its SARIF locations,
   and the test on a collected directory catches that.
