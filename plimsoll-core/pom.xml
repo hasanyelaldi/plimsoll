@@ -59,6 +59,27 @@
     </dependency>
   </dependencies>
 
+  <build>
+    <resources>
+      <!-- version.properties carries the project version for SARIF's tool.driver (#85). -->
+      <resource>
+        <directory>src/main/resources</directory>
+        <filtering>true</filtering>
+      </resource>
+    </resources>
+    <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <systemPropertyVariables>
+            <plimsoll.expectedVersion>${project.version}</plimsoll.expectedVersion>
+          </systemPropertyVariables>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
+
   <profiles>
     <!-- Spring Boot annotation oracle; resilience4j-spring-boot4 exists from 2.4.0 on.
          Older versions: ./mvnw test -Dresilience4j.version=<x.y.z> -DnoSpringOracle -->

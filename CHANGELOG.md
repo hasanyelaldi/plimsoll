@@ -6,6 +6,16 @@ the report format and the rules.
 
 ## [Unreleased]
 
+### CLI and report
+
+- SARIF: `tool.driver` carries the Plimsoll version (`version`, `semanticVersion`), so code scanning can tell when
+  results changed with the tool (#85).
+
+### Documentation
+
+- README links the [plimsoll-demo](https://github.com/hasanyelaldi/plimsoll-demo) repository and explains the
+  fingerprint warning `upload-sarif` logs; ADR 0013 records it (#85).
+
 ### Build
 
 - CI also runs the GitHub Action with the last release, downloaded from Maven Central, so its SHA-256 and signature

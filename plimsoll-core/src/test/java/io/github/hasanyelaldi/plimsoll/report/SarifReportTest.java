@@ -93,6 +93,15 @@ class SarifReportTest {
     }
 
     @Test
+    void theToolCarriesTheProjectVersion() throws IOException {
+        JsonNode driver = JSON.readTree(checkout()).at("/runs/0/tool/driver");
+        assertThat(driver.get("semanticVersion").asText())
+                .isEqualTo(System.getProperty("plimsoll.expectedVersion"))
+                .matches("\\d+\\.\\d+\\.\\d+(-SNAPSHOT)?");
+        assertThat(driver.get("version").asText()).isEqualTo(driver.get("semanticVersion").asText());
+    }
+
+    @Test
     void findingsAreLocatedAtTheirFirstExplicitFileLine() throws IOException {
         List<JsonNode> results = results(checkout());
         JsonNode a3 = results.get(1);
