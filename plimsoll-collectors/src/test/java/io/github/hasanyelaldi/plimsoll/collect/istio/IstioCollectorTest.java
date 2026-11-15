@@ -9,7 +9,9 @@ import io.github.hasanyelaldi.plimsoll.collect.istio.IstioCollector.Route;
 import io.github.hasanyelaldi.plimsoll.collect.kb.DefaultsKb;
 import io.github.hasanyelaldi.plimsoll.io.InvalidSpecException;
 import io.github.hasanyelaldi.plimsoll.model.Durations;
+import io.github.hasanyelaldi.plimsoll.model.FailureClass;
 import io.github.hasanyelaldi.plimsoll.model.Layer;
+import io.github.hasanyelaldi.plimsoll.model.RetryConditions;
 import io.github.hasanyelaldi.plimsoll.model.RetryPolicy;
 import io.github.hasanyelaldi.plimsoll.model.Source;
 import io.github.hasanyelaldi.plimsoll.model.Val;
@@ -58,6 +60,56 @@ class IstioCollectorTest {
         assertThat(p.initialBackoff()).isEqualTo(Val.explicit(Duration.ofMillis(50), VS + ":16"));
         assertThat(p.retryOn()).isEqualTo(Val.explicit(Set.of("5xx", "reset", "503"), VS + ":15"));
         assertThat(layer.overallTimeout()).isEqualTo(Val.explicit(Duration.ofSeconds(2), VS + ":11"));
+    }
+
+    /** ADR 0014: Envoy conditions map to failure classes; a bare status is its own class. */
+    @Test
+    void explicitConditionsMapToFailureClasses() {
+        RetryConditions c = route("orders", "default").layer().conditions();
+        assertThat(c.retried().value()).containsExactlyInAnyOrder(FailureClass.NOT_SENT, FailureClass.RESET,
+                FailureClass.TIMEOUT, FailureClass.STATUS_500, FailureClass.STATUS_502, FailureClass.STATUS_503,
+                FailureClass.STATUS_504, FailureClass.STATUS_5XX_OTHER);
+        assertThat(c.retried().source()).isEqualTo(Source.EXPLICIT);
+        assertThat(c.retried().evidence()).startsWith(VS + ":15; classes: istio 1.31 (Envoy 8893f913) default "
+                + "(verified by source), https://github.com/envoyproxy/envoy/blob/8893f913");
+    }
+
+    @Test
+    void theDefaultPolicyRetriesOnlyFailuresBeforeTheRequestIsSent() {
+        RetryConditions c = route("payments", "http[1]").layer().conditions();
+        // connect-failure and refused-stream: not-sent; unavailable and cancelled read grpc-status: no class.
+        assertThat(c.retried().value()).containsExactly(FailureClass.NOT_SENT);
+        assertThat(c.retried().source()).isEqualTo(Source.LIBRARY_DEFAULT);
+    }
+
+    @Test
+    void theSidecarAnswers503Or504OnceItGivesUp() {
+        Val<Map<FailureClass, Set<FailureClass>>> givesUpAs = route("orders", "default").layer().conditions().givesUpAs();
+        assertThat(givesUpAs.value()).isEqualTo(Map.of(
+                FailureClass.NOT_SENT, Set.of(FailureClass.STATUS_503),
+                FailureClass.RESET, Set.of(FailureClass.STATUS_503, FailureClass.STATUS_502),
+                FailureClass.TIMEOUT, Set.of(FailureClass.STATUS_504)));
+        assertThat(givesUpAs.source()).isEqualTo(Source.LIBRARY_DEFAULT);
+        assertThat(givesUpAs.evidence()).contains("router.cc");
+    }
+
+    @Test
+    void anUnmappedConditionLeavesTheClassesUnknown(@TempDir Path dir) throws IOException {
+        Files.writeString(dir.resolve("vs.yaml"), """
+                apiVersion: networking.istio.io/v1
+                kind: VirtualService
+                metadata: { name: x, namespace: n }
+                spec:
+                  hosts: [ x ]
+                  http:
+                    - retries:
+                        attempts: 1
+                        retryOn: connect-failure,retriable-headers
+                """);
+        Val<Set<FailureClass>> retried = IstioCollector.collect(dir).routes().get(0).layer().conditions().retried();
+        assertThat(retried.source()).isEqualTo(Source.UNKNOWN);
+        assertThat(retried.evidence()).isEqualTo("vs.yaml:9; no verified istio mapping for retryOn condition "
+                + "'retriable-headers', so every failure class is retried");
     }
 
     @Test

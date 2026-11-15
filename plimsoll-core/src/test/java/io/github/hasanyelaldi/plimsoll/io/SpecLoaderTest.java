@@ -4,10 +4,15 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.github.hasanyelaldi.plimsoll.model.Edge;
+import io.github.hasanyelaldi.plimsoll.model.FailureClass;
+import io.github.hasanyelaldi.plimsoll.model.RetryConditions;
 import io.github.hasanyelaldi.plimsoll.model.RetryPolicy;
 import io.github.hasanyelaldi.plimsoll.model.ServiceGraph;
 import io.github.hasanyelaldi.plimsoll.model.Source;
+import io.github.hasanyelaldi.plimsoll.model.Val;
 import java.time.Duration;
+import java.util.Map;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 class SpecLoaderTest {
@@ -75,7 +80,7 @@ class SpecLoaderTest {
                         multiplier: 2
                         maxBackoff: 1s
                         jitter: true
-                        retryOn: [503, ioerror]
+                        retryOn: [503, reset]
                 """, "spec.yaml");
         Edge e = g.edges().get(0);
         assertThat(e.idempotent().value()).isFalse();
@@ -86,7 +91,11 @@ class SpecLoaderTest {
         assertThat(p.initialBackoff().value()).isEqualTo(Duration.ofMillis(100));
         assertThat(p.multiplier().value()).isEqualTo(2.0);
         assertThat(p.jitter().value()).isTrue();
-        assertThat(p.retryOn().value()).containsExactlyInAnyOrder("503", "ioerror");
+        assertThat(p.retryOn().value()).containsExactlyInAnyOrder("503", "reset");
+        RetryConditions c = e.layers().get(0).conditions();
+        assertThat(c.retried()).isEqualTo(Val.explicit(Set.of(FailureClass.STATUS_503, FailureClass.RESET), "spec.yaml:16"));
+        assertThat(c.givesUpAs().value()).isEmpty();
+        assertThat(c.givesUpAs().source()).isEqualTo(Source.LIBRARY_DEFAULT);
         assertThat(g.services().get("a").deadline().evidence()).isEqualTo("spec.yaml:2");
         assertThat(g.services().get("b").deadline().source()).isEqualTo(Source.UNKNOWN);
         assertThat(g.services().get("a").entry()).isTrue();
@@ -120,6 +129,25 @@ class SpecLoaderTest {
         assertInvalid(HEAD + "edges:\n  - { from: a, to: b, layers: [ { kind: generic, multiplier: 0.5 } ] }\n", "finite number >= 1");
         assertInvalid(HEAD + "edges:\n  - { from: a, to: b, fanout: 0 }\n", "at least 1");
         assertInvalid("services:\n  a: { entry: true }\n  a: { entry: true }\n", "duplicate key 'a'");
+    }
+
+    /** ADR 0014: retryOn names failure classes; how a failure passes on depends on the kind. */
+    @Test
+    void retryOnListsFailureClasses() {
+        String head = HEAD + "edges:\n  - { from: a, to: b, layers: [ ";
+        RetryConditions generic = SpecLoader.parse(head + "{ kind: generic, retryOn: [not-sent, status-5xx-other, 599] } ] }\n", "t")
+                .edges().get(0).layers().get(0).conditions();
+        assertThat(generic.retried().value()).containsExactly(FailureClass.NOT_SENT, FailureClass.STATUS_5XX_OTHER);
+        assertThat(generic.givesUpAs()).isEqualTo(Val.explicit(Map.of(), "t:5 (a generic layer passes a failure on as it is)"));
+
+        RetryConditions istio = SpecLoader.parse(head + "{ kind: istio, attempts: 2 } ] }\n", "t")
+                .edges().get(0).layers().get(0).conditions();
+        assertThat(istio.retried().source()).isEqualTo(Source.UNKNOWN);
+        assertThat(istio.retried().evidence()).endsWith("every failure class is retried");
+        assertThat(istio.givesUpAs().source()).isEqualTo(Source.UNKNOWN);
+
+        assertInvalid(head + "{ kind: generic, retryOn: [connect-failure] } ] }\n", "unknown failure class 'connect-failure'");
+        assertInvalid(head + "{ kind: generic, retryOn: [302] } ] }\n", "unknown failure class '302'");
     }
 
     @Test

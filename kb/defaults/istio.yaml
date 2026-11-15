@@ -88,3 +88,135 @@
   unit: percent
   source: https://istio.io/v1.31/docs/reference/config/networking/destination-rule/#OutlierDetection
   verified_by: doc
+
+# ADR 0014: the failure classes each retryOn condition retries, from the Envoy router of Istio 1.31's proxy
+# (istio/proxy release-1.31 pins Envoy 8893f913). A per-try timeout resets the stream locally (onPerTryTimeoutCommon),
+# so it is retried only by conditions that retry resets. Conditions not listed here leave the classes UNKNOWN.
+- library: istio
+  versions: "1.31 (Envoy 8893f913)"
+  parameter: retryOn.connect-failure
+  value: not-sent
+  unit: failure-classes      # a connection failure or connect timeout (wouldRetryFromReset)
+  source: https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/retry_state_impl.cc
+  verified_by: source
+
+- library: istio
+  versions: "1.31 (Envoy 8893f913)"
+  parameter: retryOn.refused-stream
+  value: not-sent
+  unit: failure-classes      # a REFUSED_STREAM reset from the callee (wouldRetryFromReset)
+  source: https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/retry_state_impl.cc
+  verified_by: source
+
+- library: istio
+  versions: "1.31 (Envoy 8893f913)"
+  parameter: retryOn.reset
+  value: not-sent,reset,timeout
+  unit: failure-classes      # any reset, a connection failure and a per-try timeout's local reset included (wouldRetryFromReset)
+  source: https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/retry_state_impl.cc
+  verified_by: source
+
+- library: istio
+  versions: "1.31 (Envoy 8893f913)"
+  parameter: retryOn.reset-before-request
+  value: not-sent
+  unit: failure-classes      # resets before any byte was sent upstream (wouldRetryFromReset)
+  source: https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/retry_state_impl.cc
+  verified_by: source
+
+- library: istio
+  versions: "1.31 (Envoy 8893f913)"
+  parameter: retryOn.5xx
+  value: not-sent,reset,timeout,status-500,status-502,status-503,status-504,status-5xx-other
+  unit: failure-classes      # every 5xx response (wouldRetryFromHeaders) and every reset (wouldRetryFromReset)
+  source: https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/retry_state_impl.cc
+  verified_by: source
+
+- library: istio
+  versions: "1.31 (Envoy 8893f913)"
+  parameter: retryOn.gateway-error
+  value: not-sent,reset,timeout,status-502,status-503,status-504
+  unit: failure-classes      # 502, 503, 504 (isGatewayError) and every reset
+  source: https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/retry_state_impl.cc
+  verified_by: source
+
+- library: istio
+  versions: "1.31 (Envoy 8893f913)"
+  parameter: retryOn.retriable-4xx
+  value: status-409
+  unit: failure-classes      # 409 Conflict only (wouldRetryFromHeaders)
+  source: https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/retry_state_impl.cc
+  verified_by: source
+
+- library: istio
+  versions: "1.31 (Envoy 8893f913)"
+  parameter: retryOn.retriable-status-codes
+  value: none
+  unit: failure-classes      # the codes themselves are separate retryOn entries in Istio, mapped by status
+  source: https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/retry_state_impl.cc
+  verified_by: source
+
+- library: istio
+  versions: "1.31 (Envoy 8893f913)"
+  parameter: retryOn.cancelled
+  value: none
+  unit: failure-classes      # reads the grpc-status response header; an HTTP edge has none
+  source: https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/retry_state_impl.cc
+  verified_by: source
+
+- library: istio
+  versions: "1.31 (Envoy 8893f913)"
+  parameter: retryOn.deadline-exceeded
+  value: none
+  unit: failure-classes      # reads the grpc-status response header; an HTTP edge has none
+  source: https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/retry_state_impl.cc
+  verified_by: source
+
+- library: istio
+  versions: "1.31 (Envoy 8893f913)"
+  parameter: retryOn.internal
+  value: none
+  unit: failure-classes      # reads the grpc-status response header; an HTTP edge has none
+  source: https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/retry_state_impl.cc
+  verified_by: source
+
+- library: istio
+  versions: "1.31 (Envoy 8893f913)"
+  parameter: retryOn.resource-exhausted
+  value: none
+  unit: failure-classes      # reads the grpc-status response header; an HTTP edge has none
+  source: https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/retry_state_impl.cc
+  verified_by: source
+
+- library: istio
+  versions: "1.31 (Envoy 8893f913)"
+  parameter: retryOn.unavailable
+  value: none
+  unit: failure-classes      # reads the grpc-status response header; an HTTP edge has none
+  source: https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/retry_state_impl.cc
+  verified_by: source
+
+# ADR 0014: what the sidecar answers its caller once it gives up. A response status passes through unchanged.
+- library: istio
+  versions: "1.31 (Envoy 8893f913)"
+  parameter: givesUpAs.not-sent
+  value: status-503
+  unit: failure-classes      # onUpstreamReset: 503 after a connection failure
+  source: https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/router.cc
+  verified_by: source
+
+- library: istio
+  versions: "1.31 (Envoy 8893f913)"
+  parameter: givesUpAs.reset
+  value: status-503,status-502
+  unit: failure-classes      # onUpstreamReset: 503, or 502 after a protocol error
+  source: https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/router.cc
+  verified_by: source
+
+- library: istio
+  versions: "1.31 (Envoy 8893f913)"
+  parameter: givesUpAs.timeout
+  value: status-504
+  unit: failure-classes      # onPerTryTimeoutCommon: timeout_response_code_, 504 by default (router.h)
+  source: https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/router.cc
+  verified_by: source

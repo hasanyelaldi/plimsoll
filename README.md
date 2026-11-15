@@ -108,6 +108,7 @@ edges:
 - Durations are strings (`300ms`, `1s`). `perTryTimeout` and `overallTimeout` also take `unlimited`.
 - Layer `kind` is `resilience4j` (attempts as `maxAttempts`), `istio` (`attempts`, retries only), `http-client` or `generic` (`totalAttempts`). See [Attempt counting](#attempt-counting).
 - A layer also takes `perTryTimeout`, `backoff`, `multiplier`, `maxBackoff`, `jitter`, `retryOn` and `overallTimeout`; an edge takes `operation`, `idempotent`, `fanout` and `choice`.
+- `retryOn` lists the failure classes the layer retries ([ADR 0014](docs/adr/0014-failure-classes-and-retry-conditions.md)): `not-sent`, `reset`, `timeout`, `status-500`, `status-502`, `status-503`, `status-504`, `status-5xx-other`, `status-409`, `status-429`, `status-4xx-other`, or a status code such as `503`. Without it the layer retries every class.
 - Layers are listed outermost first.
 - An absent `multiplier` means fixed backoff, an absent `fanout` means 1; any other absent field is `UNKNOWN`.
 - `choice: <name>` marks edges from one service that are alternatives (only one is taken per request, [ADR 0012](docs/adr/0012-alternative-edges-in-amplification.md)).

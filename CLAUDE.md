@@ -65,7 +65,10 @@ record RetryPolicy(Val<Integer> totalAttempts,              // always counts the
                    Val<Duration> perTryTimeout,
                    Val<Duration> initialBackoff, Val<Double> multiplier, Val<Duration> maxBackoff,
                    Val<Boolean> jitter, Val<Set<String>> retryOn) {}
-record Layer(String kind, RetryPolicy retry, Val<Duration> overallTimeout) {}  // resilience4j | spring-cloud-gateway | istio | http-client | generic
+record Layer(String kind, RetryPolicy retry, Val<Duration> overallTimeout,
+             RetryConditions conditions) {}  // resilience4j | spring-cloud-gateway | istio | http-client | generic
+record RetryConditions(Val<Set<FailureClass>> retried,                      // UNKNOWN = every class (ADR 0014)
+                       Val<Map<FailureClass, Set<FailureClass>>> givesUpAs) {}  // absent key = passed on as is
 record Edge(String from, String to, String operation, Val<Boolean> idempotent,
             Val<Integer> fanout, List<Layer> layers, Val<String> choice) {}    // layers: outermost first; choice: null or the routing decision it is an alternative of (ADR 0012)
 record Service(String name, Val<Duration> deadline, boolean entry) {}
@@ -102,7 +105,7 @@ Exit codes: `0` no finding at or above `--fail-on` (default `ERROR`), `1` otherw
 
 ## Spec format and acceptance test
 
-Durations are strings (`300ms`, `1s`); `perTryTimeout` and `overallTimeout` also take `unlimited` for a timeout that does not exist (ADR 0011). In a hand-written spec an absent `multiplier` means fixed backoff (1.0) and an absent `fanout` means 1; any other absent field is `UNKNOWN`. An edge may say `choice: <name>`: edges from one service with the same choice are alternatives (ADR 0012).
+Durations are strings (`300ms`, `1s`); `perTryTimeout` and `overallTimeout` also take `unlimited` for a timeout that does not exist (ADR 0011). In a hand-written spec an absent `multiplier` means fixed backoff (1.0) and an absent `fanout` means 1; any other absent field is `UNKNOWN`. An edge may say `choice: <name>`: edges from one service with the same choice are alternatives (ADR 0012). A layer's `retryOn` lists failure classes (ADR 0014); absent means every class.
 
 In a collected graph (ADR 0009): `deadline` comes only from `deadline:` in the service's own `edges-hint.yaml`, never from its callers' or its own outbound timeouts, else `UNKNOWN`; a Spring Cloud Gateway with routes is an entry unless its hint says `entry: false`; `fanout` comes from the hint method entry, else `UNKNOWN` (A1 counts it as 1 and tags `depends-on-unknown`), and a gateway route has fanout 1.
 
