@@ -8,10 +8,13 @@ import io.github.hasanyelaldi.plimsoll.io.YamlTree.Node;
 import io.github.hasanyelaldi.plimsoll.io.YamlTree.Scalar;
 import io.github.hasanyelaldi.plimsoll.model.Durations;
 import io.github.hasanyelaldi.plimsoll.model.Edge;
+import io.github.hasanyelaldi.plimsoll.model.FailureClass;
 import io.github.hasanyelaldi.plimsoll.model.Layer;
+import io.github.hasanyelaldi.plimsoll.model.RetryConditions;
 import io.github.hasanyelaldi.plimsoll.model.RetryPolicy;
 import io.github.hasanyelaldi.plimsoll.model.Service;
 import io.github.hasanyelaldi.plimsoll.model.ServiceGraph;
+import io.github.hasanyelaldi.plimsoll.model.Source;
 import io.github.hasanyelaldi.plimsoll.model.Val;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -19,11 +22,15 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.stream.Collectors;
 
 /**
  * Loads the hand-written YAML spec. Attempt counts are normalized here, at the boundary:
@@ -165,7 +172,36 @@ public final class SpecLoader {
                 duration(m, "maxBackoff"),
                 booleanVal(m, "jitter"),
                 retryOn(m));
-        return new Layer(kind, retry, timeout(m, "overallTimeout"));
+        return new Layer(kind, retry, timeout(m, "overallTimeout"), conditions(kind, m));
+    }
+
+    /**
+     * ADR 0014: {@code retryOn} lists failure classes ({@code not-sent}, {@code status-503} or {@code 503}, ...). How
+     * a failure passes on is known for in-process kinds only; an istio or http-client layer may pass on any class.
+     */
+    private RetryConditions conditions(String kind, MapNode m) {
+        Val<Set<FailureClass>> retried;
+        Entry e = m.entries().get("retryOn");
+        if (e == null) {
+            retried = Val.unknown(absent("retryOn", m) + "; every failure class is retried");
+        } else {
+            Set<FailureClass> classes = EnumSet.noneOf(FailureClass.class);
+            for (Node n : list(e.value(), "retryOn").items()) {
+                String text = scalar(new Entry(e.keyLine(), n), "retryOn", null, "a list of strings or numbers").text();
+                classes.add(FailureClass.parse(text).orElseThrow(() -> error(e.keyLine(), "'retryOn': unknown failure "
+                        + "class '" + text + "' (expected " + Arrays.stream(FailureClass.values())
+                                .map(FailureClass::id).collect(Collectors.joining(", ")) + ", or a status code from 400)")));
+            }
+            retried = Val.explicit(Collections.unmodifiableSet(classes), at(e.keyLine()));
+        }
+        String kindAt = at(m.entries().get("kind").keyLine());
+        Val<Map<FailureClass, Set<FailureClass>>> givesUpAs = switch (kind) {
+            case "generic" -> Val.explicit(Map.of(), kindAt + " (a generic layer passes a failure on as it is)");
+            case "resilience4j" -> new Val<>(Map.of(), Source.LIBRARY_DEFAULT, kindAt + " (Resilience4j rethrows the "
+                    + "last try's exception, checked by RetryAttemptCountingOracleTest)");
+            default -> Val.unknown(kindAt + ": what a " + kind + " layer passes on is not modelled in a spec");
+        };
+        return new RetryConditions(retried, givesUpAs);
     }
 
     private Val<Set<String>> retryOn(MapNode m) {

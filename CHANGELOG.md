@@ -6,6 +6,17 @@ the report format and the rules.
 
 ## [Unreleased]
 
+### Analysis
+
+- Failure classes (ADR 0014, #24): a layer records which failures it retries and what it passes on once it gives up.
+  Istio's `retryOn` conditions and its 503/504 answers are mapped from the Envoy source of Istio 1.31's proxy. The
+  rules do not use them yet.
+
+### Spec format
+
+- `retryOn` lists failure classes (`not-sent`, `reset`, `timeout`, `status-503`, or a status code such as `503`);
+  any other name is invalid input (#24).
+
 ### CLI and report
 
 - SARIF: `tool.driver` carries the Plimsoll version (`version`, `semanticVersion`), so code scanning can tell when

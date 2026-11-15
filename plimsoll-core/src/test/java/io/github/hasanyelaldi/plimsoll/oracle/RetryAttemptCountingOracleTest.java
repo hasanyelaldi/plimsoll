@@ -7,6 +7,8 @@ import io.github.resilience4j.core.IntervalBiFunction;
 import io.github.resilience4j.core.functions.Either;
 import io.github.resilience4j.retry.Retry;
 import io.github.resilience4j.retry.RetryConfig;
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.time.Duration;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
@@ -61,6 +63,21 @@ class RetryAttemptCountingOracleTest {
         // The interval function gives the wait before retry n; read it instead of sleeping.
         assertThat(interval.apply(1, failure)).isEqualTo(500L);
         assertThat(interval.apply(2, failure)).isEqualTo(500L);
+    }
+
+    /** ADR 0014: Resilience4j runs in the caller's process and passes the last try's failure on as it is. */
+    @Test
+    void givingUpRethrowsTheLastTrysExceptionUnchanged() {
+        AtomicInteger calls = new AtomicInteger();
+        Supplier<String> failing = () -> {
+            throw new UncheckedIOException(new IOException("try " + calls.incrementAndGet()));
+        };
+        RetryConfig config = RetryConfig.custom().maxAttempts(3).waitDuration(Duration.ZERO).build();
+
+        assertThatThrownBy(Retry.decorateSupplier(Retry.of("oracle", config), failing)::get)
+                .isExactlyInstanceOf(UncheckedIOException.class)
+                .hasMessageContaining("try 3")
+                .hasCauseExactlyInstanceOf(IOException.class);
     }
 
     @Test

@@ -6,6 +6,7 @@ import io.github.hasanyelaldi.plimsoll.collect.istio.IstioCollector.Route;
 import io.github.hasanyelaldi.plimsoll.model.Durations;
 import io.github.hasanyelaldi.plimsoll.model.Edge;
 import io.github.hasanyelaldi.plimsoll.model.Layer;
+import io.github.hasanyelaldi.plimsoll.model.RetryConditions;
 import io.github.hasanyelaldi.plimsoll.model.RetryPolicy;
 import io.github.hasanyelaldi.plimsoll.model.Val;
 import java.time.Duration;
@@ -118,7 +119,9 @@ public final class GraphAssembler {
                 agreed(to, routes, "maxBackoff", p -> p.retry().maxBackoff()),
                 agreed(to, routes, "jitter", p -> p.retry().jitter()),
                 agreed(to, routes, "retryOn", p -> p.retry().retryOn()));
-        return new Layer(ISTIO, retry, agreed(to, routes, "overallTimeout", Layer::overallTimeout));
+        return new Layer(ISTIO, retry, agreed(to, routes, "overallTimeout", Layer::overallTimeout),
+                new RetryConditions(agreed(to, routes, "retried failure classes", l -> l.conditions().retried()),
+                        agreed(to, routes, "givesUpAs", l -> l.conditions().givesUpAs())));
     }
 
     private static <T> Val<T> agreed(String to, List<Route> routes, String name, Function<Layer, Val<T>> field) {
