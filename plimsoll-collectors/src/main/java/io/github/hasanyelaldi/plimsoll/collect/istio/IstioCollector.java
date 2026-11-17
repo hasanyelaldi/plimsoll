@@ -24,9 +24,6 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
-import java.util.EnumMap;
-import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -265,62 +262,16 @@ public final class IstioCollector {
                 field(retries, "retryOn", e -> conditions(text(e.value(), "retryOn")),
                         () -> kb.defaultOr(KB, "retries.retryOn", IstioCollector::conditions, absent)));
         return new Layer("istio", retry, routeTimeout,
-                new RetryConditions(retried(retry.retryOn()), givesUpAs()));
+                new RetryConditions(retried(retry.retryOn()), kb.givesUpAs(KB)));
     }
 
     /**
-     * ADR 0014: the failure classes the conditions retry, from the knowledge base. A status code is a condition of
-     * its own (Istio adds it to Envoy's retriable status codes). A condition without a verified entry leaves the
-     * classes UNKNOWN, so every class counts as retried.
+     * ADR 0014: the failure classes the conditions retry. A status code is a condition of its own (Istio adds it to
+     * Envoy's retriable status codes).
      */
     private Val<Set<FailureClass>> retried(Val<Set<String>> conditions) {
-        if (!conditions.isKnown()) {
-            return Val.unknown(conditions.evidence() + "; every failure class is retried");
-        }
-        Set<FailureClass> classes = EnumSet.noneOf(FailureClass.class);
-        Set<String> sources = new TreeSet<>();
-        for (String condition : new TreeSet<>(conditions.value())) {
-            if (condition.matches("\\d{3}")) {
-                FailureClass.status(Integer.parseInt(condition)).ifPresent(classes::add);
-                continue;
-            }
-            Optional<DefaultsKb.Entry> e = kb.lookup(KB, "retryOn." + condition);
-            if (e.isEmpty()) {
-                return Val.unknown(conditions.evidence() + "; no verified istio mapping for retryOn condition '"
-                        + condition + "', so every failure class is retried");
-            }
-            classes.addAll(failureClasses(e.get().value()));
-            sources.add(e.get().evidence());
-        }
-        String evidence = conditions.evidence() + (sources.isEmpty() ? "" : "; classes: " + String.join("; ", sources));
-        return new Val<>(Collections.unmodifiableSet(classes), conditions.source(), evidence);
-    }
-
-    /** ADR 0014: what the sidecar answers its caller after giving up on a reset or a timeout. */
-    private Val<Map<FailureClass, Set<FailureClass>>> givesUpAs() {
-        Map<FailureClass, Set<FailureClass>> map = new EnumMap<>(FailureClass.class);
-        Set<String> sources = new TreeSet<>();
-        for (FailureClass from : List.of(FailureClass.NOT_SENT, FailureClass.RESET, FailureClass.TIMEOUT)) {
-            Optional<DefaultsKb.Entry> e = kb.lookup(KB, "givesUpAs." + from.id());
-            if (e.isEmpty()) {
-                return Val.unknown("no verified istio entry for givesUpAs." + from.id());
-            }
-            map.put(from, failureClasses(e.get().value()));
-            sources.add(e.get().evidence());
-        }
-        return new Val<>(Collections.unmodifiableMap(map), Source.LIBRARY_DEFAULT, String.join("; ", sources));
-    }
-
-    /** {@code status-503,status-502} or {@code none}. */
-    private static Set<FailureClass> failureClasses(String text) {
-        Set<FailureClass> out = EnumSet.noneOf(FailureClass.class);
-        if (!text.equals("none")) {
-            for (String id : text.split(",")) {
-                out.add(FailureClass.parse(id.strip()).orElseThrow(
-                        () -> new IllegalStateException("kb/defaults/istio.yaml: unknown failure class '" + id + "'")));
-            }
-        }
-        return Collections.unmodifiableSet(out);
+        return kb.retried(KB, conditions, c -> c.matches("\\d{3}")
+                ? FailureClass.status(Integer.parseInt(c)).map(Set::of).orElse(Set.of()) : null);
     }
 
     /** The route timeout Istio applies when none is set: none (ADR 0011), from the knowledge base. */

@@ -111,3 +111,105 @@
   unit: milliseconds          # bounds connection setup only, not a try; not modelled
   source: https://github.com/spring-cloud/spring-cloud-gateway/blob/v5.0.3/spring-cloud-gateway-server-webflux/src/main/java/org/springframework/cloud/gateway/config/HttpClientProperties.java
   verified_by: oracle
+
+# ADR 0014: the failure classes each Retry condition retries. `status <name>` entries cover the HttpStatus names;
+# a numeric status maps by its code. A condition not listed here leaves the classes UNKNOWN. `method` entries are
+# applied by the collector, which gives a route one try when its method is not retried.
+- library: spring-cloud-gateway
+  versions: "5.0.3"
+  parameter: retryOn.series SERVER_ERROR
+  value: status-500,status-502,status-503,status-504,status-5xx-other
+  unit: failure-classes      # every 5xx response; 500 and 503 retried, 404 not (defaultsAreThreeRetriesOnGetFor5xx)
+  source: https://github.com/hasanyelaldi/plimsoll/blob/main/plimsoll-collectors/src/test/java/io/github/hasanyelaldi/plimsoll/collect/oracle/GatewayRetryOracleTest.java
+  verified_by: oracle
+
+- library: spring-cloud-gateway
+  versions: "5.0.3"
+  parameter: retryOn.java.io.IOException
+  value: not-sent,reset
+  unit: failure-classes      # a refused connection, a connect timeout and a closed connection are IOExceptions (connectionFailuresAndResetsAreRetriedByDefault)
+  source: https://github.com/hasanyelaldi/plimsoll/blob/main/plimsoll-collectors/src/test/java/io/github/hasanyelaldi/plimsoll/collect/oracle/GatewayRetryOracleTest.java
+  verified_by: oracle
+
+- library: spring-cloud-gateway
+  versions: "5.0.3"
+  parameter: retryOn.org.springframework.cloud.gateway.support.TimeoutException
+  value: timeout
+  unit: failure-classes      # the response timeout of a try (responseTimeoutOfATryIsRetried)
+  source: https://github.com/hasanyelaldi/plimsoll/blob/main/plimsoll-collectors/src/test/java/io/github/hasanyelaldi/plimsoll/collect/oracle/GatewayRetryOracleTest.java
+  verified_by: oracle
+
+- library: spring-cloud-gateway
+  versions: "5.0.3"
+  parameter: retryOn.status INTERNAL_SERVER_ERROR
+  value: status-500
+  unit: failure-classes      # HttpStatus.INTERNAL_SERVER_ERROR is 500
+  source: https://docs.spring.io/spring-framework/docs/7.0.x/javadoc-api/org/springframework/http/HttpStatus.html
+  verified_by: doc
+
+- library: spring-cloud-gateway
+  versions: "5.0.3"
+  parameter: retryOn.status BAD_GATEWAY
+  value: status-502
+  unit: failure-classes      # HttpStatus.BAD_GATEWAY is 502
+  source: https://docs.spring.io/spring-framework/docs/7.0.x/javadoc-api/org/springframework/http/HttpStatus.html
+  verified_by: doc
+
+- library: spring-cloud-gateway
+  versions: "5.0.3"
+  parameter: retryOn.status SERVICE_UNAVAILABLE
+  value: status-503
+  unit: failure-classes      # HttpStatus.SERVICE_UNAVAILABLE is 503
+  source: https://docs.spring.io/spring-framework/docs/7.0.x/javadoc-api/org/springframework/http/HttpStatus.html
+  verified_by: doc
+
+- library: spring-cloud-gateway
+  versions: "5.0.3"
+  parameter: retryOn.status GATEWAY_TIMEOUT
+  value: status-504
+  unit: failure-classes      # HttpStatus.GATEWAY_TIMEOUT is 504
+  source: https://docs.spring.io/spring-framework/docs/7.0.x/javadoc-api/org/springframework/http/HttpStatus.html
+  verified_by: doc
+
+- library: spring-cloud-gateway
+  versions: "5.0.3"
+  parameter: retryOn.status CONFLICT
+  value: status-409
+  unit: failure-classes      # HttpStatus.CONFLICT is 409
+  source: https://docs.spring.io/spring-framework/docs/7.0.x/javadoc-api/org/springframework/http/HttpStatus.html
+  verified_by: doc
+
+- library: spring-cloud-gateway
+  versions: "5.0.3"
+  parameter: retryOn.status TOO_MANY_REQUESTS
+  value: status-429
+  unit: failure-classes      # HttpStatus.TOO_MANY_REQUESTS is 429
+  source: https://docs.spring.io/spring-framework/docs/7.0.x/javadoc-api/org/springframework/http/HttpStatus.html
+  verified_by: doc
+
+# ADR 0014: what the gateway answers once Retry gives up (whatTheGatewayAnswersAfterGivingUp). A response status
+# passes through. A refused connection, a connect timeout or a closed connection gives 500; an lb:// service without
+# instances gives 503 and is not retried (aServiceWithoutInstancesIsNotRetried); a response timeout gives 504.
+- library: spring-cloud-gateway
+  versions: "5.0.3"
+  parameter: givesUpAs.not-sent
+  value: status-500,status-503
+  unit: failure-classes
+  source: https://github.com/hasanyelaldi/plimsoll/blob/main/plimsoll-collectors/src/test/java/io/github/hasanyelaldi/plimsoll/collect/oracle/GatewayRetryOracleTest.java
+  verified_by: oracle
+
+- library: spring-cloud-gateway
+  versions: "5.0.3"
+  parameter: givesUpAs.reset
+  value: status-500
+  unit: failure-classes
+  source: https://github.com/hasanyelaldi/plimsoll/blob/main/plimsoll-collectors/src/test/java/io/github/hasanyelaldi/plimsoll/collect/oracle/GatewayRetryOracleTest.java
+  verified_by: oracle
+
+- library: spring-cloud-gateway
+  versions: "5.0.3"
+  parameter: givesUpAs.timeout
+  value: status-504
+  unit: failure-classes
+  source: https://github.com/hasanyelaldi/plimsoll/blob/main/plimsoll-collectors/src/test/java/io/github/hasanyelaldi/plimsoll/collect/oracle/GatewayRetryOracleTest.java
+  verified_by: oracle

@@ -4,7 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
 import io.github.resilience4j.timelimiter.TimeLimiterConfig;
+import io.netty.channel.ConnectTimeoutException;
 import java.io.IOException;
+import java.net.ConnectException;
 import java.net.URI;
 import java.time.Duration;
 import java.util.ArrayList;
@@ -12,6 +14,7 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 import org.reactivestreams.Publisher;
+import reactor.netty.http.client.PrematureCloseException;
 import org.springframework.boot.ApplicationContextFactory;
 import org.springframework.boot.WebApplicationType;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
@@ -22,6 +25,7 @@ import org.springframework.cloud.circuitbreaker.resilience4j.Resilience4JConfigB
 import org.springframework.cloud.client.circuitbreaker.Customizer;
 import org.springframework.cloud.gateway.filter.GlobalFilter;
 import org.springframework.cloud.gateway.route.Route;
+import org.springframework.cloud.gateway.support.NotFoundException;
 import org.springframework.cloud.gateway.support.ServerWebExchangeUtils;
 import org.springframework.cloud.gateway.support.TimeoutException;
 import org.springframework.context.ConfigurableApplicationContext;
@@ -64,7 +68,14 @@ class GatewayRetryOracleTest {
     static final String[] GATEWAY_OFF = {"spring.cloud.gateway.server.webflux.enabled=false",
             "spring.cloud.circuitbreaker.resilience4j.enabled=false"};
 
-    enum Answer { STATUS, IO_ERROR, RESPONSE_TIMEOUT, HANG }
+    /**
+     * The connection failures are the exceptions Reactor Netty emits: a refused connection is Netty's
+     * {@code AnnotatedConnectException}, a {@link ConnectException}; a connect timeout is Netty's
+     * {@link ConnectTimeoutException}; a connection closed before the response is {@link PrematureCloseException}.
+     * {@code NO_INSTANCE} is what {@code ReactiveLoadBalancerClientFilter} throws for an {@code lb://} service without
+     * instances, a 503 unless {@code use404} is set.
+     */
+    enum Answer { STATUS, IO_ERROR, RESPONSE_TIMEOUT, HANG, CONNECT_REFUSED, CONNECT_TIMEOUT, CLOSED, NO_INSTANCE }
 
     /** The upstream: runs once per try, before {@code NettyRoutingFilter}, and marks the exchange as routed. */
     static final class Upstream implements GlobalFilter, Ordered {
@@ -90,6 +101,10 @@ class GatewayRetryOracleTest {
                 case RESPONSE_TIMEOUT -> Mono.error(new ResponseStatusException(HttpStatus.GATEWAY_TIMEOUT,
                         "Response took longer than timeout", new TimeoutException("Response took longer than timeout")));
                 case HANG -> Mono.never();
+                case CONNECT_REFUSED -> Mono.error(new ConnectException("Connection refused: backend.invalid/10.0.0.1:8080"));
+                case CONNECT_TIMEOUT -> Mono.error(new ConnectTimeoutException("connection timed out: backend.invalid"));
+                case CLOSED -> Mono.error(PrematureCloseException.TEST_EXCEPTION);
+                case NO_INSTANCE -> Mono.error(NotFoundException.create(false, "Unable to find instance for backend"));
             };
         }
 
@@ -219,6 +234,36 @@ class GatewayRetryOracleTest {
                 "filters[0].args.methods=POST").tries()).isEqualTo(2);
         assertThat(send(HttpMethod.GET, Answer.RESPONSE_TIMEOUT, null, "filters[0].name=Retry",
                 "filters[0].args.exceptions=java.io.IOException").tries()).isEqualTo(1);
+    }
+
+    // ---- failure classes (ADR 0014) ---------------------------------------
+
+    /** Retry's default exceptions: a refused connection, a connect timeout and a closed connection are IOExceptions. */
+    @Test
+    void connectionFailuresAndResetsAreRetriedByDefault() {
+        for (Answer a : List.of(Answer.CONNECT_REFUSED, Answer.CONNECT_TIMEOUT, Answer.CLOSED)) {
+            assertThat(send(HttpMethod.GET, a, null, "filters[0].name=Retry").tries()).as(a.name()).isEqualTo(4);
+        }
+    }
+
+    /** A service without instances is not an IOException: not retried, even though nothing was sent. */
+    @Test
+    void aServiceWithoutInstancesIsNotRetried() {
+        Outcome o = send(HttpMethod.GET, Answer.NO_INSTANCE, null, "filters[0].name=Retry");
+        assertThat(o.tries()).isEqualTo(1);
+        assertThat(o.status()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
+    }
+
+    /** What the gateway answers once Retry gives up: a status passes through; failures without one become 5xx. */
+    @Test
+    void whatTheGatewayAnswersAfterGivingUp() {
+        String[] retry = {"filters[0].name=Retry", "filters[0].args.retries=1"};
+        assertThat(send(HttpMethod.GET, Answer.STATUS, HttpStatus.BAD_GATEWAY, retry).status())
+                .isEqualTo(HttpStatus.BAD_GATEWAY);
+        assertThat(send(HttpMethod.GET, Answer.CONNECT_REFUSED, null, retry).status()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
+        assertThat(send(HttpMethod.GET, Answer.CONNECT_TIMEOUT, null, retry).status()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
+        assertThat(send(HttpMethod.GET, Answer.CLOSED, null, retry).status()).isEqualTo(HttpStatus.INTERNAL_SERVER_ERROR);
+        assertThat(send(HttpMethod.GET, Answer.RESPONSE_TIMEOUT, null, retry).status()).isEqualTo(HttpStatus.GATEWAY_TIMEOUT);
     }
 
     // ---- routes are alternatives (ADR 0012) -------------------------------
