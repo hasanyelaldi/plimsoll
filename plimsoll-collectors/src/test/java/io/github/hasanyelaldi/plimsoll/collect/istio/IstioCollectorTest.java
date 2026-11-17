@@ -108,7 +108,7 @@ class IstioCollectorTest {
                 """);
         Val<Set<FailureClass>> retried = IstioCollector.collect(dir).routes().get(0).layer().conditions().retried();
         assertThat(retried.source()).isEqualTo(Source.UNKNOWN);
-        assertThat(retried.evidence()).isEqualTo("vs.yaml:9; no verified istio mapping for retryOn condition "
+        assertThat(retried.evidence()).isEqualTo("vs.yaml:9; no verified istio mapping for retry condition "
                 + "'retriable-headers', so every failure class is retried");
     }
 

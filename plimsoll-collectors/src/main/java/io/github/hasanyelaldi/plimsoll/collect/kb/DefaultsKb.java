@@ -6,17 +6,22 @@ import io.github.hasanyelaldi.plimsoll.io.YamlTree.ListNode;
 import io.github.hasanyelaldi.plimsoll.io.YamlTree.MapNode;
 import io.github.hasanyelaldi.plimsoll.io.YamlTree.Node;
 import io.github.hasanyelaldi.plimsoll.io.YamlTree.Scalar;
+import io.github.hasanyelaldi.plimsoll.model.FailureClass;
 import io.github.hasanyelaldi.plimsoll.model.Source;
 import io.github.hasanyelaldi.plimsoll.model.Val;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
+import java.util.Collections;
+import java.util.EnumMap;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeSet;
 import java.util.function.Function;
 
 /**
@@ -78,6 +83,63 @@ public final class DefaultsKb {
         return lookup(library, parameter)
                 .map(e -> new Val<>(parse.apply(e.value()), Source.LIBRARY_DEFAULT, absent + "; " + e.evidence()))
                 .orElseGet(() -> Val.unknown(absent + "; no verified " + library + " default for " + parameter));
+    }
+
+    /**
+     * ADR 0014: the failure classes a layer's retry conditions retry, from the {@code retryOn.<condition>} entries.
+     * {@code direct} maps a condition without an entry (a status code), or returns null to look it up. A condition
+     * with neither leaves the classes UNKNOWN, so every class counts as retried.
+     */
+    public Val<Set<FailureClass>> retried(String library, Val<Set<String>> conditions,
+            Function<String, Set<FailureClass>> direct) {
+        if (!conditions.isKnown()) {
+            return Val.unknown(conditions.evidence() + "; every failure class is retried");
+        }
+        Set<FailureClass> classes = EnumSet.noneOf(FailureClass.class);
+        Set<String> sources = new TreeSet<>();
+        for (String condition : new TreeSet<>(conditions.value())) {
+            Set<FailureClass> mapped = direct.apply(condition);
+            if (mapped != null) {
+                classes.addAll(mapped);
+                continue;
+            }
+            Optional<Entry> e = lookup(library, "retryOn." + condition);
+            if (e.isEmpty()) {
+                return Val.unknown(conditions.evidence() + "; no verified " + library + " mapping for retry condition '"
+                        + condition + "', so every failure class is retried");
+            }
+            classes.addAll(failureClasses(e.get()));
+            sources.add(e.get().evidence());
+        }
+        String evidence = conditions.evidence() + (sources.isEmpty() ? "" : "; classes: " + String.join("; ", sources));
+        return new Val<>(Collections.unmodifiableSet(classes), conditions.source(), evidence);
+    }
+
+    /** ADR 0014: what a layer answers the layer outside once it gives up, from the {@code givesUpAs.<class>} entries. */
+    public Val<Map<FailureClass, Set<FailureClass>>> givesUpAs(String library) {
+        Map<FailureClass, Set<FailureClass>> map = new EnumMap<>(FailureClass.class);
+        Set<String> sources = new TreeSet<>();
+        for (FailureClass from : List.of(FailureClass.NOT_SENT, FailureClass.RESET, FailureClass.TIMEOUT)) {
+            Optional<Entry> e = lookup(library, "givesUpAs." + from.id());
+            if (e.isEmpty()) {
+                return Val.unknown("no verified " + library + " entry for givesUpAs." + from.id());
+            }
+            map.put(from, failureClasses(e.get()));
+            sources.add(e.get().evidence());
+        }
+        return new Val<>(Collections.unmodifiableMap(map), Source.LIBRARY_DEFAULT, String.join("; ", sources));
+    }
+
+    /** {@code status-503,status-502} or {@code none}. */
+    private static Set<FailureClass> failureClasses(Entry e) {
+        Set<FailureClass> out = EnumSet.noneOf(FailureClass.class);
+        if (!e.value().equals("none")) {
+            for (String id : e.value().split(",")) {
+                out.add(FailureClass.parse(id.strip()).orElseThrow(() -> new InvalidSpecException("kb/defaults/"
+                        + e.library() + ".yaml: " + e.parameter() + ": unknown failure class '" + id.strip() + "'")));
+            }
+        }
+        return Collections.unmodifiableSet(out);
     }
 
     private List<Entry> entries(String library) {

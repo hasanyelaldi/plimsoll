@@ -142,3 +142,6 @@ A non-idempotent edge is a risk when a failure the callee may have processed is 
 - A1 details get per-class lines for collected graphs where conditions are known. Hand-written specs without
   `retryOn` report exactly as before.
 - gRPC edges are out of scope. A gRPC callee would need its own classes.
+- The gateway oracle (#24) shows that it answers 500 after a connection failure or reset and 504 after a response
+  timeout. An `lb://` service without instances is `not-sent`, but the gateway answers 503 and does not retry it.
+  `not-sent` stays in the retried classes, because a refused connection is retried.

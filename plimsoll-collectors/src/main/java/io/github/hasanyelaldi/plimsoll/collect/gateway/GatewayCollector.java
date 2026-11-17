@@ -11,7 +11,9 @@ import io.github.hasanyelaldi.plimsoll.collect.spring.RequestMappingScanner.Mapp
 import io.github.hasanyelaldi.plimsoll.io.InvalidSpecException;
 import io.github.hasanyelaldi.plimsoll.model.Durations;
 import io.github.hasanyelaldi.plimsoll.model.Edge;
+import io.github.hasanyelaldi.plimsoll.model.FailureClass;
 import io.github.hasanyelaldi.plimsoll.model.Layer;
+import io.github.hasanyelaldi.plimsoll.model.RetryConditions;
 import io.github.hasanyelaldi.plimsoll.model.RetryPolicy;
 import io.github.hasanyelaldi.plimsoll.model.Source;
 import io.github.hasanyelaldi.plimsoll.model.Val;
@@ -310,7 +312,7 @@ public final class GatewayCollector {
                                 + "); route " + id + " serves " + String.join(", ",
                                         operations.value().stream().map(Operation::describe).toList());
                         layer = new Layer(KIND, noRetry(new Val<>(1, methods.source(), why), perTry),
-                                Val.unknown("no retry"));
+                                Val.unknown("no retry"), conditions(Val.unknown(why)));
                     }
                     retried.addAll(repeated);
                 } else {
@@ -321,7 +323,8 @@ public final class GatewayCollector {
         }
         if (layers.isEmpty()) {
             String why = "no Retry filter on route " + id + " (" + evidenceOf(route) + ") or in default-filters";
-            layers.add(new Layer(KIND, noRetry(Val.explicit(1, why), perTry), Val.unknown("no Retry filter")));
+            layers.add(new Layer(KIND, noRetry(Val.explicit(1, why), perTry), Val.unknown("no Retry filter"),
+                    conditions(Val.unknown(why))));
         }
         Val<Boolean> idempotent;
         if (!operations.isKnown()) {
@@ -609,7 +612,7 @@ public final class GatewayCollector {
 
         RetryPolicy retry = new RetryPolicy(attempts, perTry, initial, multiplier, maxBackoff, jitter,
                 retryOn(f, filter));
-        return new Layer(KIND, retry, overall);
+        return new Layer(KIND, retry, overall, conditions(retry.retryOn()));
     }
 
     /** Status codes and series (combined with OR), exceptions, and the methods all of them apply to. */
@@ -640,6 +643,21 @@ public final class GatewayCollector {
             source = Source.LIBRARY_DEFAULT;
         }
         return new Val<>(Set.copyOf(on), source, filter + ": " + String.join("; ", evidence));
+    }
+
+    /**
+     * ADR 0014: the failure classes of a Retry filter's conditions, and what the gateway answers once it gives up.
+     * {@code method} entries are skipped: a route whose method is not repeated already has one try. A numeric status
+     * maps by its code.
+     */
+    private RetryConditions conditions(Val<Set<String>> on) {
+        return new RetryConditions(kb.retried(KB, on, c -> {
+            if (c.startsWith("method ")) {
+                return Set.of();
+            }
+            Matcher m = Pattern.compile("status (\\d{3})").matcher(c);
+            return m.matches() ? FailureClass.status(Integer.parseInt(m.group(1))).map(Set::of).orElse(Set.of()) : null;
+        }), kb.givesUpAs(KB));
     }
 
     /** The methods a Retry filter repeats: its {@code methods}, or the default. */

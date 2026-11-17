@@ -16,7 +16,9 @@ import io.github.hasanyelaldi.plimsoll.collect.spring.SpringProperties;
 import io.github.hasanyelaldi.plimsoll.io.InvalidSpecException;
 import io.github.hasanyelaldi.plimsoll.model.Durations;
 import io.github.hasanyelaldi.plimsoll.model.Edge;
+import io.github.hasanyelaldi.plimsoll.model.FailureClass;
 import io.github.hasanyelaldi.plimsoll.model.Layer;
+import io.github.hasanyelaldi.plimsoll.model.RetryConditions;
 import io.github.hasanyelaldi.plimsoll.model.RetryPolicy;
 import io.github.hasanyelaldi.plimsoll.model.Service;
 import io.github.hasanyelaldi.plimsoll.model.ServiceGraph;
@@ -27,6 +29,7 @@ import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.junit.jupiter.api.Test;
 
 class GatewayCollectorTest {
@@ -429,6 +432,48 @@ class GatewayCollectorTest {
         assertThat(retry.retryOn().value()).containsExactlyInAnyOrder("status BAD_GATEWAY", "status GATEWAY_TIMEOUT",
                 "method GET", "method POST", "java.io.IOException");
         assertThat(retry.retryOn().source()).isEqualTo(Source.EXPLICIT);
+    }
+
+    /** ADR 0014: the default conditions retry every 5xx, connection failures, resets and response timeouts. */
+    @Test
+    void defaultConditionsMapToFailureClasses() {
+        RetryConditions c = only(collect(route("- name: Retry"))).conditions();
+        assertThat(c.retried().value()).containsExactlyInAnyOrder(FailureClass.NOT_SENT, FailureClass.RESET,
+                FailureClass.TIMEOUT, FailureClass.STATUS_500, FailureClass.STATUS_502, FailureClass.STATUS_503,
+                FailureClass.STATUS_504, FailureClass.STATUS_5XX_OTHER);
+        assertThat(c.retried().source()).isEqualTo(Source.LIBRARY_DEFAULT);
+        assertThat(c.retried().evidence()).contains("classes: spring-cloud-gateway 5.0.3 default (verified by oracle)");
+        assertThat(c.givesUpAs().value()).isEqualTo(Map.of(
+                FailureClass.NOT_SENT, Set.of(FailureClass.STATUS_500, FailureClass.STATUS_503),
+                FailureClass.RESET, Set.of(FailureClass.STATUS_500),
+                FailureClass.TIMEOUT, Set.of(FailureClass.STATUS_504)));
+    }
+
+    @Test
+    void listedStatusesAndExceptionsMapToTheirClasses() {
+        RetryConditions c = only(collect(route("""
+                - name: Retry
+                  args: { series: [], statuses: [ BAD_GATEWAY, 504 ], methods: [ GET, POST ], exceptions: java.io.IOException }
+                """))).conditions();
+        assertThat(c.retried().value()).containsExactlyInAnyOrder(FailureClass.NOT_SENT, FailureClass.RESET,
+                FailureClass.STATUS_502, FailureClass.STATUS_504);
+        assertThat(c.retried().source()).isEqualTo(Source.EXPLICIT);
+    }
+
+    @Test
+    void anUnmappedExceptionLeavesTheClassesUnknown() {
+        RetryConditions c = only(collect(route(
+                "- { name: Retry, args: { exceptions: java.net.SocketException } }"))).conditions();
+        assertThat(c.retried().source()).isEqualTo(Source.UNKNOWN);
+        assertThat(c.retried().evidence()).contains("no verified spring-cloud-gateway mapping for retry condition "
+                + "'java.net.SocketException', so every failure class is retried");
+    }
+
+    @Test
+    void aRouteWithoutRetryStillSaysWhatTheGatewayAnswers() {
+        Layer layer = only(collect(route("- StripPrefix=1")));
+        assertThat(layer.retry().totalAttempts().value()).isEqualTo(1);
+        assertThat(layer.conditions().givesUpAs().source()).isEqualTo(Source.LIBRARY_DEFAULT);
     }
 
     @Test
