@@ -7,10 +7,13 @@ import io.github.hasanyelaldi.plimsoll.analysis.AnalysisOptions;
 import io.github.hasanyelaldi.plimsoll.analysis.AnalysisResult;
 import io.github.hasanyelaldi.plimsoll.analysis.Analyzer;
 import io.github.hasanyelaldi.plimsoll.analysis.ServiceAmplification;
+import io.github.hasanyelaldi.plimsoll.collect.kb.DefaultsKb;
 import io.github.hasanyelaldi.plimsoll.collect.resilience4j.Resilience4jCollector.Result;
 import io.github.hasanyelaldi.plimsoll.io.InvalidSpecException;
 import io.github.hasanyelaldi.plimsoll.model.Edge;
+import io.github.hasanyelaldi.plimsoll.model.FailureClass;
 import io.github.hasanyelaldi.plimsoll.model.Layer;
+import io.github.hasanyelaldi.plimsoll.model.RetryConditions;
 import io.github.hasanyelaldi.plimsoll.model.RetryPolicy;
 import io.github.hasanyelaldi.plimsoll.model.Service;
 import io.github.hasanyelaldi.plimsoll.model.ServiceGraph;
@@ -24,6 +27,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -59,6 +63,28 @@ class Resilience4jCollectorTest {
         assertThat(p.initialBackoff().value()).isEqualTo(Duration.ofMillis(100));
         assertThat(p.perTryTimeout()).isEqualTo(Val.explicit(Duration.ofMillis(800), "src/main/resources/application.yml:15"));
         assertThat(layer.overallTimeout().source()).isEqualTo(Source.UNKNOWN);
+    }
+
+    /** ADR 0014: without retryExceptions every exception is retried, so every failure class; failures pass on as is. */
+    @Test
+    void defaultRetryConditionsCoverEveryFailureClass() {
+        RetryConditions c = edge("GET /owners/{id}").layers().get(0).conditions();
+        assertThat(c.retried().value()).containsExactlyInAnyOrder(FailureClass.values());
+        assertThat(c.retried().source()).isEqualTo(Source.LIBRARY_DEFAULT);
+        assertThat(c.retried().evidence()).startsWith("retryExceptions not configured; resilience4j-retry 2.4.0 default "
+                + "(verified by oracle)");
+        assertThat(c.givesUpAs().value()).isEqualTo(Map.of(FailureClass.NOT_SENT, Set.of(FailureClass.NOT_SENT),
+                FailureClass.RESET, Set.of(FailureClass.RESET), FailureClass.TIMEOUT, Set.of(FailureClass.TIMEOUT)));
+    }
+
+    /** Which exception an HTTP client throws for a failure is client-specific, so listed exceptions are not mapped. */
+    @Test
+    void listedRetryExceptionsLeaveTheClassesUnknown() {
+        Val<Set<FailureClass>> retried = DefaultsKb.classpath().retried(Resilience4jConfig.RETRY_KB,
+                Val.explicit(Set.of("java.io.IOException"), "application.yml:9 (retryExceptions)"), c -> null);
+        assertThat(retried.source()).isEqualTo(Source.UNKNOWN);
+        assertThat(retried.evidence()).isEqualTo("application.yml:9 (retryExceptions); no verified resilience4j-retry "
+                + "mapping for retry condition 'java.io.IOException', so every failure class is retried");
     }
 
     @Test

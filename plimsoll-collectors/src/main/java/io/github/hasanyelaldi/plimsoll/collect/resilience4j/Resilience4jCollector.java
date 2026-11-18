@@ -11,6 +11,7 @@ import io.github.hasanyelaldi.plimsoll.collect.spring.SpringProperties;
 import io.github.hasanyelaldi.plimsoll.io.InvalidSpecException;
 import io.github.hasanyelaldi.plimsoll.model.Edge;
 import io.github.hasanyelaldi.plimsoll.model.Layer;
+import io.github.hasanyelaldi.plimsoll.model.RetryConditions;
 import io.github.hasanyelaldi.plimsoll.model.RetryPolicy;
 import io.github.hasanyelaldi.plimsoll.model.Val;
 import java.nio.file.Path;
@@ -204,7 +205,10 @@ public final class Resilience4jCollector {
         }
         RetryPolicy withTimeout = new RetryPolicy(retry.totalAttempts(), perTry, retry.initialBackoff(),
                 retry.multiplier(), retry.maxBackoff(), retry.jitter(), retry.retryOn());
-        return new Layer("resilience4j", withTimeout, overall);
+        // ADR 0014: listed retryExceptions have no mapping, so they leave the classes UNKNOWN.
+        return new Layer("resilience4j", withTimeout, overall, new RetryConditions(
+                kb.retried(Resilience4jConfig.RETRY_KB, retry.retryOn(), c -> null),
+                kb.givesUpAs(Resilience4jConfig.RETRY_KB)));
     }
 
     private static String named(Val<String> name) {

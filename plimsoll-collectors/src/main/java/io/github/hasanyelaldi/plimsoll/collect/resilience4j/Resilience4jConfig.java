@@ -130,7 +130,7 @@ public final class Resilience4jConfig {
                 fixedBackoffFrom(wait),
                 Val.unknown("fixed backoff, no cap"),
                 kb.defaultOr(SPRING_KB, "resilience4j.retry.enable-randomized-wait", Boolean::valueOf, absent),
-                Val.unknown("retryExceptions not configured; no verified default"));
+                kb.defaultOr(RETRY_KB, "retryExceptions", Set::of, "retryExceptions " + absent));
     }
 
     /** The default interval function waits the same {@code waitDuration} before every retry. */

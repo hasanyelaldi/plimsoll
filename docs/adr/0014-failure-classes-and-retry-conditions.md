@@ -145,3 +145,11 @@ A non-idempotent edge is a risk when a failure the callee may have processed is 
 - The gateway oracle (#24) shows that it answers 500 after a connection failure or reset and 504 after a response
   timeout. An `lb://` service without instances is `not-sent`, but the gateway answers 503 and does not retry it.
   `not-sent` stays in the retried classes, because a refused connection is retried.
+- The LoadBalancer oracle (#24) shows that the retryable exceptions are matched on the error and on its cause, so
+  the `WebClientRequestException` around a connection failure is retried. Reactor Netty's response timeout
+  (`ReadTimeoutException`) is not retried, but a `java.util.concurrent.TimeoutException` is, so `timeout` counts as
+  retried. Once the LoadBalancer gives up, the caller gets the last error, possibly inside Reactor's
+  `RetryExhaustedException`. A service without instances becomes a 503 response.
+- Resilience4j without `retryExceptions` retries every exception, so it retries every class. Listed exceptions are
+  not mapped, because which exception a client throws for each failure is client-specific; they leave the classes
+  `UNKNOWN`.

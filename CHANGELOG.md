@@ -11,8 +11,9 @@ the report format and the rules.
 - Failure classes (ADR 0014, #24): a layer records which failures it retries and what it passes on once it gives up.
   Istio's `retryOn` conditions and its 503/504 answers are mapped from the Envoy source of Istio 1.31's proxy;
   Spring Cloud Gateway's `Retry` conditions and its answers (500 after a connection failure or reset, 503 for a
-  service without instances, 504 after a response timeout) from oracle tests on the real gateway. The rules do not
-  use them yet.
+  service without instances, 504 after a response timeout) from oracle tests on the real gateway; Spring Cloud
+  LoadBalancer's retryable exceptions and status codes, and Resilience4j's default of retrying every exception, from
+  oracle tests too. The rules do not use them yet.
 
 ### Spec format
 

@@ -10,6 +10,9 @@ import io.github.resilience4j.retry.RetryConfig;
 import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.time.Duration;
+import java.util.List;
+import java.util.concurrent.Callable;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 import org.junit.jupiter.api.Test;
@@ -63,6 +66,22 @@ class RetryAttemptCountingOracleTest {
         // The interval function gives the wait before retry n; read it instead of sleeping.
         assertThat(interval.apply(1, failure)).isEqualTo(500L);
         assertThat(interval.apply(2, failure)).isEqualTo(500L);
+    }
+
+    /** ADR 0014: without retryExceptions, any exception is retried, checked or unchecked. */
+    @Test
+    void defaultsRetryEveryException() {
+        RetryConfig noWait = RetryConfig.custom().waitDuration(Duration.ZERO).build();
+        for (Exception failure : List.<Exception>of(new IOException("reset"), new TimeoutException("slow"),
+                new IllegalArgumentException("status 409"))) {
+            AtomicInteger calls = new AtomicInteger();
+            Callable<String> failing = () -> {
+                calls.incrementAndGet();
+                throw failure;
+            };
+            assertThatThrownBy(Retry.decorateCallable(Retry.of("oracle", noWait), failing)::call).isSameAs(failure);
+            assertThat(calls.get()).as(failure.toString()).isEqualTo(3);
+        }
     }
 
     /** ADR 0014: Resilience4j runs in the caller's process and passes the last try's failure on as it is. */

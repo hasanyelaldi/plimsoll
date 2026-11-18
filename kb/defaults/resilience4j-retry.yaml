@@ -15,3 +15,47 @@
   unit: duration-fixed        # same wait before every retry
   source: https://resilience4j.readme.io/docs/retry
   verified_by: oracle
+
+# ADR 0014: retryExceptions not configured retries every exception (defaultsRetryEveryException). Plimsoll assumes
+# the HTTP client raises every failure as an exception, statuses included, so every failure class counts as retried.
+# Listed exception classes are not mapped: which exception a client throws for a failure is client-specific.
+- library: resilience4j-retry
+  versions: "2.4.0"
+  parameter: retryExceptions
+  value: java.lang.Exception
+  unit: exceptions                 # any exception
+  source: https://github.com/hasanyelaldi/plimsoll/blob/main/plimsoll-core/src/test/java/io/github/hasanyelaldi/plimsoll/oracle/RetryAttemptCountingOracleTest.java
+  verified_by: oracle
+
+- library: resilience4j-retry
+  versions: "2.4.0"
+  parameter: retryOn.java.lang.Exception
+  value: not-sent,reset,timeout,status-500,status-502,status-503,status-504,status-5xx-other,status-409,status-429,status-4xx-other
+  unit: failure-classes
+  source: https://github.com/hasanyelaldi/plimsoll/blob/main/plimsoll-core/src/test/java/io/github/hasanyelaldi/plimsoll/oracle/RetryAttemptCountingOracleTest.java
+  verified_by: oracle
+
+# ADR 0014: Resilience4j rethrows the last try's exception (givingUpRethrowsTheLastTrysExceptionUnchanged).
+- library: resilience4j-retry
+  versions: "2.4.0"
+  parameter: givesUpAs.not-sent
+  value: not-sent
+  unit: failure-classes
+  source: https://github.com/hasanyelaldi/plimsoll/blob/main/plimsoll-core/src/test/java/io/github/hasanyelaldi/plimsoll/oracle/RetryAttemptCountingOracleTest.java
+  verified_by: oracle
+
+- library: resilience4j-retry
+  versions: "2.4.0"
+  parameter: givesUpAs.reset
+  value: reset
+  unit: failure-classes
+  source: https://github.com/hasanyelaldi/plimsoll/blob/main/plimsoll-core/src/test/java/io/github/hasanyelaldi/plimsoll/oracle/RetryAttemptCountingOracleTest.java
+  verified_by: oracle
+
+- library: resilience4j-retry
+  versions: "2.4.0"
+  parameter: givesUpAs.timeout
+  value: timeout
+  unit: failure-classes
+  source: https://github.com/hasanyelaldi/plimsoll/blob/main/plimsoll-core/src/test/java/io/github/hasanyelaldi/plimsoll/oracle/RetryAttemptCountingOracleTest.java
+  verified_by: oracle

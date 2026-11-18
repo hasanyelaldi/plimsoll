@@ -59,3 +59,66 @@
   unit: boolean
   source: https://github.com/spring-cloud/spring-cloud-commons/blob/v5.0.3/spring-cloud-commons/src/main/java/org/springframework/cloud/client/loadbalancer/LoadBalancerProperties.java
   verified_by: source
+
+# ADR 0014: the failure classes of the retryable exceptions. They are checked on the error and on its cause, so the
+# WebClientRequestException that wraps a connection failure is retried (connectionFailuresAndResetsAreRetried...).
+# Reactor Netty's response timeout is a ReadTimeoutException and is not retried; a java.util.concurrent
+# TimeoutException is (onlyAJavaTimeoutIsRetried), so `timeout` counts as retried.
+- library: spring-cloud-loadbalancer
+  versions: "5.0.3"
+  parameter: retryOn.java.io.IOException
+  value: not-sent,reset
+  unit: failure-classes
+  source: https://github.com/hasanyelaldi/plimsoll/blob/main/plimsoll-collectors/src/test/java/io/github/hasanyelaldi/plimsoll/collect/oracle/LoadBalancerRetryOracleTest.java
+  verified_by: oracle
+
+- library: spring-cloud-loadbalancer
+  versions: "5.0.3"
+  parameter: retryOn.java.util.concurrent.TimeoutException
+  value: timeout
+  unit: failure-classes
+  source: https://github.com/hasanyelaldi/plimsoll/blob/main/plimsoll-collectors/src/test/java/io/github/hasanyelaldi/plimsoll/collect/oracle/LoadBalancerRetryOracleTest.java
+  verified_by: oracle
+
+- library: spring-cloud-loadbalancer
+  versions: "5.0.3"
+  parameter: retryOn.org.springframework.cloud.client.loadbalancer.RetryableStatusCodeException
+  value: none
+  unit: failure-classes            # the filter's own signal for a retryable status code; the codes are mapped by status
+  source: https://github.com/spring-cloud/spring-cloud-commons/blob/v5.0.3/spring-cloud-commons/src/main/java/org/springframework/cloud/client/loadbalancer/reactive/RetryableLoadBalancerExchangeFilterFunction.java
+  verified_by: source
+
+- library: spring-cloud-loadbalancer
+  versions: "5.0.3"
+  parameter: retryOn.org.springframework.cloud.client.loadbalancer.reactive.RetryableStatusCodeException
+  value: none
+  unit: failure-classes            # the filter's own signal for a retryable status code; the codes are mapped by status
+  source: https://github.com/spring-cloud/spring-cloud-commons/blob/v5.0.3/spring-cloud-commons/src/main/java/org/springframework/cloud/client/loadbalancer/reactive/RetryableLoadBalancerExchangeFilterFunction.java
+  verified_by: source
+
+# ADR 0014: what the caller gets once the LoadBalancer gives up: the last try's error, possibly inside Reactor's
+# RetryExhaustedException (givingUpPassesTheLastErrorOnAsTheCause); a service without instances is a 503 response,
+# never retried (aServiceWithoutInstancesAnswers503).
+- library: spring-cloud-loadbalancer
+  versions: "5.0.3"
+  parameter: givesUpAs.not-sent
+  value: not-sent,status-503
+  unit: failure-classes
+  source: https://github.com/hasanyelaldi/plimsoll/blob/main/plimsoll-collectors/src/test/java/io/github/hasanyelaldi/plimsoll/collect/oracle/LoadBalancerRetryOracleTest.java
+  verified_by: oracle
+
+- library: spring-cloud-loadbalancer
+  versions: "5.0.3"
+  parameter: givesUpAs.reset
+  value: reset
+  unit: failure-classes
+  source: https://github.com/hasanyelaldi/plimsoll/blob/main/plimsoll-collectors/src/test/java/io/github/hasanyelaldi/plimsoll/collect/oracle/LoadBalancerRetryOracleTest.java
+  verified_by: oracle
+
+- library: spring-cloud-loadbalancer
+  versions: "5.0.3"
+  parameter: givesUpAs.timeout
+  value: timeout
+  unit: failure-classes
+  source: https://github.com/hasanyelaldi/plimsoll/blob/main/plimsoll-collectors/src/test/java/io/github/hasanyelaldi/plimsoll/collect/oracle/LoadBalancerRetryOracleTest.java
+  verified_by: oracle
