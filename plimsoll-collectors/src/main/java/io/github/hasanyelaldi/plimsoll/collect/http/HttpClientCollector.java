@@ -8,7 +8,9 @@ import io.github.hasanyelaldi.plimsoll.collect.spring.SpringProperties.Property;
 import io.github.hasanyelaldi.plimsoll.io.InvalidSpecException;
 import io.github.hasanyelaldi.plimsoll.model.Durations;
 import io.github.hasanyelaldi.plimsoll.model.Edge;
+import io.github.hasanyelaldi.plimsoll.model.FailureClass;
 import io.github.hasanyelaldi.plimsoll.model.Layer;
+import io.github.hasanyelaldi.plimsoll.model.RetryConditions;
 import io.github.hasanyelaldi.plimsoll.model.RetryPolicy;
 import io.github.hasanyelaldi.plimsoll.model.Source;
 import io.github.hasanyelaldi.plimsoll.model.Val;
@@ -23,6 +25,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.regex.Pattern;
+import java.util.regex.Matcher;
 import java.util.function.Function;
 
 /**
@@ -228,7 +232,8 @@ public final class HttpClientCollector {
         }
         if (!enabled.value()) {
             String why = client + ": LoadBalancer retry off; " + enabled.evidence();
-            return new Layer(KIND, noRetry(new Val<>(1, enabled.source(), why), timeout), timeout);
+            return new Layer(KIND, noRetry(new Val<>(1, enabled.source(), why), timeout), timeout,
+                    conditions(Val.unknown(why)));
         }
 
         Val<Integer> same = setting("max-retries-on-same-service-instance", HttpClientCollector::retries,
@@ -273,8 +278,22 @@ public final class HttpClientCollector {
             jitter = new Val<>(false, backoff.source(), why);
         }
         RetryPolicy retry = new RetryPolicy(attempts, timeout, initial, multiplier, maxBackoff, jitter, retryOn(where));
-        return new Layer(KIND, retry, timeout);
+        return new Layer(KIND, retry, timeout, conditions(retry.retryOn()));
     }
+
+    /**
+     * ADR 0014: the failure classes of the LoadBalancer's retryable exceptions and status codes, and what it passes on
+     * once it gives up. A status code counts whatever the method: {@code (GET only)} is not narrowed to the edge's
+     * method, which keeps the classes an upper bound.
+     */
+    private RetryConditions conditions(Val<Set<String>> on) {
+        return new RetryConditions(kb.retried(LB_KB, on, c -> {
+            Matcher m = STATUS.matcher(c);
+            return m.matches() ? FailureClass.status(Integer.parseInt(m.group(1))).map(Set::of).orElse(Set.of()) : null;
+        }), kb.givesUpAs(LB_KB));
+    }
+
+    private static final Pattern STATUS = Pattern.compile("status (\\d{3})( \\(GET only\\))?");
 
     /** A {@code @LoadBalanced} RestTemplate or RestClient: blocking LoadBalancer retries, not verified yet. */
     private Layer unverifiedLoadBalanced(ClientCallScanner.ClientCall call) {

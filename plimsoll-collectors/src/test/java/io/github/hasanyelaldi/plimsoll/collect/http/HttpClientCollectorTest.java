@@ -8,7 +8,9 @@ import io.github.hasanyelaldi.plimsoll.collect.kb.DefaultsKb;
 import io.github.hasanyelaldi.plimsoll.collect.resilience4j.EdgesHint;
 import io.github.hasanyelaldi.plimsoll.collect.spring.SpringProperties;
 import io.github.hasanyelaldi.plimsoll.io.InvalidSpecException;
+import io.github.hasanyelaldi.plimsoll.model.FailureClass;
 import io.github.hasanyelaldi.plimsoll.model.Layer;
+import io.github.hasanyelaldi.plimsoll.model.RetryConditions;
 import io.github.hasanyelaldi.plimsoll.model.RetryPolicy;
 import io.github.hasanyelaldi.plimsoll.model.Source;
 import io.github.hasanyelaldi.plimsoll.model.Val;
@@ -108,6 +110,33 @@ class HttpClientCollectorTest {
                 .contains("status 502 (GET only)", "status 503 (GET only)", "java.io.IOException");
         assertThat(webClient(collect(base + "  retry-on-all-operations: true\n")).retry().retryOn().value())
                 .contains("status 502", "status 503");
+    }
+
+    /** ADR 0014: the retryable exceptions and status codes as failure classes; a service without instances is a 503. */
+    @Test
+    void retryConditionsMapToFailureClasses() {
+        RetryConditions c = webClient(collect("spring.cloud.loadbalancer.retry.enabled: true")).conditions();
+        assertThat(c.retried().value()).containsExactlyInAnyOrder(FailureClass.NOT_SENT, FailureClass.RESET,
+                FailureClass.TIMEOUT);
+        assertThat(c.retried().source()).isEqualTo(Source.LIBRARY_DEFAULT);
+        assertThat(c.givesUpAs().value()).containsEntry(FailureClass.NOT_SENT,
+                Set.of(FailureClass.NOT_SENT, FailureClass.STATUS_503));
+
+        RetryConditions codes = webClient(collect("""
+                spring.cloud.loadbalancer.retry:
+                  enabled: true
+                  retryable-status-codes: 503, 429
+                """)).conditions();
+        assertThat(codes.retried().value()).containsExactlyInAnyOrder(FailureClass.NOT_SENT, FailureClass.RESET,
+                FailureClass.TIMEOUT, FailureClass.STATUS_503, FailureClass.STATUS_429);
+        assertThat(codes.retried().source()).isEqualTo(Source.EXPLICIT);
+    }
+
+    @Test
+    void retryOffStillSaysWhatTheLoadBalancerPassesOn() {
+        Layer layer = webClient(collect("server.port: 8080"));
+        assertThat(layer.retry().totalAttempts().value()).isEqualTo(1);
+        assertThat(layer.conditions().givesUpAs().source()).isEqualTo(Source.LIBRARY_DEFAULT);
     }
 
     @Test
