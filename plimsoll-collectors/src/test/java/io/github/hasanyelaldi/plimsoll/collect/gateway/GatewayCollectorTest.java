@@ -217,9 +217,9 @@ class GatewayCollectorTest {
         assertThat(a.findings()).filteredOn(f -> f.ruleId().equals("PLM-A3"))
                 .extracting(Finding::severity, Finding::location, Finding::detail).containsExactly(
                         org.assertj.core.groups.Tuple.tuple(Severity.ERROR, "api-gateway→customers-service",
-                                "non-idempotent call retried, 2 tries"),
+                                "non-idempotent call retried, 2 tries (on reset)"),
                         org.assertj.core.groups.Tuple.tuple(Severity.ERROR, "api-gateway→visits-service",
-                                "non-idempotent call retried, 2 tries"));
+                                "non-idempotent call retried, 2 tries (on reset)"));
     }
 
     @Test

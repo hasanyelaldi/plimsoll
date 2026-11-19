@@ -8,7 +8,7 @@ Issue #9. Testbed choice: ADR 0005. The full generated report is in [`petclinic-
 | --- | --- |
 | spring-petclinic-microservices | `1d76b00d683e86b62867a6bf59530f8ab301244f` (7 Oct 2026), Spring Boot 4.0.1, Spring Cloud 2025.1.0 (Gateway 5.0.0) |
 | spring-petclinic-microservices-config | `323993ce2519c6d02df63e08bf4458d123d3b611` (2 May 2026), read by hand only |
-| Plimsoll | `3851edd` (main after #35); report regenerated after #23 (PLM-C1, Coverage section) after #37 (client calls in code), #38 (unlimited timeouts, ADR 0011) and #48 (alternative routes, ADR 0012), same command |
+| Plimsoll | `3851edd` (main after #35); report regenerated after #23 (PLM-C1, Coverage section) after #37 (client calls in code), #38 (unlimited timeouts, ADR 0011), #48 (alternative routes, ADR 0012) and #24 (A3 reads retry conditions, ADR 0014), same command |
 
 ```bash
 git clone https://github.com/spring-petclinic/spring-petclinic-microservices.git
@@ -35,9 +35,9 @@ After #37: **3 error, 5 warn, 16 info.** The graph has one entry (`api-gateway`)
 
 | Severity | Rule | Location | Detail |
 | --- | --- | --- | --- |
-| ERROR | A3 | api-gateway→customers-service | non-idempotent call retried, 2 tries |
-| ERROR | A3 | api-gateway→genai-service | non-idempotent call retried, 2 tries |
-| ERROR | A3 | api-gateway→visits-service | non-idempotent call retried, 2 tries |
+| ERROR | A3 | api-gateway→customers-service | non-idempotent call retried, 2 tries (on reset) |
+| ERROR | A3 | api-gateway→genai-service | non-idempotent call retried, 2 tries (on reset) |
+| ERROR | A3 | api-gateway→visits-service | non-idempotent call retried, 2 tries (on reset) |
 | WARN | A4 | api-gateway→customers-service, genai-service, visits-service | zero backoff |
 | WARN | C1 | api-gateway | Spring Cloud CircuitBreaker (programmatic) detected, not modelled |
 | WARN | C1 | genai-service | Spring AI retry detected, not modelled |
@@ -92,7 +92,7 @@ Each finding was checked against the petclinic sources at the pinned commit and 
 | Finding | Verdict | Notes |
 | --- | --- | --- |
 | A1 ×2 on customers, genai, visits; ×1 on vets | correct for the collected graph | Upper bound over the worst operation of the route: POST is retried once, GET is not. The real graph has more edges (see gaps), so these are lower than the true bound. |
-| A3 on customers, genai, visits | true positive, with a nuance | The filter retries POST on `503` and on the default exceptions `IOException` and `TimeoutException`. A `503` usually means the request was not processed, but a POST that fails with an `IOException` after it was sent can be applied twice (duplicate owner, pet, visit). For genai, a retried `POST /chatclient` also repeats a paid LLM call. A3 does not yet say which trigger makes the retry unsafe (comment on #24). |
+| A3 on customers, genai, visits | true positive, with a nuance | The filter retries POST on `503` and on the default exceptions `IOException` and `TimeoutException`. A `503` usually means the request was not processed, but a POST that fails with an `IOException` after it was sent can be applied twice (duplicate owner, pet, visit). For genai, a retried `POST /chatclient` also repeats a paid LLM call. Since #24 A3 names a class that makes the retry unsafe: `reset`, from `IOException` (gateway oracle); the finding lists every retried class with its source. |
 | A3 absent on vets | correct | vets-service has no POST; the Retry filter does not apply to its GETs. |
 | A4 zero backoff, no jitter | true positive | No `backoff` arguments on the filter; the config repository does not override them. |
 | A2a / A2b INFO | correct to stay silent | No deadline is configured anywhere; the response timeouts are known to be absent (#38). |
@@ -109,7 +109,6 @@ No false positives were found.
 | Programmatic Spring Cloud CircuitBreaker and its 10 s TimeLimiter | `ApiGatewayApplication.java:85-88`, `ApiGatewayController` (`getOwnerDetails` breaker) | #18 |
 | Breakers in the model | `CircuitBreaker` default filter and `genaiCircuitBreaker` with fallbacks; the order is known since #31 (listed before `Retry`, so it wraps all tries, and a timeout is not retried) | #22 |
 | Spring AI retry to the LLM provider | genai-service (`spring.ai.retry.*` not set, so the Spring AI defaults apply) | #19 |
-| Condition-aware A3 (which status or exception triggers the retry) | `statuses: SERVICE_UNAVAILABLE` plus default exceptions | #24 |
 
 The Coverage section of the report lists the files read for each of the 8 modules, the layer kinds searched on each of the 7 edges (`spring-cloud-gateway` on routes, `http-client` on code edges; there is no edges hint and no Istio manifest) and the 17 sources not read (#23).
 
