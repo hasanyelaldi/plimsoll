@@ -1,6 +1,6 @@
 # Plimsoll analysis of `train-ticket`
 
-**34 error, 0 warn, 78 info**
+**0 error, 0 warn, 112 info**
 
 ## Amplification per service
 
@@ -52,40 +52,6 @@ Limit: 10
 
 | Severity | Rule | Location | Detail |
 | --- | --- | --- | --- |
-| ERROR | PLM-A3 | ts-gateway-service→ts-admin-basic-info-service | non-idempotent call retried, 3 tries |
-| ERROR | PLM-A3 | ts-gateway-service→ts-admin-order-service | non-idempotent call retried, 3 tries |
-| ERROR | PLM-A3 | ts-gateway-service→ts-admin-route-service | non-idempotent call retried, 3 tries |
-| ERROR | PLM-A3 | ts-gateway-service→ts-admin-travel-service | non-idempotent call retried, 3 tries |
-| ERROR | PLM-A3 | ts-gateway-service→ts-admin-user-service | non-idempotent call retried, 3 tries |
-| ERROR | PLM-A3 | ts-gateway-service→ts-assurance-service | non-idempotent call retried, 3 tries |
-| ERROR | PLM-A3 | ts-gateway-service→ts-auth-service (/api/v1/auth/**) | non-idempotent call retried, 3 tries |
-| ERROR | PLM-A3 | ts-gateway-service→ts-auth-service (/api/v1/users/**) | non-idempotent call retried, 3 tries |
-| ERROR | PLM-A3 | ts-gateway-service→ts-basic-service | non-idempotent call retried, 3 tries |
-| ERROR | PLM-A3 | ts-gateway-service→ts-config-service | non-idempotent call retried, 3 tries |
-| ERROR | PLM-A3 | ts-gateway-service→ts-consign-price-service | non-idempotent call retried, 3 tries |
-| ERROR | PLM-A3 | ts-gateway-service→ts-consign-service | non-idempotent call retried, 3 tries |
-| ERROR | PLM-A3 | ts-gateway-service→ts-contacts-service | non-idempotent call retried, 3 tries |
-| ERROR | PLM-A3 | ts-gateway-service→ts-food-service | non-idempotent call retried, 3 tries |
-| ERROR | PLM-A3 | ts-gateway-service→ts-inside-payment-service | non-idempotent call retried, 3 tries |
-| ERROR | PLM-A3 | ts-gateway-service→ts-notification-service | non-idempotent call retried, 3 tries |
-| ERROR | PLM-A3 | ts-gateway-service→ts-order-other-service | non-idempotent call retried, 3 tries |
-| ERROR | PLM-A3 | ts-gateway-service→ts-order-service | non-idempotent call retried, 3 tries |
-| ERROR | PLM-A3 | ts-gateway-service→ts-payment-service | non-idempotent call retried, 3 tries |
-| ERROR | PLM-A3 | ts-gateway-service→ts-preserve-other-service | non-idempotent call retried, 3 tries |
-| ERROR | PLM-A3 | ts-gateway-service→ts-preserve-service | non-idempotent call retried, 3 tries |
-| ERROR | PLM-A3 | ts-gateway-service→ts-price-service | non-idempotent call retried, 3 tries |
-| ERROR | PLM-A3 | ts-gateway-service→ts-rebook-service | non-idempotent call retried, 3 tries |
-| ERROR | PLM-A3 | ts-gateway-service→ts-route-plan-service | non-idempotent call retried, 3 tries |
-| ERROR | PLM-A3 | ts-gateway-service→ts-route-service | non-idempotent call retried, 3 tries |
-| ERROR | PLM-A3 | ts-gateway-service→ts-seat-service | non-idempotent call retried, 3 tries |
-| ERROR | PLM-A3 | ts-gateway-service→ts-security-service | non-idempotent call retried, 3 tries |
-| ERROR | PLM-A3 | ts-gateway-service→ts-station-food-service | non-idempotent call retried, 3 tries |
-| ERROR | PLM-A3 | ts-gateway-service→ts-station-service | non-idempotent call retried, 3 tries |
-| ERROR | PLM-A3 | ts-gateway-service→ts-train-service | non-idempotent call retried, 3 tries |
-| ERROR | PLM-A3 | ts-gateway-service→ts-travel-plan-service | non-idempotent call retried, 3 tries |
-| ERROR | PLM-A3 | ts-gateway-service→ts-travel-service | non-idempotent call retried, 3 tries |
-| ERROR | PLM-A3 | ts-gateway-service→ts-travel2-service | non-idempotent call retried, 3 tries |
-| ERROR | PLM-A3 | ts-gateway-service→ts-user-service | non-idempotent call retried, 3 tries |
 | INFO | PLM-A2a | ts-gateway-service→ts-admin-basic-info-service | layer 2 (istio): cannot evaluate: ts-gateway-service deadline UNKNOWN |
 | INFO | PLM-A2a | ts-gateway-service→ts-admin-order-service | layer 2 (istio): cannot evaluate: ts-gateway-service deadline UNKNOWN |
 | INFO | PLM-A2a | ts-gateway-service→ts-admin-route-service | layer 2 (istio): cannot evaluate: ts-gateway-service deadline UNKNOWN |
@@ -164,212 +130,42 @@ Limit: 10
 | INFO | PLM-A2b | ts-gateway-service→ts-travel2-service | cannot evaluate: ts-travel2-service deadline UNKNOWN |
 | INFO | PLM-A2b | ts-gateway-service→ts-user-service | cannot evaluate: ts-user-service deadline UNKNOWN |
 | INFO | PLM-A2b | ts-gateway-service→ts-verification-code-service | cannot evaluate: ts-verification-code-service deadline UNKNOWN |
+| INFO | PLM-A3 | ts-gateway-service→ts-admin-basic-info-service | retried only when the request was not sent, 3 tries |
+| INFO | PLM-A3 | ts-gateway-service→ts-admin-order-service | retried only when the request was not sent, 3 tries |
+| INFO | PLM-A3 | ts-gateway-service→ts-admin-route-service | retried only when the request was not sent, 3 tries |
+| INFO | PLM-A3 | ts-gateway-service→ts-admin-travel-service | retried only when the request was not sent, 3 tries |
+| INFO | PLM-A3 | ts-gateway-service→ts-admin-user-service | retried only when the request was not sent, 3 tries |
+| INFO | PLM-A3 | ts-gateway-service→ts-assurance-service | retried only when the request was not sent, 3 tries |
+| INFO | PLM-A3 | ts-gateway-service→ts-auth-service (/api/v1/auth/**) | retried only when the request was not sent, 3 tries |
+| INFO | PLM-A3 | ts-gateway-service→ts-auth-service (/api/v1/users/**) | retried only when the request was not sent, 3 tries |
+| INFO | PLM-A3 | ts-gateway-service→ts-basic-service | retried only when the request was not sent, 3 tries |
+| INFO | PLM-A3 | ts-gateway-service→ts-config-service | retried only when the request was not sent, 3 tries |
+| INFO | PLM-A3 | ts-gateway-service→ts-consign-price-service | retried only when the request was not sent, 3 tries |
+| INFO | PLM-A3 | ts-gateway-service→ts-consign-service | retried only when the request was not sent, 3 tries |
+| INFO | PLM-A3 | ts-gateway-service→ts-contacts-service | retried only when the request was not sent, 3 tries |
+| INFO | PLM-A3 | ts-gateway-service→ts-food-service | retried only when the request was not sent, 3 tries |
+| INFO | PLM-A3 | ts-gateway-service→ts-inside-payment-service | retried only when the request was not sent, 3 tries |
+| INFO | PLM-A3 | ts-gateway-service→ts-notification-service | retried only when the request was not sent, 3 tries |
+| INFO | PLM-A3 | ts-gateway-service→ts-order-other-service | retried only when the request was not sent, 3 tries |
+| INFO | PLM-A3 | ts-gateway-service→ts-order-service | retried only when the request was not sent, 3 tries |
+| INFO | PLM-A3 | ts-gateway-service→ts-payment-service | retried only when the request was not sent, 3 tries |
+| INFO | PLM-A3 | ts-gateway-service→ts-preserve-other-service | retried only when the request was not sent, 3 tries |
+| INFO | PLM-A3 | ts-gateway-service→ts-preserve-service | retried only when the request was not sent, 3 tries |
+| INFO | PLM-A3 | ts-gateway-service→ts-price-service | retried only when the request was not sent, 3 tries |
+| INFO | PLM-A3 | ts-gateway-service→ts-rebook-service | retried only when the request was not sent, 3 tries |
+| INFO | PLM-A3 | ts-gateway-service→ts-route-plan-service | retried only when the request was not sent, 3 tries |
+| INFO | PLM-A3 | ts-gateway-service→ts-route-service | retried only when the request was not sent, 3 tries |
+| INFO | PLM-A3 | ts-gateway-service→ts-seat-service | retried only when the request was not sent, 3 tries |
+| INFO | PLM-A3 | ts-gateway-service→ts-security-service | retried only when the request was not sent, 3 tries |
+| INFO | PLM-A3 | ts-gateway-service→ts-station-food-service | retried only when the request was not sent, 3 tries |
+| INFO | PLM-A3 | ts-gateway-service→ts-station-service | retried only when the request was not sent, 3 tries |
+| INFO | PLM-A3 | ts-gateway-service→ts-train-service | retried only when the request was not sent, 3 tries |
+| INFO | PLM-A3 | ts-gateway-service→ts-travel-plan-service | retried only when the request was not sent, 3 tries |
+| INFO | PLM-A3 | ts-gateway-service→ts-travel-service | retried only when the request was not sent, 3 tries |
+| INFO | PLM-A3 | ts-gateway-service→ts-travel2-service | retried only when the request was not sent, 3 tries |
+| INFO | PLM-A3 | ts-gateway-service→ts-user-service | retried only when the request was not sent, 3 tries |
 
 ## Values used
-
-### ERROR PLM-A3 ts-gateway-service→ts-admin-basic-info-service
-
-- ts-gateway-service→ts-admin-basic-info-service idempotent = false [LIBRARY_DEFAULT: POST (ts-admin-basic-info-service /api/v1/adminbasicservice/adminbasic/contacts, ts-admin-basic-info-service/src/main/java/adminbasic/controller/AdminBasicInfoController.java:56); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
-- ts-gateway-service→ts-admin-basic-info-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route admin-basic-info (ts-gateway-service/src/main/resources/application.yml:16) or in default-filters]
-- ts-gateway-service→ts-admin-basic-info-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
-
-### ERROR PLM-A3 ts-gateway-service→ts-admin-order-service
-
-- ts-gateway-service→ts-admin-order-service idempotent = false [LIBRARY_DEFAULT: POST (ts-admin-order-service /api/v1/adminorderservice/adminorder, ts-admin-order-service/src/main/java/adminorder/controller/AdminOrderController.java:38); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
-- ts-gateway-service→ts-admin-order-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route admin-order (ts-gateway-service/src/main/resources/application.yml:21) or in default-filters]
-- ts-gateway-service→ts-admin-order-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
-
-### ERROR PLM-A3 ts-gateway-service→ts-admin-route-service
-
-- ts-gateway-service→ts-admin-route-service idempotent = false [LIBRARY_DEFAULT: POST (ts-admin-route-service /api/v1/adminrouteservice/adminroute, ts-admin-route-service/src/main/java/adminroute/controller/AdminRouteController.java:38); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
-- ts-gateway-service→ts-admin-route-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route admin-route (ts-gateway-service/src/main/resources/application.yml:26) or in default-filters]
-- ts-gateway-service→ts-admin-route-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
-
-### ERROR PLM-A3 ts-gateway-service→ts-admin-travel-service
-
-- ts-gateway-service→ts-admin-travel-service idempotent = false [LIBRARY_DEFAULT: POST (ts-admin-travel-service /api/v1/admintravelservice/admintravel, ts-admin-travel-service/src/main/java/admintravel/controller/AdminTravelController.java:37); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
-- ts-gateway-service→ts-admin-travel-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route admin-travel (ts-gateway-service/src/main/resources/application.yml:31) or in default-filters]
-- ts-gateway-service→ts-admin-travel-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
-
-### ERROR PLM-A3 ts-gateway-service→ts-admin-user-service
-
-- ts-gateway-service→ts-admin-user-service idempotent = false [LIBRARY_DEFAULT: POST (ts-admin-user-service /api/v1/adminuserservice/users, ts-admin-user-service/src/main/java/adminuser/controller/AdminUserController.java:44); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
-- ts-gateway-service→ts-admin-user-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route admin-user (ts-gateway-service/src/main/resources/application.yml:36) or in default-filters]
-- ts-gateway-service→ts-admin-user-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
-
-### ERROR PLM-A3 ts-gateway-service→ts-assurance-service
-
-- ts-gateway-service→ts-assurance-service idempotent = false [LIBRARY_DEFAULT: PATCH (ts-assurance-service /api/v1/assuranceservice/assurances/{assuranceId}/{orderId}/{typeIndex}, ts-assurance-service/src/main/java/assurance/controller/AssuranceController.java:61); http RFC 5789 default (verified by doc), https://www.rfc-editor.org/rfc/rfc5789#section-2]
-- ts-gateway-service→ts-assurance-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route assurance (ts-gateway-service/src/main/resources/application.yml:41) or in default-filters]
-- ts-gateway-service→ts-assurance-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
-
-### ERROR PLM-A3 ts-gateway-service→ts-auth-service (/api/v1/auth/**)
-
-- ts-gateway-service→ts-auth-service (/api/v1/auth/**) idempotent = false [LIBRARY_DEFAULT: POST (ts-auth-service /api/v1/auth, ts-auth-service/src/main/java/auth/controller/AuthController.java:36); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
-- ts-gateway-service→ts-auth-service (/api/v1/auth/**) layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route auth (ts-gateway-service/src/main/resources/application.yml:46) or in default-filters]
-- ts-gateway-service→ts-auth-service (/api/v1/auth/**) layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
-
-### ERROR PLM-A3 ts-gateway-service→ts-auth-service (/api/v1/users/**)
-
-- ts-gateway-service→ts-auth-service (/api/v1/users/**) idempotent = false [LIBRARY_DEFAULT: POST (ts-auth-service /api/v1/users/login, ts-auth-service/src/main/java/auth/controller/UserController.java:41); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
-- ts-gateway-service→ts-auth-service (/api/v1/users/**) layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route auth-user (ts-gateway-service/src/main/resources/application.yml:51) or in default-filters]
-- ts-gateway-service→ts-auth-service (/api/v1/users/**) layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
-
-### ERROR PLM-A3 ts-gateway-service→ts-basic-service
-
-- ts-gateway-service→ts-basic-service idempotent = false [LIBRARY_DEFAULT: POST (ts-basic-service /api/v1/basicservice/basic/travel, ts-basic-service/src/main/java/fdse/microservice/controller/BasicController.java:35); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
-- ts-gateway-service→ts-basic-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route basic (ts-gateway-service/src/main/resources/application.yml:61) or in default-filters]
-- ts-gateway-service→ts-basic-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
-
-### ERROR PLM-A3 ts-gateway-service→ts-config-service
-
-- ts-gateway-service→ts-config-service idempotent = false [LIBRARY_DEFAULT: POST (ts-config-service /api/v1/configservice/configs, ts-config-service/src/main/java/config/controller/ConfigController.java:43); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
-- ts-gateway-service→ts-config-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route config (ts-gateway-service/src/main/resources/application.yml:71) or in default-filters]
-- ts-gateway-service→ts-config-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
-
-### ERROR PLM-A3 ts-gateway-service→ts-consign-price-service
-
-- ts-gateway-service→ts-consign-price-service idempotent = false [LIBRARY_DEFAULT: POST (ts-consign-price-service /api/v1/consignpriceservice/consignprice, ts-consign-price-service/src/main/java/consignprice/controller/ConsignPriceController.java:51); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
-- ts-gateway-service→ts-consign-price-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route consign-price (ts-gateway-service/src/main/resources/application.yml:76) or in default-filters]
-- ts-gateway-service→ts-consign-price-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
-
-### ERROR PLM-A3 ts-gateway-service→ts-consign-service
-
-- ts-gateway-service→ts-consign-service idempotent = false [LIBRARY_DEFAULT: POST (ts-consign-service /api/v1/consignservice/consigns, ts-consign-service/src/main/java/consign/controller/ConsignController.java:33); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
-- ts-gateway-service→ts-consign-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route consign (ts-gateway-service/src/main/resources/application.yml:81) or in default-filters]
-- ts-gateway-service→ts-consign-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
-
-### ERROR PLM-A3 ts-gateway-service→ts-contacts-service
-
-- ts-gateway-service→ts-contacts-service idempotent = false [LIBRARY_DEFAULT: POST (ts-contacts-service /api/v1/contactservice/contacts, ts-contacts-service/src/main/java/contacts/controller/ContactsController.java:42); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
-- ts-gateway-service→ts-contacts-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route contacts (ts-gateway-service/src/main/resources/application.yml:86) or in default-filters]
-- ts-gateway-service→ts-contacts-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
-
-### ERROR PLM-A3 ts-gateway-service→ts-food-service
-
-- ts-gateway-service→ts-food-service idempotent = false [LIBRARY_DEFAULT: POST (ts-food-service /api/v1/foodservice/orders, ts-food-service/src/main/java/foodsearch/controller/FoodController.java:56); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
-- ts-gateway-service→ts-food-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route food (ts-gateway-service/src/main/resources/application.yml:96) or in default-filters]
-- ts-gateway-service→ts-food-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
-
-### ERROR PLM-A3 ts-gateway-service→ts-inside-payment-service
-
-- ts-gateway-service→ts-inside-payment-service idempotent = false [LIBRARY_DEFAULT: POST (ts-inside-payment-service /api/v1/inside_pay_service/inside_payment, ts-inside-payment-service/src/main/java/inside_payment/controller/InsidePaymentController.java:31); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
-- ts-gateway-service→ts-inside-payment-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route inside-payment (ts-gateway-service/src/main/resources/application.yml:101) or in default-filters]
-- ts-gateway-service→ts-inside-payment-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
-
-### ERROR PLM-A3 ts-gateway-service→ts-notification-service
-
-- ts-gateway-service→ts-notification-service idempotent = false [LIBRARY_DEFAULT: POST (ts-notification-service /api/v1/notifyservice/notification/preserve_success, ts-notification-service/src/main/java/notification/controller/NotificationController.java:57); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
-- ts-gateway-service→ts-notification-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route notification (ts-gateway-service/src/main/resources/application.yml:106) or in default-filters]
-- ts-gateway-service→ts-notification-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
-
-### ERROR PLM-A3 ts-gateway-service→ts-order-other-service
-
-- ts-gateway-service→ts-order-other-service idempotent = false [LIBRARY_DEFAULT: POST (ts-order-other-service /api/v1/orderOtherService/orderOther/tickets, ts-order-other-service/src/main/java/other/controller/OrderOtherController.java:40); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
-- ts-gateway-service→ts-order-other-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route order-other (ts-gateway-service/src/main/resources/application.yml:111) or in default-filters]
-- ts-gateway-service→ts-order-other-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
-
-### ERROR PLM-A3 ts-gateway-service→ts-order-service
-
-- ts-gateway-service→ts-order-service idempotent = false [LIBRARY_DEFAULT: POST (ts-order-service /api/v1/orderservice/order/tickets, ts-order-service/src/main/java/order/controller/OrderController.java:37); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
-- ts-gateway-service→ts-order-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route order (ts-gateway-service/src/main/resources/application.yml:116) or in default-filters]
-- ts-gateway-service→ts-order-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
-
-### ERROR PLM-A3 ts-gateway-service→ts-payment-service
-
-- ts-gateway-service→ts-payment-service idempotent = false [LIBRARY_DEFAULT: POST (ts-payment-service /api/v1/paymentservice/payment, ts-payment-service/src/main/java/com/trainticket/controller/PaymentController.java:32); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
-- ts-gateway-service→ts-payment-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route payment (ts-gateway-service/src/main/resources/application.yml:121) or in default-filters]
-- ts-gateway-service→ts-payment-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
-
-### ERROR PLM-A3 ts-gateway-service→ts-preserve-other-service
-
-- ts-gateway-service→ts-preserve-other-service idempotent = false [LIBRARY_DEFAULT: POST (ts-preserve-other-service /api/v1/preserveotherservice/preserveOther, ts-preserve-other-service/src/main/java/preserveOther/controller/PreserveOtherController.java:32); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
-- ts-gateway-service→ts-preserve-other-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route preserve-other (ts-gateway-service/src/main/resources/application.yml:126) or in default-filters]
-- ts-gateway-service→ts-preserve-other-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
-
-### ERROR PLM-A3 ts-gateway-service→ts-preserve-service
-
-- ts-gateway-service→ts-preserve-service idempotent = false [LIBRARY_DEFAULT: POST (ts-preserve-service /api/v1/preserveservice/preserve, ts-preserve-service/src/main/java/preserve/controller/PreserveController.java:32); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
-- ts-gateway-service→ts-preserve-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route preserve (ts-gateway-service/src/main/resources/application.yml:131) or in default-filters]
-- ts-gateway-service→ts-preserve-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
-
-### ERROR PLM-A3 ts-gateway-service→ts-price-service
-
-- ts-gateway-service→ts-price-service idempotent = false [LIBRARY_DEFAULT: POST (ts-price-service /api/v1/priceservice/prices/byRouteIdsAndTrainTypes, ts-price-service/src/main/java/price/controller/PriceController.java:43); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
-- ts-gateway-service→ts-price-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route price (ts-gateway-service/src/main/resources/application.yml:136) or in default-filters]
-- ts-gateway-service→ts-price-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
-
-### ERROR PLM-A3 ts-gateway-service→ts-rebook-service
-
-- ts-gateway-service→ts-rebook-service idempotent = false [LIBRARY_DEFAULT: POST (ts-rebook-service /api/v1/rebookservice/rebook/difference, ts-rebook-service/src/main/java/rebook/controller/RebookController.java:31); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
-- ts-gateway-service→ts-rebook-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route rebook (ts-gateway-service/src/main/resources/application.yml:141) or in default-filters]
-- ts-gateway-service→ts-rebook-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
-
-### ERROR PLM-A3 ts-gateway-service→ts-route-plan-service
-
-- ts-gateway-service→ts-route-plan-service idempotent = false [LIBRARY_DEFAULT: POST (ts-route-plan-service /api/v1/routeplanservice/routePlan/cheapestRoute, ts-route-plan-service/src/main/java/plan/controller/RoutePlanController.java:30); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
-- ts-gateway-service→ts-route-plan-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route route-plan (ts-gateway-service/src/main/resources/application.yml:146) or in default-filters]
-- ts-gateway-service→ts-route-plan-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
-
-### ERROR PLM-A3 ts-gateway-service→ts-route-service
-
-- ts-gateway-service→ts-route-service idempotent = false [LIBRARY_DEFAULT: POST (ts-route-service /api/v1/routeservice/routes, ts-route-service/src/main/java/route/controller/RouteController.java:33); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
-- ts-gateway-service→ts-route-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route route (ts-gateway-service/src/main/resources/application.yml:151) or in default-filters]
-- ts-gateway-service→ts-route-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
-
-### ERROR PLM-A3 ts-gateway-service→ts-seat-service
-
-- ts-gateway-service→ts-seat-service idempotent = false [LIBRARY_DEFAULT: POST (ts-seat-service /api/v1/seatservice/seats, ts-seat-service/src/main/java/seat/controller/SeatController.java:39); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
-- ts-gateway-service→ts-seat-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route seat (ts-gateway-service/src/main/resources/application.yml:156) or in default-filters]
-- ts-gateway-service→ts-seat-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
-
-### ERROR PLM-A3 ts-gateway-service→ts-security-service
-
-- ts-gateway-service→ts-security-service idempotent = false [LIBRARY_DEFAULT: POST (ts-security-service /api/v1/securityservice/securityConfigs, ts-security-service/src/main/java/security/controller/SecurityController.java:39); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
-- ts-gateway-service→ts-security-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route security (ts-gateway-service/src/main/resources/application.yml:161) or in default-filters]
-- ts-gateway-service→ts-security-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
-
-### ERROR PLM-A3 ts-gateway-service→ts-station-food-service
-
-- ts-gateway-service→ts-station-food-service idempotent = false [LIBRARY_DEFAULT: POST (ts-station-food-service /api/v1/stationfoodservice/stationfoodstores, ts-station-food-service/src/main/java/food/controller/StationFoodController.java:44); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
-- ts-gateway-service→ts-station-food-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route station-food (ts-gateway-service/src/main/resources/application.yml:166) or in default-filters]
-- ts-gateway-service→ts-station-food-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
-
-### ERROR PLM-A3 ts-gateway-service→ts-station-service
-
-- ts-gateway-service→ts-station-service idempotent = false [LIBRARY_DEFAULT: POST (ts-station-service /api/v1/stationservice/stations, ts-station-service/src/main/java/fdse/microservice/controller/StationController.java:38); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
-- ts-gateway-service→ts-station-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route station (ts-gateway-service/src/main/resources/application.yml:171) or in default-filters]
-- ts-gateway-service→ts-station-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
-
-### ERROR PLM-A3 ts-gateway-service→ts-train-service
-
-- ts-gateway-service→ts-train-service idempotent = false [LIBRARY_DEFAULT: POST (ts-train-service /api/v1/trainservice/trains, ts-train-service/src/main/java/train/controller/TrainController.java:34); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
-- ts-gateway-service→ts-train-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route train (ts-gateway-service/src/main/resources/application.yml:181) or in default-filters]
-- ts-gateway-service→ts-train-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
-
-### ERROR PLM-A3 ts-gateway-service→ts-travel-plan-service
-
-- ts-gateway-service→ts-travel-plan-service idempotent = false [LIBRARY_DEFAULT: POST (ts-travel-plan-service /api/v1/travelplanservice/travelPlan/transferResult, ts-travel-plan-service/src/main/java/travelplan/controller/TravelPlanController.java:32); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
-- ts-gateway-service→ts-travel-plan-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route travel-plan (ts-gateway-service/src/main/resources/application.yml:191) or in default-filters]
-- ts-gateway-service→ts-travel-plan-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
-
-### ERROR PLM-A3 ts-gateway-service→ts-travel-service
-
-- ts-gateway-service→ts-travel-service idempotent = false [LIBRARY_DEFAULT: POST (ts-travel-service /api/v1/travelservice/trips/routes, ts-travel-service/src/main/java/travel/controller/TravelController.java:58); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
-- ts-gateway-service→ts-travel-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route travel (ts-gateway-service/src/main/resources/application.yml:196) or in default-filters]
-- ts-gateway-service→ts-travel-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
-
-### ERROR PLM-A3 ts-gateway-service→ts-travel2-service
-
-- ts-gateway-service→ts-travel2-service idempotent = false [LIBRARY_DEFAULT: POST (ts-travel2-service /api/v1/travel2service/trips/routes, ts-travel2-service/src/main/java/travel2/controller/Travel2Controller.java:51); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
-- ts-gateway-service→ts-travel2-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route travel2 (ts-gateway-service/src/main/resources/application.yml:186) or in default-filters]
-- ts-gateway-service→ts-travel2-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
-
-### ERROR PLM-A3 ts-gateway-service→ts-user-service
-
-- ts-gateway-service→ts-user-service idempotent = false [LIBRARY_DEFAULT: POST (ts-user-service /api/v1/userservice/users/register, ts-user-service/src/main/java/user/controller/UserController.java:52); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
-- ts-gateway-service→ts-user-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route user (ts-gateway-service/src/main/resources/application.yml:201) or in default-filters]
-- ts-gateway-service→ts-user-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
 
 ### INFO PLM-A2a ts-gateway-service→ts-admin-basic-info-service
 
@@ -1111,6 +907,278 @@ Limit: 10
 - ts-gateway-service→ts-verification-code-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route verification-code (ts-gateway-service/src/main/resources/application.yml:206) or in default-filters]
 - ts-gateway-service→ts-verification-code-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
 - **depends-on-unknown: ts-verification-code-service deadline**
+
+### INFO PLM-A3 ts-gateway-service→ts-admin-basic-info-service
+
+- ts-gateway-service→ts-admin-basic-info-service idempotent = false [LIBRARY_DEFAULT: POST (ts-admin-basic-info-service /api/v1/adminbasicservice/adminbasic/contacts, ts-admin-basic-info-service/src/main/java/adminbasic/controller/AdminBasicInfoController.java:56); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
+- ts-gateway-service→ts-admin-basic-info-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route admin-basic-info (ts-gateway-service/src/main/resources/application.yml:16) or in default-filters]
+- ts-gateway-service→ts-admin-basic-info-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
+- ts-gateway-service→ts-admin-basic-info-service layer 2 (istio) retried = not-sent [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry; classes: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/retry_state_impl.cc]
+- ts-gateway-service→ts-admin-basic-info-service layer 2 (istio) gives up as = not-sent as status-503; reset as status-502, status-503; timeout as status-504 [LIBRARY_DEFAULT: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/router.cc]
+
+### INFO PLM-A3 ts-gateway-service→ts-admin-order-service
+
+- ts-gateway-service→ts-admin-order-service idempotent = false [LIBRARY_DEFAULT: POST (ts-admin-order-service /api/v1/adminorderservice/adminorder, ts-admin-order-service/src/main/java/adminorder/controller/AdminOrderController.java:38); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
+- ts-gateway-service→ts-admin-order-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route admin-order (ts-gateway-service/src/main/resources/application.yml:21) or in default-filters]
+- ts-gateway-service→ts-admin-order-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
+- ts-gateway-service→ts-admin-order-service layer 2 (istio) retried = not-sent [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry; classes: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/retry_state_impl.cc]
+- ts-gateway-service→ts-admin-order-service layer 2 (istio) gives up as = not-sent as status-503; reset as status-502, status-503; timeout as status-504 [LIBRARY_DEFAULT: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/router.cc]
+
+### INFO PLM-A3 ts-gateway-service→ts-admin-route-service
+
+- ts-gateway-service→ts-admin-route-service idempotent = false [LIBRARY_DEFAULT: POST (ts-admin-route-service /api/v1/adminrouteservice/adminroute, ts-admin-route-service/src/main/java/adminroute/controller/AdminRouteController.java:38); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
+- ts-gateway-service→ts-admin-route-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route admin-route (ts-gateway-service/src/main/resources/application.yml:26) or in default-filters]
+- ts-gateway-service→ts-admin-route-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
+- ts-gateway-service→ts-admin-route-service layer 2 (istio) retried = not-sent [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry; classes: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/retry_state_impl.cc]
+- ts-gateway-service→ts-admin-route-service layer 2 (istio) gives up as = not-sent as status-503; reset as status-502, status-503; timeout as status-504 [LIBRARY_DEFAULT: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/router.cc]
+
+### INFO PLM-A3 ts-gateway-service→ts-admin-travel-service
+
+- ts-gateway-service→ts-admin-travel-service idempotent = false [LIBRARY_DEFAULT: POST (ts-admin-travel-service /api/v1/admintravelservice/admintravel, ts-admin-travel-service/src/main/java/admintravel/controller/AdminTravelController.java:37); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
+- ts-gateway-service→ts-admin-travel-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route admin-travel (ts-gateway-service/src/main/resources/application.yml:31) or in default-filters]
+- ts-gateway-service→ts-admin-travel-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
+- ts-gateway-service→ts-admin-travel-service layer 2 (istio) retried = not-sent [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry; classes: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/retry_state_impl.cc]
+- ts-gateway-service→ts-admin-travel-service layer 2 (istio) gives up as = not-sent as status-503; reset as status-502, status-503; timeout as status-504 [LIBRARY_DEFAULT: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/router.cc]
+
+### INFO PLM-A3 ts-gateway-service→ts-admin-user-service
+
+- ts-gateway-service→ts-admin-user-service idempotent = false [LIBRARY_DEFAULT: POST (ts-admin-user-service /api/v1/adminuserservice/users, ts-admin-user-service/src/main/java/adminuser/controller/AdminUserController.java:44); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
+- ts-gateway-service→ts-admin-user-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route admin-user (ts-gateway-service/src/main/resources/application.yml:36) or in default-filters]
+- ts-gateway-service→ts-admin-user-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
+- ts-gateway-service→ts-admin-user-service layer 2 (istio) retried = not-sent [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry; classes: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/retry_state_impl.cc]
+- ts-gateway-service→ts-admin-user-service layer 2 (istio) gives up as = not-sent as status-503; reset as status-502, status-503; timeout as status-504 [LIBRARY_DEFAULT: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/router.cc]
+
+### INFO PLM-A3 ts-gateway-service→ts-assurance-service
+
+- ts-gateway-service→ts-assurance-service idempotent = false [LIBRARY_DEFAULT: PATCH (ts-assurance-service /api/v1/assuranceservice/assurances/{assuranceId}/{orderId}/{typeIndex}, ts-assurance-service/src/main/java/assurance/controller/AssuranceController.java:61); http RFC 5789 default (verified by doc), https://www.rfc-editor.org/rfc/rfc5789#section-2]
+- ts-gateway-service→ts-assurance-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route assurance (ts-gateway-service/src/main/resources/application.yml:41) or in default-filters]
+- ts-gateway-service→ts-assurance-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
+- ts-gateway-service→ts-assurance-service layer 2 (istio) retried = not-sent [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry; classes: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/retry_state_impl.cc]
+- ts-gateway-service→ts-assurance-service layer 2 (istio) gives up as = not-sent as status-503; reset as status-502, status-503; timeout as status-504 [LIBRARY_DEFAULT: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/router.cc]
+
+### INFO PLM-A3 ts-gateway-service→ts-auth-service (/api/v1/auth/**)
+
+- ts-gateway-service→ts-auth-service (/api/v1/auth/**) idempotent = false [LIBRARY_DEFAULT: POST (ts-auth-service /api/v1/auth, ts-auth-service/src/main/java/auth/controller/AuthController.java:36); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
+- ts-gateway-service→ts-auth-service (/api/v1/auth/**) layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route auth (ts-gateway-service/src/main/resources/application.yml:46) or in default-filters]
+- ts-gateway-service→ts-auth-service (/api/v1/auth/**) layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
+- ts-gateway-service→ts-auth-service (/api/v1/auth/**) layer 2 (istio) retried = not-sent [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry; classes: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/retry_state_impl.cc]
+- ts-gateway-service→ts-auth-service (/api/v1/auth/**) layer 2 (istio) gives up as = not-sent as status-503; reset as status-502, status-503; timeout as status-504 [LIBRARY_DEFAULT: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/router.cc]
+
+### INFO PLM-A3 ts-gateway-service→ts-auth-service (/api/v1/users/**)
+
+- ts-gateway-service→ts-auth-service (/api/v1/users/**) idempotent = false [LIBRARY_DEFAULT: POST (ts-auth-service /api/v1/users/login, ts-auth-service/src/main/java/auth/controller/UserController.java:41); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
+- ts-gateway-service→ts-auth-service (/api/v1/users/**) layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route auth-user (ts-gateway-service/src/main/resources/application.yml:51) or in default-filters]
+- ts-gateway-service→ts-auth-service (/api/v1/users/**) layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
+- ts-gateway-service→ts-auth-service (/api/v1/users/**) layer 2 (istio) retried = not-sent [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry; classes: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/retry_state_impl.cc]
+- ts-gateway-service→ts-auth-service (/api/v1/users/**) layer 2 (istio) gives up as = not-sent as status-503; reset as status-502, status-503; timeout as status-504 [LIBRARY_DEFAULT: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/router.cc]
+
+### INFO PLM-A3 ts-gateway-service→ts-basic-service
+
+- ts-gateway-service→ts-basic-service idempotent = false [LIBRARY_DEFAULT: POST (ts-basic-service /api/v1/basicservice/basic/travel, ts-basic-service/src/main/java/fdse/microservice/controller/BasicController.java:35); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
+- ts-gateway-service→ts-basic-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route basic (ts-gateway-service/src/main/resources/application.yml:61) or in default-filters]
+- ts-gateway-service→ts-basic-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
+- ts-gateway-service→ts-basic-service layer 2 (istio) retried = not-sent [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry; classes: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/retry_state_impl.cc]
+- ts-gateway-service→ts-basic-service layer 2 (istio) gives up as = not-sent as status-503; reset as status-502, status-503; timeout as status-504 [LIBRARY_DEFAULT: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/router.cc]
+
+### INFO PLM-A3 ts-gateway-service→ts-config-service
+
+- ts-gateway-service→ts-config-service idempotent = false [LIBRARY_DEFAULT: POST (ts-config-service /api/v1/configservice/configs, ts-config-service/src/main/java/config/controller/ConfigController.java:43); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
+- ts-gateway-service→ts-config-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route config (ts-gateway-service/src/main/resources/application.yml:71) or in default-filters]
+- ts-gateway-service→ts-config-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
+- ts-gateway-service→ts-config-service layer 2 (istio) retried = not-sent [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry; classes: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/retry_state_impl.cc]
+- ts-gateway-service→ts-config-service layer 2 (istio) gives up as = not-sent as status-503; reset as status-502, status-503; timeout as status-504 [LIBRARY_DEFAULT: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/router.cc]
+
+### INFO PLM-A3 ts-gateway-service→ts-consign-price-service
+
+- ts-gateway-service→ts-consign-price-service idempotent = false [LIBRARY_DEFAULT: POST (ts-consign-price-service /api/v1/consignpriceservice/consignprice, ts-consign-price-service/src/main/java/consignprice/controller/ConsignPriceController.java:51); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
+- ts-gateway-service→ts-consign-price-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route consign-price (ts-gateway-service/src/main/resources/application.yml:76) or in default-filters]
+- ts-gateway-service→ts-consign-price-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
+- ts-gateway-service→ts-consign-price-service layer 2 (istio) retried = not-sent [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry; classes: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/retry_state_impl.cc]
+- ts-gateway-service→ts-consign-price-service layer 2 (istio) gives up as = not-sent as status-503; reset as status-502, status-503; timeout as status-504 [LIBRARY_DEFAULT: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/router.cc]
+
+### INFO PLM-A3 ts-gateway-service→ts-consign-service
+
+- ts-gateway-service→ts-consign-service idempotent = false [LIBRARY_DEFAULT: POST (ts-consign-service /api/v1/consignservice/consigns, ts-consign-service/src/main/java/consign/controller/ConsignController.java:33); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
+- ts-gateway-service→ts-consign-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route consign (ts-gateway-service/src/main/resources/application.yml:81) or in default-filters]
+- ts-gateway-service→ts-consign-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
+- ts-gateway-service→ts-consign-service layer 2 (istio) retried = not-sent [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry; classes: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/retry_state_impl.cc]
+- ts-gateway-service→ts-consign-service layer 2 (istio) gives up as = not-sent as status-503; reset as status-502, status-503; timeout as status-504 [LIBRARY_DEFAULT: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/router.cc]
+
+### INFO PLM-A3 ts-gateway-service→ts-contacts-service
+
+- ts-gateway-service→ts-contacts-service idempotent = false [LIBRARY_DEFAULT: POST (ts-contacts-service /api/v1/contactservice/contacts, ts-contacts-service/src/main/java/contacts/controller/ContactsController.java:42); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
+- ts-gateway-service→ts-contacts-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route contacts (ts-gateway-service/src/main/resources/application.yml:86) or in default-filters]
+- ts-gateway-service→ts-contacts-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
+- ts-gateway-service→ts-contacts-service layer 2 (istio) retried = not-sent [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry; classes: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/retry_state_impl.cc]
+- ts-gateway-service→ts-contacts-service layer 2 (istio) gives up as = not-sent as status-503; reset as status-502, status-503; timeout as status-504 [LIBRARY_DEFAULT: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/router.cc]
+
+### INFO PLM-A3 ts-gateway-service→ts-food-service
+
+- ts-gateway-service→ts-food-service idempotent = false [LIBRARY_DEFAULT: POST (ts-food-service /api/v1/foodservice/orders, ts-food-service/src/main/java/foodsearch/controller/FoodController.java:56); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
+- ts-gateway-service→ts-food-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route food (ts-gateway-service/src/main/resources/application.yml:96) or in default-filters]
+- ts-gateway-service→ts-food-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
+- ts-gateway-service→ts-food-service layer 2 (istio) retried = not-sent [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry; classes: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/retry_state_impl.cc]
+- ts-gateway-service→ts-food-service layer 2 (istio) gives up as = not-sent as status-503; reset as status-502, status-503; timeout as status-504 [LIBRARY_DEFAULT: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/router.cc]
+
+### INFO PLM-A3 ts-gateway-service→ts-inside-payment-service
+
+- ts-gateway-service→ts-inside-payment-service idempotent = false [LIBRARY_DEFAULT: POST (ts-inside-payment-service /api/v1/inside_pay_service/inside_payment, ts-inside-payment-service/src/main/java/inside_payment/controller/InsidePaymentController.java:31); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
+- ts-gateway-service→ts-inside-payment-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route inside-payment (ts-gateway-service/src/main/resources/application.yml:101) or in default-filters]
+- ts-gateway-service→ts-inside-payment-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
+- ts-gateway-service→ts-inside-payment-service layer 2 (istio) retried = not-sent [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry; classes: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/retry_state_impl.cc]
+- ts-gateway-service→ts-inside-payment-service layer 2 (istio) gives up as = not-sent as status-503; reset as status-502, status-503; timeout as status-504 [LIBRARY_DEFAULT: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/router.cc]
+
+### INFO PLM-A3 ts-gateway-service→ts-notification-service
+
+- ts-gateway-service→ts-notification-service idempotent = false [LIBRARY_DEFAULT: POST (ts-notification-service /api/v1/notifyservice/notification/preserve_success, ts-notification-service/src/main/java/notification/controller/NotificationController.java:57); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
+- ts-gateway-service→ts-notification-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route notification (ts-gateway-service/src/main/resources/application.yml:106) or in default-filters]
+- ts-gateway-service→ts-notification-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
+- ts-gateway-service→ts-notification-service layer 2 (istio) retried = not-sent [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry; classes: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/retry_state_impl.cc]
+- ts-gateway-service→ts-notification-service layer 2 (istio) gives up as = not-sent as status-503; reset as status-502, status-503; timeout as status-504 [LIBRARY_DEFAULT: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/router.cc]
+
+### INFO PLM-A3 ts-gateway-service→ts-order-other-service
+
+- ts-gateway-service→ts-order-other-service idempotent = false [LIBRARY_DEFAULT: POST (ts-order-other-service /api/v1/orderOtherService/orderOther/tickets, ts-order-other-service/src/main/java/other/controller/OrderOtherController.java:40); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
+- ts-gateway-service→ts-order-other-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route order-other (ts-gateway-service/src/main/resources/application.yml:111) or in default-filters]
+- ts-gateway-service→ts-order-other-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
+- ts-gateway-service→ts-order-other-service layer 2 (istio) retried = not-sent [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry; classes: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/retry_state_impl.cc]
+- ts-gateway-service→ts-order-other-service layer 2 (istio) gives up as = not-sent as status-503; reset as status-502, status-503; timeout as status-504 [LIBRARY_DEFAULT: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/router.cc]
+
+### INFO PLM-A3 ts-gateway-service→ts-order-service
+
+- ts-gateway-service→ts-order-service idempotent = false [LIBRARY_DEFAULT: POST (ts-order-service /api/v1/orderservice/order/tickets, ts-order-service/src/main/java/order/controller/OrderController.java:37); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
+- ts-gateway-service→ts-order-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route order (ts-gateway-service/src/main/resources/application.yml:116) or in default-filters]
+- ts-gateway-service→ts-order-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
+- ts-gateway-service→ts-order-service layer 2 (istio) retried = not-sent [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry; classes: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/retry_state_impl.cc]
+- ts-gateway-service→ts-order-service layer 2 (istio) gives up as = not-sent as status-503; reset as status-502, status-503; timeout as status-504 [LIBRARY_DEFAULT: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/router.cc]
+
+### INFO PLM-A3 ts-gateway-service→ts-payment-service
+
+- ts-gateway-service→ts-payment-service idempotent = false [LIBRARY_DEFAULT: POST (ts-payment-service /api/v1/paymentservice/payment, ts-payment-service/src/main/java/com/trainticket/controller/PaymentController.java:32); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
+- ts-gateway-service→ts-payment-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route payment (ts-gateway-service/src/main/resources/application.yml:121) or in default-filters]
+- ts-gateway-service→ts-payment-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
+- ts-gateway-service→ts-payment-service layer 2 (istio) retried = not-sent [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry; classes: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/retry_state_impl.cc]
+- ts-gateway-service→ts-payment-service layer 2 (istio) gives up as = not-sent as status-503; reset as status-502, status-503; timeout as status-504 [LIBRARY_DEFAULT: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/router.cc]
+
+### INFO PLM-A3 ts-gateway-service→ts-preserve-other-service
+
+- ts-gateway-service→ts-preserve-other-service idempotent = false [LIBRARY_DEFAULT: POST (ts-preserve-other-service /api/v1/preserveotherservice/preserveOther, ts-preserve-other-service/src/main/java/preserveOther/controller/PreserveOtherController.java:32); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
+- ts-gateway-service→ts-preserve-other-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route preserve-other (ts-gateway-service/src/main/resources/application.yml:126) or in default-filters]
+- ts-gateway-service→ts-preserve-other-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
+- ts-gateway-service→ts-preserve-other-service layer 2 (istio) retried = not-sent [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry; classes: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/retry_state_impl.cc]
+- ts-gateway-service→ts-preserve-other-service layer 2 (istio) gives up as = not-sent as status-503; reset as status-502, status-503; timeout as status-504 [LIBRARY_DEFAULT: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/router.cc]
+
+### INFO PLM-A3 ts-gateway-service→ts-preserve-service
+
+- ts-gateway-service→ts-preserve-service idempotent = false [LIBRARY_DEFAULT: POST (ts-preserve-service /api/v1/preserveservice/preserve, ts-preserve-service/src/main/java/preserve/controller/PreserveController.java:32); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
+- ts-gateway-service→ts-preserve-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route preserve (ts-gateway-service/src/main/resources/application.yml:131) or in default-filters]
+- ts-gateway-service→ts-preserve-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
+- ts-gateway-service→ts-preserve-service layer 2 (istio) retried = not-sent [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry; classes: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/retry_state_impl.cc]
+- ts-gateway-service→ts-preserve-service layer 2 (istio) gives up as = not-sent as status-503; reset as status-502, status-503; timeout as status-504 [LIBRARY_DEFAULT: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/router.cc]
+
+### INFO PLM-A3 ts-gateway-service→ts-price-service
+
+- ts-gateway-service→ts-price-service idempotent = false [LIBRARY_DEFAULT: POST (ts-price-service /api/v1/priceservice/prices/byRouteIdsAndTrainTypes, ts-price-service/src/main/java/price/controller/PriceController.java:43); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
+- ts-gateway-service→ts-price-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route price (ts-gateway-service/src/main/resources/application.yml:136) or in default-filters]
+- ts-gateway-service→ts-price-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
+- ts-gateway-service→ts-price-service layer 2 (istio) retried = not-sent [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry; classes: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/retry_state_impl.cc]
+- ts-gateway-service→ts-price-service layer 2 (istio) gives up as = not-sent as status-503; reset as status-502, status-503; timeout as status-504 [LIBRARY_DEFAULT: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/router.cc]
+
+### INFO PLM-A3 ts-gateway-service→ts-rebook-service
+
+- ts-gateway-service→ts-rebook-service idempotent = false [LIBRARY_DEFAULT: POST (ts-rebook-service /api/v1/rebookservice/rebook/difference, ts-rebook-service/src/main/java/rebook/controller/RebookController.java:31); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
+- ts-gateway-service→ts-rebook-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route rebook (ts-gateway-service/src/main/resources/application.yml:141) or in default-filters]
+- ts-gateway-service→ts-rebook-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
+- ts-gateway-service→ts-rebook-service layer 2 (istio) retried = not-sent [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry; classes: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/retry_state_impl.cc]
+- ts-gateway-service→ts-rebook-service layer 2 (istio) gives up as = not-sent as status-503; reset as status-502, status-503; timeout as status-504 [LIBRARY_DEFAULT: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/router.cc]
+
+### INFO PLM-A3 ts-gateway-service→ts-route-plan-service
+
+- ts-gateway-service→ts-route-plan-service idempotent = false [LIBRARY_DEFAULT: POST (ts-route-plan-service /api/v1/routeplanservice/routePlan/cheapestRoute, ts-route-plan-service/src/main/java/plan/controller/RoutePlanController.java:30); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
+- ts-gateway-service→ts-route-plan-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route route-plan (ts-gateway-service/src/main/resources/application.yml:146) or in default-filters]
+- ts-gateway-service→ts-route-plan-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
+- ts-gateway-service→ts-route-plan-service layer 2 (istio) retried = not-sent [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry; classes: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/retry_state_impl.cc]
+- ts-gateway-service→ts-route-plan-service layer 2 (istio) gives up as = not-sent as status-503; reset as status-502, status-503; timeout as status-504 [LIBRARY_DEFAULT: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/router.cc]
+
+### INFO PLM-A3 ts-gateway-service→ts-route-service
+
+- ts-gateway-service→ts-route-service idempotent = false [LIBRARY_DEFAULT: POST (ts-route-service /api/v1/routeservice/routes, ts-route-service/src/main/java/route/controller/RouteController.java:33); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
+- ts-gateway-service→ts-route-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route route (ts-gateway-service/src/main/resources/application.yml:151) or in default-filters]
+- ts-gateway-service→ts-route-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
+- ts-gateway-service→ts-route-service layer 2 (istio) retried = not-sent [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry; classes: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/retry_state_impl.cc]
+- ts-gateway-service→ts-route-service layer 2 (istio) gives up as = not-sent as status-503; reset as status-502, status-503; timeout as status-504 [LIBRARY_DEFAULT: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/router.cc]
+
+### INFO PLM-A3 ts-gateway-service→ts-seat-service
+
+- ts-gateway-service→ts-seat-service idempotent = false [LIBRARY_DEFAULT: POST (ts-seat-service /api/v1/seatservice/seats, ts-seat-service/src/main/java/seat/controller/SeatController.java:39); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
+- ts-gateway-service→ts-seat-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route seat (ts-gateway-service/src/main/resources/application.yml:156) or in default-filters]
+- ts-gateway-service→ts-seat-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
+- ts-gateway-service→ts-seat-service layer 2 (istio) retried = not-sent [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry; classes: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/retry_state_impl.cc]
+- ts-gateway-service→ts-seat-service layer 2 (istio) gives up as = not-sent as status-503; reset as status-502, status-503; timeout as status-504 [LIBRARY_DEFAULT: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/router.cc]
+
+### INFO PLM-A3 ts-gateway-service→ts-security-service
+
+- ts-gateway-service→ts-security-service idempotent = false [LIBRARY_DEFAULT: POST (ts-security-service /api/v1/securityservice/securityConfigs, ts-security-service/src/main/java/security/controller/SecurityController.java:39); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
+- ts-gateway-service→ts-security-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route security (ts-gateway-service/src/main/resources/application.yml:161) or in default-filters]
+- ts-gateway-service→ts-security-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
+- ts-gateway-service→ts-security-service layer 2 (istio) retried = not-sent [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry; classes: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/retry_state_impl.cc]
+- ts-gateway-service→ts-security-service layer 2 (istio) gives up as = not-sent as status-503; reset as status-502, status-503; timeout as status-504 [LIBRARY_DEFAULT: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/router.cc]
+
+### INFO PLM-A3 ts-gateway-service→ts-station-food-service
+
+- ts-gateway-service→ts-station-food-service idempotent = false [LIBRARY_DEFAULT: POST (ts-station-food-service /api/v1/stationfoodservice/stationfoodstores, ts-station-food-service/src/main/java/food/controller/StationFoodController.java:44); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
+- ts-gateway-service→ts-station-food-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route station-food (ts-gateway-service/src/main/resources/application.yml:166) or in default-filters]
+- ts-gateway-service→ts-station-food-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
+- ts-gateway-service→ts-station-food-service layer 2 (istio) retried = not-sent [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry; classes: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/retry_state_impl.cc]
+- ts-gateway-service→ts-station-food-service layer 2 (istio) gives up as = not-sent as status-503; reset as status-502, status-503; timeout as status-504 [LIBRARY_DEFAULT: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/router.cc]
+
+### INFO PLM-A3 ts-gateway-service→ts-station-service
+
+- ts-gateway-service→ts-station-service idempotent = false [LIBRARY_DEFAULT: POST (ts-station-service /api/v1/stationservice/stations, ts-station-service/src/main/java/fdse/microservice/controller/StationController.java:38); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
+- ts-gateway-service→ts-station-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route station (ts-gateway-service/src/main/resources/application.yml:171) or in default-filters]
+- ts-gateway-service→ts-station-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
+- ts-gateway-service→ts-station-service layer 2 (istio) retried = not-sent [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry; classes: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/retry_state_impl.cc]
+- ts-gateway-service→ts-station-service layer 2 (istio) gives up as = not-sent as status-503; reset as status-502, status-503; timeout as status-504 [LIBRARY_DEFAULT: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/router.cc]
+
+### INFO PLM-A3 ts-gateway-service→ts-train-service
+
+- ts-gateway-service→ts-train-service idempotent = false [LIBRARY_DEFAULT: POST (ts-train-service /api/v1/trainservice/trains, ts-train-service/src/main/java/train/controller/TrainController.java:34); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
+- ts-gateway-service→ts-train-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route train (ts-gateway-service/src/main/resources/application.yml:181) or in default-filters]
+- ts-gateway-service→ts-train-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
+- ts-gateway-service→ts-train-service layer 2 (istio) retried = not-sent [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry; classes: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/retry_state_impl.cc]
+- ts-gateway-service→ts-train-service layer 2 (istio) gives up as = not-sent as status-503; reset as status-502, status-503; timeout as status-504 [LIBRARY_DEFAULT: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/router.cc]
+
+### INFO PLM-A3 ts-gateway-service→ts-travel-plan-service
+
+- ts-gateway-service→ts-travel-plan-service idempotent = false [LIBRARY_DEFAULT: POST (ts-travel-plan-service /api/v1/travelplanservice/travelPlan/transferResult, ts-travel-plan-service/src/main/java/travelplan/controller/TravelPlanController.java:32); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
+- ts-gateway-service→ts-travel-plan-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route travel-plan (ts-gateway-service/src/main/resources/application.yml:191) or in default-filters]
+- ts-gateway-service→ts-travel-plan-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
+- ts-gateway-service→ts-travel-plan-service layer 2 (istio) retried = not-sent [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry; classes: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/retry_state_impl.cc]
+- ts-gateway-service→ts-travel-plan-service layer 2 (istio) gives up as = not-sent as status-503; reset as status-502, status-503; timeout as status-504 [LIBRARY_DEFAULT: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/router.cc]
+
+### INFO PLM-A3 ts-gateway-service→ts-travel-service
+
+- ts-gateway-service→ts-travel-service idempotent = false [LIBRARY_DEFAULT: POST (ts-travel-service /api/v1/travelservice/trips/routes, ts-travel-service/src/main/java/travel/controller/TravelController.java:58); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
+- ts-gateway-service→ts-travel-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route travel (ts-gateway-service/src/main/resources/application.yml:196) or in default-filters]
+- ts-gateway-service→ts-travel-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
+- ts-gateway-service→ts-travel-service layer 2 (istio) retried = not-sent [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry; classes: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/retry_state_impl.cc]
+- ts-gateway-service→ts-travel-service layer 2 (istio) gives up as = not-sent as status-503; reset as status-502, status-503; timeout as status-504 [LIBRARY_DEFAULT: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/router.cc]
+
+### INFO PLM-A3 ts-gateway-service→ts-travel2-service
+
+- ts-gateway-service→ts-travel2-service idempotent = false [LIBRARY_DEFAULT: POST (ts-travel2-service /api/v1/travel2service/trips/routes, ts-travel2-service/src/main/java/travel2/controller/Travel2Controller.java:51); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
+- ts-gateway-service→ts-travel2-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route travel2 (ts-gateway-service/src/main/resources/application.yml:186) or in default-filters]
+- ts-gateway-service→ts-travel2-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
+- ts-gateway-service→ts-travel2-service layer 2 (istio) retried = not-sent [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry; classes: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/retry_state_impl.cc]
+- ts-gateway-service→ts-travel2-service layer 2 (istio) gives up as = not-sent as status-503; reset as status-502, status-503; timeout as status-504 [LIBRARY_DEFAULT: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/router.cc]
+
+### INFO PLM-A3 ts-gateway-service→ts-user-service
+
+- ts-gateway-service→ts-user-service idempotent = false [LIBRARY_DEFAULT: POST (ts-user-service /api/v1/userservice/users/register, ts-user-service/src/main/java/user/controller/UserController.java:52); http RFC 9110 default (verified by doc), https://www.rfc-editor.org/rfc/rfc9110#section-9.2.2]
+- ts-gateway-service→ts-user-service layer 1 (spring-cloud-gateway) totalAttempts = 1 [EXPLICIT: no Retry filter on route user (ts-gateway-service/src/main/resources/application.yml:201) or in default-filters]
+- ts-gateway-service→ts-user-service layer 2 (istio) totalAttempts = 3 [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry (attempts 2 + 1)]
+- ts-gateway-service→ts-user-service layer 2 (istio) retried = not-sent [LIBRARY_DEFAULT: no VirtualService for the host; istio 1.31 default (verified by doc), https://istio.io/v1.31/docs/reference/config/networking/virtual-service/#HTTPRetry; classes: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/retry_state_impl.cc]
+- ts-gateway-service→ts-user-service layer 2 (istio) gives up as = not-sent as status-503; reset as status-502, status-503; timeout as status-504 [LIBRARY_DEFAULT: istio 1.31 (Envoy 8893f913) default (verified by source), https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/router.cc]
 
 ## Coverage
 

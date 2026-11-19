@@ -13,7 +13,13 @@ the report format and the rules.
   Spring Cloud Gateway's `Retry` conditions and its answers (500 after a connection failure or reset, 503 for a
   service without instances, 504 after a response timeout) from oracle tests on the real gateway; Spring Cloud
   LoadBalancer's retryable exceptions and status codes, and Resilience4j's default of retrying every exception, from
-  oracle tests too. The rules do not use them yet.
+  oracle tests too.
+- PLM-A3 reads them (#24): a non-idempotent edge is `ERROR` when a failure the callee may have processed is retried,
+  with the most tries over those classes and, when every layer's conditions are known, a class that causes it
+  (e.g. "2 tries (on reset)"). An edge retried only when the request was not sent is `INFO`, "retried only when the
+  request was not sent, n tries". The finding lists the known conditions with their sources. Unknown conditions
+  retry every class, so the finding is as before. On TrainTicket the 34 POST routes under the Istio default are now
+  `INFO`.
 
 ### Spec format
 

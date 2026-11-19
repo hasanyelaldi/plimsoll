@@ -207,7 +207,7 @@ Runs on real projects, with a hand check of every finding: [spring-petclinic-mic
 | **PLM-A1** Amplification | How many requests one entry request can cause at each service, assuming every try fails and the failure propagates upward. The attempts of an edge's layers multiply; paths through different callers add up; alternatives (`choice`) take the largest. A cycle reachable from an entry is `UNBOUNDED`. | `ERROR` above `--max-amp` |
 | **PLM-A2a** Retry budget exceeds the caller's deadline | Time for all tries and backoffs, `k × perTry + Σ backoff`, against the caller's deadline; reports how many tries actually fit. | `WARN` |
 | **PLM-A2b** Abandoned work | The callee may work longer (its deadline) than the caller waits for one try, so the callee keeps working after the caller gave up. | `WARN` if the edge retries, else `INFO` |
-| **PLM-A3** Retry on a non-idempotent edge | A call that is not idempotent (e.g. `POST`, per RFC 9110) is retried. | `ERROR` |
+| **PLM-A3** Retry on a non-idempotent edge | A call that is not idempotent (e.g. `POST`, per RFC 9110) is retried on a failure the callee may have processed. Retried only when the request was not sent: `INFO`. | `ERROR` |
 | **PLM-A4** Backoff hygiene | Retries with zero backoff; retries without jitter. | `WARN`; `INFO` |
 | **PLM-A5** Layered retries | One edge retried by two or more layers (e.g. Resilience4j and Istio); one path with retries on two or more edges. | `WARN` |
 | **PLM-C1** Mechanism detected but not modelled | A retry, timeout or breaker mechanism no collector models yet, found by the patterns in [`kb/detectors/mechanisms.yaml`](kb/detectors/mechanisms.yaml). Only collected directories produce it. | `WARN` |

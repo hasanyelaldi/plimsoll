@@ -7,7 +7,7 @@ Issue #28. Testbed choice: ADR 0005 (secondary testbed). The full generated repo
 | Input | Value |
 | --- | --- |
 | FudanSELab/train-ticket | `313886e99befb94be6cd45f085c98e0019f59829` (1 Nov 2022), Spring Boot 2.x, Spring Cloud Hoxton.SR12 |
-| Plimsoll | `40205f9` (main after #46) |
+| Plimsoll | `40205f9` (main after #46); report regenerated after #24 (A3 reads retry conditions, ADR 0014), same command |
 
 ```bash
 git clone https://github.com/FudanSELab/train-ticket.git
@@ -16,13 +16,13 @@ git -C train-ticket checkout 313886e99befb94be6cd45f085c98e0019f59829
 java -jar plimsoll-cli/target/plimsoll.jar analyze --format=MARKDOWN train-ticket
 ```
 
-No file in TrainTicket was changed and no `edges-hint.yaml` was added. Exit code 1. Two runs gave byte-identical output. The run takes about 5 s.
+No file in TrainTicket was changed and no `edges-hint.yaml` was added. Exit code 1 before #24, 0 since. Two runs gave byte-identical output. The run takes about 5 s.
 
 The first run, before #46, named every callee `${..._HOST:ts-...}` after the unresolved placeholder in the gateway's `lb://` URIs. No callee matched its module, so idempotency stayed `UNKNOWN` and the report was `0 error, 0 warn, 78 info`. #46 resolves a placeholder to its default. Everything below is after #46.
 
 ## Result
 
-**34 error, 0 warn, 78 info.** The graph has one entry (`ts-gateway-service`) and 39 edges, one per gateway route, to 38 callees. Each edge has two layers:
+**0 error, 0 warn, 112 info** since #24; 34 error, 0 warn, 78 info before. The graph has one entry (`ts-gateway-service`) and 39 edges, one per gateway route, to 38 callees. Each edge has two layers:
 
 1. `spring-cloud-gateway`: no `Retry` filter on any route, so 1 try.
 2. `istio`: three Istio manifests were found and none has a VirtualService for these hosts, so every callee gets Istio's default policy (2 retries, so 3 tries).
@@ -30,7 +30,7 @@ The first run, before #46, named every callee `${..._HOST:ts-...}` after the unr
 | Rule | Count | Detail |
 | --- | --- | --- |
 | A1 | none above the limit | ×3 on 38 callees (`ts-auth-service` ×6 before #48), ×1 on the gateway |
-| A3 `ERROR` | 34 | POST routes retried 3 times by the Istio default |
+| A3 `INFO` | 34 | POST routes retried 3 times by the Istio default, only when the request was not sent (`ERROR` before #24) |
 | A2a `INFO` | 39 | cannot evaluate: gateway deadline `UNKNOWN` (per-try timeouts are unlimited since #38) |
 | A2b `INFO` | 39 | cannot evaluate: callee deadline `UNKNOWN` |
 | A4, A5, C1 | none | Istio backs off (25 ms base, jittered); only one layer retries; no mechanism from `kb/detectors` was found |
@@ -67,20 +67,20 @@ Checked against the TrainTicket sources and manifests at the pinned commit.
 | Finding | Verdict | Notes |
 | --- | --- | --- |
 | Istio default on every callee | correct for the input, but see the deployment caveat | `virtual-services-fault.yaml` routes only `ts-voucher-service`, which no collected edge calls. `trainticket-gateway.yaml` binds the ingress gateway only and is skipped (it does not apply to mesh traffic). No manifest sets `retries`, `timeout` or `outlierDetection`. |
-| A3 on 34 POST routes | true positive in form, low risk in practice | POSTs do get up to 3 tries under the Istio default. But the default retries only on `connect-failure` and `refused-stream`, both before the upstream processes the request, and on `unavailable` and `cancelled`, gRPC statuses a REST call does not return. A duplicate side effect is therefore unlikely. A3 does not look at `retryOn` yet (comment on #24). |
+| A3 on 34 POST routes | true positive in form, low risk in practice | POSTs do get up to 3 tries under the Istio default. But the default retries only on `connect-failure` and `refused-stream`, both before the upstream processes the request, and on `unavailable` and `cancelled`, gRPC statuses a REST call does not return. A duplicate side effect is therefore unlikely. Since #24 A3 reads the conditions (ADR 0014): `connect-failure` and `refused-stream` map to `not-sent`, the gRPC policies to no class, so each finding is `INFO`, "retried only when the request was not sent, 3 tries", and lists the classes with their Envoy source. |
 | A1 ×3 per callee | correct | 1 (gateway) × 3 (Istio) per route. |
 | A1 on `ts-auth-service` | correct since #48 | Two routes (`auth`, `auth-user`) go to it. A request takes only the first matching route (oracle), so the routes are alternatives and A1 reports ×3, "max over 2 alternatives of routes of ts-gateway-service" (ADR 0012). Before #48 it summed them to ×6. The two A3 findings are now located `ts-gateway-service→ts-auth-service (/api/v1/auth/**)` and `(/api/v1/users/**)`. |
 | A2a / A2b `INFO` | correct to stay silent | No deadline is configured anywhere; the timeouts are known to be absent (#38). |
 | C1 none | correct | No Resilience4j, Spring Retry, Feign, Hystrix or other listed mechanism in the poms or the code. |
 
-**Deployment caveat.** The Istio manifests in `deployment/kubernetes-manifests/k8s-with-istio` (May 2021, images `0.0.4`) deploy the older architecture, which has no `ts-gateway-service`; there, `ts-ui-dashboard` routes requests. The gateway was added in August 2022 and is deployed by `quickstart-k8s`, which has no Istio. Plimsoll merges all manifests under the directory with all the code, so the 34 A3 findings describe a combination that the repository never deploys: the current gateway inside the 2021 mesh. If that gateway ran in a mesh with sidecar injection, the findings would hold. Filed as #49.
+**Deployment caveat.** The Istio manifests in `deployment/kubernetes-manifests/k8s-with-istio` (May 2021, images `0.0.4`) deploy the older architecture, which has no `ts-gateway-service`; there, `ts-ui-dashboard` routes requests. The gateway was added in August 2022 and is deployed by `quickstart-k8s`, which has no Istio. Plimsoll merges all manifests under the directory with all the code, so the 34 A3 findings (`INFO` since #24) describe a combination that the repository never deploys: the current gateway inside the 2021 mesh. If that gateway ran in a mesh with sidecar injection, the findings would hold. Filed as #49.
 
 ## Gaps (false negatives)
 
 | Gap | Where in TrainTicket | Follow-up |
 | --- | --- | --- |
 | Service-to-service calls in code are not edges | `RestTemplate` calls in 70 files, e.g. preserve → order, seat, travel, … | #37 |
-| Condition-aware A3 and A1 | Istio default `retryOn` | #24 |
+| Condition-aware A1 (per-class figures) | Istio default `retryOn` | #24 |
 | Version of the libraries | Gateway 2.2.x (Hoxton) and Istio `v1alpha3`, while the KB covers Gateway 5.0.0 and Istio 1.31 | #51 |
 | Modules that are not services | `old-docs/Json2Shiviz`, `old-docs/Lib/ms-monitoring-core`, `ts-common` (a library) | #50 |
 
