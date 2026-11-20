@@ -153,3 +153,6 @@ A non-idempotent edge is a risk when a failure the callee may have processed is 
 - Resilience4j without `retryExceptions` retries every exception, so it retries every class. Listed exceptions are
   not mapped, because which exception a client throws for each failure is client-specific; they leave the classes
   `UNKNOWN`.
+- A layer known to try once retries no class, so its retried classes do not change `E_c`. It counts as having known
+  conditions when its translation is known. This lets a retry-off LoadBalancer or a gateway route without `Retry`
+  sit on an edge into `v` without hiding the per-class figures.

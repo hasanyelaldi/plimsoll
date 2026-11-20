@@ -314,4 +314,87 @@ class AmplificationRuleTest {
             assertThat(f.unknowns()).containsExactly("gw→a (other) layer 1 (generic) totalAttempts");
         });
     }
+
+    // ---- per failure class (ADR 0014) ----------------------------------------
+
+    private static Finding a1(String yaml) {
+        List<Finding> f = findings(analyze(yaml), "PLM-A1");
+        assertThat(f).hasSize(1);
+        return f.get(0);
+    }
+
+    @Test
+    void perClassFiguresWhenEveryLayerIntoTheServiceHasKnownConditions() {
+        // the edge into c retries only not-sent; above b the class is unknown, so a→b keeps its 5 tries
+        Finding f = a1("""
+                services: { a: { entry: true }, b: {}, c: {} }
+                edges:
+                  - { from: a, to: b, layers: [ { kind: resilience4j, maxAttempts: 5 } ] }
+                  - { from: b, to: c, layers: [ { kind: generic, totalAttempts: 3, retryOn: [not-sent] } ] }
+                """);
+        assertThat(f.severity()).isEqualTo(Severity.ERROR);
+        assertThat(f.detail()).isEqualTo(
+                "×15 (b ×5), limit 10; by failure class at c: ×15 for not-sent, ×5 for any other class");
+        assertThat(f.values()).extracting(UsedValue::name).contains("b→c layer 1 (generic) retried");
+    }
+
+    @Test
+    void classesWithTheSameFigureAreGrouped() {
+        Finding f = a1("""
+                services: { a: { entry: true }, b: {} }
+                edges:
+                  - { from: a, to: b, layers: [ { kind: generic, totalAttempts: 4, retryOn: [503] },
+                                                { kind: generic, totalAttempts: 3, retryOn: [not-sent, reset] } ] }
+                """);
+        assertThat(f.detail()).isEqualTo("×12, limit 10; by failure class at b: ×3 for not-sent or reset, "
+                + "×4 for status-503, ×1 for any other class");
+    }
+
+    @Test
+    void noPerClassFiguresWithAnUnknownConditionIntoTheService() {
+        Finding f = a1("""
+                services: { a: { entry: true }, b: {}, c: {} }
+                edges:
+                  - { from: a, to: c, layers: [ { kind: generic, totalAttempts: 11, retryOn: [not-sent] } ] }
+                  - { from: a, to: b, layers: [ { kind: generic, totalAttempts: 1 } ] }
+                  - { from: b, to: c, layers: [ { kind: generic, totalAttempts: 2 } ] }
+                """);
+        assertThat(f.detail()).isEqualTo("×13 (b ×1), limit 10");
+        assertThat(f.values()).extracting(UsedValue::name).noneMatch(n -> n.endsWith("retried"));
+    }
+
+    @Test
+    void noPerClassFiguresWhenNoClassIsBelowTheBound() {
+        Finding f = a1("""
+                services: { a: { entry: true }, b: {} }
+                edges:
+                  - { from: a, to: b, layers: [ { kind: generic, totalAttempts: 11, retryOn: [not-sent, reset, timeout,
+                      status-500, status-502, status-503, status-504, status-5xx-other, 409, 429, 400] } ] }
+                """);
+        assertThat(f.detail()).isEqualTo("×11, limit 10");
+    }
+
+    @Test
+    void perClassFiguresFollowAlternatives() {
+        // two routes to b are alternatives: the bound takes the worse one, and so does each class
+        Finding f = a1("""
+                services: { gw: { entry: true }, b: {} }
+                edges:
+                  - { from: gw, to: b, operation: x, choice: routes, layers: [ { kind: generic, totalAttempts: 11, retryOn: [not-sent] } ] }
+                  - { from: gw, to: b, operation: y, choice: routes, layers: [ { kind: generic, totalAttempts: 2, retryOn: [reset] } ] }
+                """);
+        assertThat(f.detail()).isEqualTo("×11, limit 10; max over 2 alternatives of routes; "
+                + "by failure class at b: ×11 for not-sent, ×2 for reset, ×1 for any other class");
+    }
+
+    @Test
+    void theSeverityStaysOnTheBound() {
+        Finding f = a1("""
+                services: { a: { entry: true }, b: {} }
+                edges:
+                  - { from: a, to: b, layers: [ { kind: generic, totalAttempts: 11, retryOn: [] } ] }
+                """);
+        assertThat(f.severity()).isEqualTo(Severity.ERROR);
+        assertThat(f.detail()).isEqualTo("×11, limit 10; by failure class at b: ×1 for every class");
+    }
 }

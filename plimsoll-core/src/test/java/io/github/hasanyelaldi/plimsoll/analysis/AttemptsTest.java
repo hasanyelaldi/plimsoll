@@ -86,4 +86,14 @@ class AttemptsTest {
         assertThat(Attempts.classes(Set.of())).isEqualTo("none");
         assertThat(Attempts.givesUpAs(Map.of())).isEqualTo("every class as is");
     }
+
+    @Test
+    void aLayerThatTriesOnceNeedsNoRetriedClasses() {
+        Val<Set<FailureClass>> unknown = Val.unknown("retry off");
+        assertThat(Attempts.conditionsKnown(edge(layer(2, Map.of(), RESET), layer(1, unknown, Val.explicit(Map.of(), "x")))))
+                .isTrue();
+        assertThat(Attempts.conditionsKnown(edge(layer(2, Map.of(), RESET), layer(1, unknown, Val.unknown("x")))))
+                .isFalse();
+        assertThat(Attempts.conditionsKnown(edge(layer(2, unknown, Val.explicit(Map.of(), "x"))))).isFalse();
+    }
 }

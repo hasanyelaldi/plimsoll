@@ -68,7 +68,7 @@ Checked against the TrainTicket sources and manifests at the pinned commit.
 | --- | --- | --- |
 | Istio default on every callee | correct for the input, but see the deployment caveat | `virtual-services-fault.yaml` routes only `ts-voucher-service`, which no collected edge calls. `trainticket-gateway.yaml` binds the ingress gateway only and is skipped (it does not apply to mesh traffic). No manifest sets `retries`, `timeout` or `outlierDetection`. |
 | A3 on 34 POST routes | true positive in form, low risk in practice | POSTs do get up to 3 tries under the Istio default. But the default retries only on `connect-failure` and `refused-stream`, both before the upstream processes the request, and on `unavailable` and `cancelled`, gRPC statuses a REST call does not return. A duplicate side effect is therefore unlikely. Since #24 A3 reads the conditions (ADR 0014): `connect-failure` and `refused-stream` map to `not-sent`, the gRPC policies to no class, so each finding is `INFO`, "retried only when the request was not sent, 3 tries", and lists the classes with their Envoy source. |
-| A1 ×3 per callee | correct | 1 (gateway) × 3 (Istio) per route. |
+| A1 ×3 per callee | correct | 1 (gateway) × 3 (Istio) per route. Below the limit, so there is no A1 finding and no per-class figure (#24); per class it would be ×3 for `not-sent` and ×1 for every other class. |
 | A1 on `ts-auth-service` | correct since #48 | Two routes (`auth`, `auth-user`) go to it. A request takes only the first matching route (oracle), so the routes are alternatives and A1 reports ×3, "max over 2 alternatives of routes of ts-gateway-service" (ADR 0012). Before #48 it summed them to ×6. The two A3 findings are now located `ts-gateway-service→ts-auth-service (/api/v1/auth/**)` and `(/api/v1/users/**)`. |
 | A2a / A2b `INFO` | correct to stay silent | No deadline is configured anywhere; the timeouts are known to be absent (#38). |
 | C1 none | correct | No Resilience4j, Spring Retry, Feign, Hystrix or other listed mechanism in the poms or the code. |
@@ -80,7 +80,6 @@ Checked against the TrainTicket sources and manifests at the pinned commit.
 | Gap | Where in TrainTicket | Follow-up |
 | --- | --- | --- |
 | Service-to-service calls in code are not edges | `RestTemplate` calls in 70 files, e.g. preserve → order, seat, travel, … | #37 |
-| Condition-aware A1 (per-class figures) | Istio default `retryOn` | #24 |
 | Version of the libraries | Gateway 2.2.x (Hoxton) and Istio `v1alpha3`, while the KB covers Gateway 5.0.0 and Istio 1.31 | #51 |
 | Modules that are not services | `old-docs/Json2Shiviz`, `old-docs/Lib/ms-monitoring-core`, `ts-common` (a library) | #50 |
 

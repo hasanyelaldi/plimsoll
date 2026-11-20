@@ -97,10 +97,13 @@ final class Attempts {
         return out;
     }
 
-    /** True when every layer of the edge has known retried classes and a known translation (ADR 0014). */
+    /**
+     * True when {@link #tries} depends on no UNKNOWN condition: every layer has a known translation, and known retried
+     * classes unless it is known to try once (ADR 0014).
+     */
     static boolean conditionsKnown(Edge edge) {
-        return edge.layers().stream()
-                .allMatch(l -> l.conditions().retried().isKnown() && l.conditions().givesUpAs().isKnown());
+        return edge.layers().stream().allMatch(l -> l.conditions().givesUpAs().isKnown()
+                && (l.conditions().retried().isKnown() || (known(l) && l.retry().totalAttempts().value() == 1)));
     }
 
     /** The condition values of each layer that are known, for a finding's list of used values. */
