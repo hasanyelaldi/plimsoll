@@ -6,6 +6,7 @@ import io.github.hasanyelaldi.plimsoll.io.YamlTree.ListNode;
 import io.github.hasanyelaldi.plimsoll.io.YamlTree.MapNode;
 import io.github.hasanyelaldi.plimsoll.io.YamlTree.Node;
 import io.github.hasanyelaldi.plimsoll.io.YamlTree.Scalar;
+import io.github.hasanyelaldi.plimsoll.model.CircuitBreaker;
 import io.github.hasanyelaldi.plimsoll.model.Durations;
 import io.github.hasanyelaldi.plimsoll.model.Edge;
 import io.github.hasanyelaldi.plimsoll.model.FailureClass;
@@ -28,8 +29,10 @@ import java.util.EnumSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
@@ -38,7 +41,7 @@ import java.util.stream.Collectors;
  * Istio {@code attempts} counts retries only and becomes {@code attempts + 1}.
  *
  * <p>An absent {@code multiplier} means fixed backoff (1.0) and an absent {@code fanout} means one call;
- * any other absent field is UNKNOWN.
+ * any other absent field is UNKNOWN. A layer may have a {@code circuitBreaker} (ADR 0015).
  */
 public final class SpecLoader {
 
@@ -48,7 +51,9 @@ public final class SpecLoader {
             "choice");
     private static final Set<String> LAYER_KEYS = Set.of(
             "kind", "maxAttempts", "attempts", "totalAttempts", "perTryTimeout", "backoff", "multiplier",
-            "maxBackoff", "jitter", "retryOn", "overallTimeout");
+            "maxBackoff", "jitter", "retryOn", "overallTimeout", "circuitBreaker");
+    private static final Set<String> BREAKER_KEYS = Set.of("name", "position", "failureRateThreshold",
+            "slidingWindowType", "slidingWindowSize", "minimumNumberOfCalls", "waitDurationInOpenState");
     private static final Map<String, String> ATTEMPTS_KEY = Map.of(
             "resilience4j", "maxAttempts",
             "istio", "attempts",
@@ -172,7 +177,36 @@ public final class SpecLoader {
                 duration(m, "maxBackoff"),
                 booleanVal(m, "jitter"),
                 retryOn(m));
-        return new Layer(kind, retry, timeout(m, "overallTimeout"), conditions(kind, m));
+        Entry breaker = m.entries().get("circuitBreaker");
+        return new Layer(kind, retry, timeout(m, "overallTimeout"), conditions(kind, m),
+                breaker == null ? null : breaker(map(breaker.value(), "circuitBreaker")));
+    }
+
+    /** ADR 0015: a layer's circuit breaker; an absent field is UNKNOWN. */
+    private CircuitBreaker breaker(MapNode m) {
+        checkKeys(m, BREAKER_KEYS, "circuitBreaker");
+        Entry name = m.entries().get("name");
+        Entry rate = m.entries().get("failureRateThreshold");
+        return new CircuitBreaker(
+                name == null ? Val.unknown(absent("name", m)) : Val.explicit(string(name, "name"), at(name.keyLine())),
+                named(m, "position", CircuitBreaker.Position::parse, "wraps-all-tries or each-try"),
+                rate == null ? Val.unknown(absent("failureRateThreshold", m))
+                        : Val.explicit(percentage(rate, "failureRateThreshold"), at(rate.keyLine())),
+                named(m, "slidingWindowType", CircuitBreaker.WindowType::parse, "count-based or time-based"),
+                intVal(m, "slidingWindowSize", 1),
+                intVal(m, "minimumNumberOfCalls", 1),
+                duration(m, "waitDurationInOpenState"));
+    }
+
+    private <T> Val<T> named(MapNode m, String key, Function<String, Optional<T>> parse, String expected) {
+        Entry e = m.entries().get(key);
+        if (e == null) {
+            return Val.unknown(absent(key, m));
+        }
+        String text = string(e, key);
+        T value = parse.apply(text).orElseThrow(() ->
+                error(e.keyLine(), "'" + key + "': unknown value '" + text + "' (expected " + expected + ")"));
+        return Val.explicit(value, at(e.keyLine()));
     }
 
     /**
@@ -239,6 +273,23 @@ public final class SpecLoader {
         Duration d = Durations.parseTimeout(text).orElseThrow(() ->
                 error(e.keyLine(), "'" + key + "': invalid timeout '" + text + "' (use e.g. 300ms, 1s, 2m or unlimited)"));
         return Val.explicit(d, at(e.keyLine()));
+    }
+
+    private Val<Integer> intVal(MapNode m, String key, int min) {
+        Entry e = m.entries().get(key);
+        return e == null ? Val.unknown(absent(key, m)) : Val.explicit(integer(e, key, min), at(e.keyLine()));
+    }
+
+    private double percentage(Entry e, String key) {
+        Scalar s = scalar(e, key, null, "a number");
+        if (s.token() != JsonToken.VALUE_NUMBER_INT && s.token() != JsonToken.VALUE_NUMBER_FLOAT) {
+            throw error(e.keyLine(), "'" + key + "' must be a number");
+        }
+        double v = Double.parseDouble(s.text());
+        if (!(v > 0.0 && v <= 100.0)) {
+            throw error(e.keyLine(), "'" + key + "' must be a percentage above 0 and at most 100, got " + s.text());
+        }
+        return v;
     }
 
     private Val<Boolean> booleanVal(MapNode m, String key) {

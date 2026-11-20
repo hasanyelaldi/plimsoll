@@ -3,6 +3,7 @@ package io.github.hasanyelaldi.plimsoll.io;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import io.github.hasanyelaldi.plimsoll.model.CircuitBreaker;
 import io.github.hasanyelaldi.plimsoll.model.Edge;
 import io.github.hasanyelaldi.plimsoll.model.FailureClass;
 import io.github.hasanyelaldi.plimsoll.model.RetryConditions;
@@ -148,6 +149,49 @@ class SpecLoaderTest {
 
         assertInvalid(head + "{ kind: generic, retryOn: [connect-failure] } ] }\n", "unknown failure class 'connect-failure'");
         assertInvalid(head + "{ kind: generic, retryOn: [302] } ] }\n", "unknown failure class '302'");
+    }
+
+    /** ADR 0015: a layer may have a circuit breaker; an absent field is UNKNOWN. */
+    @Test
+    void aLayerMayHaveACircuitBreaker() {
+        String yaml = HEAD + """
+                edges:
+                  - from: a
+                    to: b
+                    layers:
+                      - kind: resilience4j
+                        maxAttempts: 3
+                        circuitBreaker:
+                          name: orders
+                          position: each-try
+                          failureRateThreshold: 50
+                          slidingWindowType: count-based
+                          slidingWindowSize: 10
+                          waitDurationInOpenState: 30s
+                      - { kind: istio, attempts: 1 }
+                """;
+        Edge edge = SpecLoader.parse(yaml, "t.yaml").edges().get(0);
+        CircuitBreaker b = edge.layers().get(0).breaker();
+        assertThat(b.name()).isEqualTo(Val.explicit("orders", "t.yaml:11"));
+        assertThat(b.position()).isEqualTo(Val.explicit(CircuitBreaker.Position.EACH_TRY, "t.yaml:12"));
+        assertThat(b.failureRateThreshold()).isEqualTo(Val.explicit(50.0, "t.yaml:13"));
+        assertThat(b.slidingWindowType()).isEqualTo(Val.explicit(CircuitBreaker.WindowType.COUNT_BASED, "t.yaml:14"));
+        assertThat(b.slidingWindowSize()).isEqualTo(Val.explicit(10, "t.yaml:15"));
+        assertThat(b.minimumNumberOfCalls()).isEqualTo(Val.unknown("'minimumNumberOfCalls' absent (t.yaml:11)"));
+        assertThat(b.waitDurationInOpenState()).isEqualTo(Val.explicit(Duration.ofSeconds(30), "t.yaml:16"));
+        assertThat(edge.layers().get(1).breaker()).isNull();
+    }
+
+    @Test
+    void invalidCircuitBreakersAreRejected() {
+        String head = HEAD + "edges:\n  - { from: a, to: b, layers: [ { kind: generic, circuitBreaker: ";
+        assertInvalid(head + "{ position: outside } } ] }\n", "'position': unknown value 'outside' (expected wraps-all-tries or each-try)");
+        assertInvalid(head + "{ slidingWindowType: sliding } } ] }\n", "expected count-based or time-based");
+        assertInvalid(head + "{ failureRateThreshold: 0 } } ] }\n", "above 0 and at most 100, got 0");
+        assertInvalid(head + "{ failureRateThreshold: 101 } } ] }\n", "above 0 and at most 100, got 101");
+        assertInvalid(head + "{ slidingWindowSize: 0 } } ] }\n", "'slidingWindowSize' must be at least 1");
+        assertInvalid(head + "{ halfOpenCalls: 3 } } ] }\n", "unknown key 'halfOpenCalls' in circuitBreaker");
+        assertInvalid(head + "true } ] }\n", "circuitBreaker must be a mapping");
     }
 
     @Test

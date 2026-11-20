@@ -48,7 +48,7 @@ plimsoll-collectors/  read real config into the model: Spring Boot properties, R
 plimsoll-cli/     picocli entry point: `plimsoll analyze <spec-or-dir>` (a directory is collected; a Coverage section lists the files read per service, the layer kinds searched and found per edge, and the configuration it did not read (config imports and config server, profile documents and activations, other config files, placeholders under collected prefixes) under Sources not read; then collector notes sorted in a Notes section; several repositories are analysed by checking them out side by side under one directory, ADR 0010)
 examples/         hand-written specs; checkout.yaml is the canonical demo and acceptance test
 findings/         runs on real testbeds (pinned commit, generated report, hand check, gaps); petclinic.md for #9, trainticket.md for #28
-docs/adr/         decisions in MADR format (0001–0014 below)
+docs/adr/         decisions in MADR format (0001–0015 below)
 kb/defaults/      library defaults knowledge base, one YAML file per library
 kb/detectors/     patterns of mechanisms no collector models (PLM-C1); `Detector` in `…collect.detect`
 ```
@@ -66,7 +66,10 @@ record RetryPolicy(Val<Integer> totalAttempts,              // always counts the
                    Val<Duration> initialBackoff, Val<Double> multiplier, Val<Duration> maxBackoff,
                    Val<Boolean> jitter, Val<Set<String>> retryOn) {}
 record Layer(String kind, RetryPolicy retry, Val<Duration> overallTimeout,
-             RetryConditions conditions) {}  // resilience4j | spring-cloud-gateway | istio | http-client | generic
+             RetryConditions conditions, CircuitBreaker breaker) {}  // kind: resilience4j | spring-cloud-gateway | istio | http-client | generic; breaker: null = none
+record CircuitBreaker(Val<String> name, Val<Position> position,             // WRAPS_ALL_TRIES | EACH_TRY, relative to the layer's retry (ADR 0015)
+                      Val<Double> failureRateThreshold, Val<WindowType> slidingWindowType, Val<Integer> slidingWindowSize,
+                      Val<Integer> minimumNumberOfCalls, Val<Duration> waitDurationInOpenState) {}
 record RetryConditions(Val<Set<FailureClass>> retried,                      // UNKNOWN = every class (ADR 0014)
                        Val<Map<FailureClass, Set<FailureClass>>> givesUpAs) {}  // absent key = passed on as is
 record Edge(String from, String to, String operation, Val<Boolean> idempotent,
@@ -105,7 +108,7 @@ Exit codes: `0` no finding at or above `--fail-on` (default `ERROR`), `1` otherw
 
 ## Spec format and acceptance test
 
-Durations are strings (`300ms`, `1s`); `perTryTimeout` and `overallTimeout` also take `unlimited` for a timeout that does not exist (ADR 0011). In a hand-written spec an absent `multiplier` means fixed backoff (1.0) and an absent `fanout` means 1; any other absent field is `UNKNOWN`. An edge may say `choice: <name>`: edges from one service with the same choice are alternatives (ADR 0012). A layer's `retryOn` lists failure classes (ADR 0014); absent means every class.
+Durations are strings (`300ms`, `1s`); `perTryTimeout` and `overallTimeout` also take `unlimited` for a timeout that does not exist (ADR 0011). In a hand-written spec an absent `multiplier` means fixed backoff (1.0) and an absent `fanout` means 1; any other absent field is `UNKNOWN`. An edge may say `choice: <name>`: edges from one service with the same choice are alternatives (ADR 0012). A layer's `retryOn` lists failure classes (ADR 0014); absent means every class. A layer may have a `circuitBreaker` (ADR 0015); the report lists it, no rule reads it.
 
 In a collected graph (ADR 0009): `deadline` comes only from `deadline:` in the service's own `edges-hint.yaml`, never from its callers' or its own outbound timeouts, else `UNKNOWN`; a Spring Cloud Gateway with routes is an entry unless its hint says `entry: false`; `fanout` comes from the hint method entry, else `UNKNOWN` (A1 counts it as 1 and tags `depends-on-unknown`), and a gateway route has fanout 1.
 
@@ -193,6 +196,7 @@ Seed entries, all `verified_by: none` until checked against primary sources:
 - 0012 Alternative edges (`Edge.choice`, gateway routes): A1 takes the max within a choice, the sum across; edges sharing `from→to` are located with their operation.
 - 0013 SARIF locations: a finding is placed at the first `file:line` in its values' evidence (EXPLICIT first), the rest are related locations; without one, line 1 of the spec or of the service's first file read; paths relative to `SRCROOT`.
 - 0014 Failure classes and retry conditions: each layer's `retryOn` maps (sourced KB, oracles) to failure classes (`not-sent`, `reset`, `timeout`, statuses); Istio turns connection failure/reset into 503 and per-try timeout into 504; across services the class is unknown. A1 keeps its bound and adds per-class figures when every condition is known; A3 is `INFO` when only `not-sent` is retried.
+- 0015 Circuit breakers in the model: a `Layer` may carry a `CircuitBreaker` (Resilience4j fields, each a `Val`) and its position relative to the layer's own retry (`wraps-all-tries` | `each-try`); listed in the report, read by no rule yet; Istio `outlierDetection` is not a breaker.
 
 ## Related work (cite it, do not duplicate it)
 
