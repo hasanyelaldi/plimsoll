@@ -1,6 +1,7 @@
 package io.github.hasanyelaldi.plimsoll.analysis;
 
 import io.github.hasanyelaldi.plimsoll.model.Edge;
+import io.github.hasanyelaldi.plimsoll.model.FailureClass;
 import io.github.hasanyelaldi.plimsoll.model.Layer;
 import io.github.hasanyelaldi.plimsoll.model.Service;
 import io.github.hasanyelaldi.plimsoll.model.ServiceGraph;
@@ -9,12 +10,15 @@ import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Deque;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.function.IntFunction;
 import java.util.function.Predicate;
+import java.util.stream.Collectors;
 import org.jgrapht.Graph;
 import org.jgrapht.alg.connectivity.KosarajuStrongConnectivityInspector;
 import org.jgrapht.graph.DirectedPseudograph;
@@ -36,6 +40,11 @@ import org.jgrapht.traverse.TopologicalOrderIterator;
  * reachable from such a cycle is unbounded too; the rest is still computed exactly.
  *
  * <p>An UNKNOWN attempt count or fanout is counted as 1, so the result is a lower bound and is tagged.
+ *
+ * <p>Per failure class (ADR 0014): {@code L_c(v)} is the same sum with {@link Attempts#tries} for a failure of class
+ * {@code c} at {@code v} on the edges into {@code v}; above them the class is unknown, so they keep their bound.
+ * A finding shows these figures when every layer on the edges into {@code v} has known conditions and some class
+ * is below {@code L(v)}. The severity stays on {@code L(v)}.
  */
 final class AmplificationRule {
 
@@ -76,6 +85,7 @@ final class AmplificationRule {
         // Exact loads for everything else, one pass per entry.
         Map<String, Run> best = new TreeMap<>();
         Map<String, String> unboundedVia = new TreeMap<>();
+        List<Run> runs = new ArrayList<>();
         for (String entry : entries) {
             for (String v : walk(Set.of(entry), all, false, v -> true)) {
                 if (unbounded.contains(v)) {
@@ -86,6 +96,7 @@ final class AmplificationRule {
                 continue;
             }
             Run run = run(entry, all, graph, unbounded);
+            runs.add(run);
             for (var e : run.load().entrySet()) {
                 Run current = best.get(e.getKey());
                 if (current == null || e.getValue().compareTo(current.load().get(e.getKey())) > 0) {
@@ -105,9 +116,9 @@ final class AmplificationRule {
             BigInteger value = run.load().get(v);
             services.add(new ServiceAmplification(v, run.entry(), value, false, unknown));
             if (value.compareTo(BigInteger.valueOf(options.maxAmplification())) > 0) {
-                findings.add(loadFinding(v, run, graph, options, Severity.ERROR));
+                findings.add(loadFinding(v, run, runs, all, graph, options, Severity.ERROR));
             } else if (!unknown.isEmpty()) {
-                findings.add(loadFinding(v, run, graph, options, Severity.INFO));
+                findings.add(loadFinding(v, run, runs, all, graph, options, Severity.INFO));
             }
         }
         return new Outcome(services, findings);
@@ -208,14 +219,18 @@ final class AmplificationRule {
         }
         Map<String, BigInteger> load = new TreeMap<>();
         for (String v : sub) {
-            load.put(v, perRequest(v, dag, topo, edges).get(entry));
+            load.put(v, perRequest(v, dag, topo, edges, i -> weight(edges.get(i))).get(entry));
         }
         return new Run(entry, dag, topo, load, unknowns);
     }
 
-    /** {@code R_v(u)} for every {@code u} of the DAG: calls on {@code v} per request to {@code u}. */
+    /**
+     * {@code R_v(u)} for every {@code u} of the DAG: calls on {@code v} per request to {@code u}.
+     *
+     * @param weight calls per call of the edge with this index: tries × fanout
+     */
     private static Map<String, BigInteger> perRequest(String v, Graph<String, Integer> dag, List<String> topo,
-            List<Edge> edges) {
+            List<Edge> edges, IntFunction<BigInteger> weight) {
         Map<String, BigInteger> r = new TreeMap<>();
         for (int k = topo.size() - 1; k >= 0; k--) {
             String u = topo.get(k);
@@ -227,7 +242,7 @@ final class AmplificationRule {
             Map<String, BigInteger> best = new TreeMap<>();
             for (int i : new TreeSet<>(dag.outgoingEdgesOf(u))) {
                 Edge e = edges.get(i);
-                BigInteger calls = weight(e).multiply(r.get(dag.getEdgeTarget(i)));
+                BigInteger calls = weight.apply(i).multiply(r.get(dag.getEdgeTarget(i)));
                 if (e.choice() == null) {
                     sum = sum.add(calls);
                 } else {
@@ -247,7 +262,7 @@ final class AmplificationRule {
      * alternative with the most calls on {@code v} is kept, the first in edge order on a tie.
      */
     private static Set<Integer> chosen(String v, Run run, List<Edge> edges) {
-        Map<String, BigInteger> r = perRequest(v, run.dag(), run.topo(), edges);
+        Map<String, BigInteger> r = perRequest(v, run.dag(), run.topo(), edges, i -> weight(edges.get(i)));
         Set<Integer> out = new TreeSet<>();
         for (String u : run.topo()) {
             Map<String, Integer> bestEdge = new TreeMap<>();
@@ -297,8 +312,8 @@ final class AmplificationRule {
 
     // ---- findings -------------------------------------------------------------
 
-    private static Finding loadFinding(String v, Run run, ServiceGraph graph, AnalysisOptions options,
-            Severity severity) {
+    private static Finding loadFinding(String v, Run run, List<Run> runs, Graph<String, Integer> all,
+            ServiceGraph graph, AnalysisOptions options, Severity severity) {
         List<Edge> edges = graph.edges();
         Set<String> ancestors = walk(Set.of(v), run.dag(), true, x -> true);
         Set<Integer> chosen = chosen(v, run, edges);
@@ -329,6 +344,11 @@ final class AmplificationRule {
         for (String alternatives : alternatives(v, run, edges)) {
             detail.append("; ").append(alternatives);
         }
+        Map<FailureClass, BigInteger> perClass = perClass(v, runs, all, edges);
+        String byClass = byClass(v, perClass, run.load().get(v));
+        if (!byClass.isEmpty()) {
+            detail.append("; ").append(byClass);
+        }
         if (severity == Severity.INFO) {
             detail.append("; the real value may be higher");
         }
@@ -339,7 +359,65 @@ final class AmplificationRule {
                 values.addAll(edgeValues(graph, edges.get(i)));
             }
         }
+        if (!byClass.isEmpty()) {
+            for (int i : new TreeSet<>(all.incomingEdgesOf(v))) {
+                values.addAll(Attempts.conditionValues(graph.location(edges.get(i)), edges.get(i)));
+            }
+        }
         return new Finding(ID, severity, v, detail.toString(), values, List.copyOf(run.unknowns().get(v)));
+    }
+
+    /**
+     * {@code L_c(v)} per failure class {@code c} at {@code v}, the most over the entries; empty unless every layer on
+     * the edges into {@code v} has known conditions.
+     */
+    private static Map<FailureClass, BigInteger> perClass(String v, List<Run> runs, Graph<String, Integer> all,
+            List<Edge> edges) {
+        if (!all.incomingEdgesOf(v).stream().allMatch(i -> Attempts.conditionsKnown(edges.get(i)))) {
+            return Map.of();
+        }
+        Map<FailureClass, BigInteger> out = new LinkedHashMap<>();
+        for (FailureClass c : FailureClass.values()) {
+            BigInteger most = BigInteger.ZERO;
+            for (Run run : runs) {
+                if (!run.dag().containsVertex(v)) {
+                    continue;
+                }
+                IntFunction<BigInteger> weight = i -> run.dag().getEdgeTarget(i).equals(v)
+                        ? BigInteger.valueOf(Attempts.tries(edges.get(i), c)).multiply(fanout(edges.get(i)))
+                        : weight(edges.get(i));
+                most = most.max(perRequest(v, run.dag(), run.topo(), edges, weight).get(run.entry()));
+            }
+            out.put(c, most);
+        }
+        return out;
+    }
+
+    /**
+     * "by failure class at v: ×9 for not-sent, ×3 for any other class": classes with the same figure are grouped,
+     * the largest group (the first on a tie) last as "any other class". Empty when no class is below {@code L(v)}.
+     */
+    private static String byClass(String v, Map<FailureClass, BigInteger> perClass, BigInteger bound) {
+        if (perClass.values().stream().noneMatch(x -> x.compareTo(bound) < 0)) {
+            return "";
+        }
+        Map<BigInteger, List<FailureClass>> groups = new LinkedHashMap<>();
+        perClass.forEach((c, x) -> groups.computeIfAbsent(x, k -> new ArrayList<>()).add(c));
+        BigInteger rest = null;
+        for (var g : groups.entrySet()) {
+            if (rest == null || g.getValue().size() > groups.get(rest).size()) {
+                rest = g.getKey();
+            }
+        }
+        List<String> parts = new ArrayList<>();
+        for (var g : groups.entrySet()) {
+            if (!g.getKey().equals(rest)) {
+                parts.add("×" + g.getKey() + " for " + g.getValue().stream().map(FailureClass::id)
+                        .collect(Collectors.joining(" or ")));
+            }
+        }
+        parts.add("×" + rest + (groups.size() == 1 ? " for every class" : " for any other class"));
+        return "by failure class at " + v + ": " + String.join(", ", parts);
     }
 
     /** "max over 2 alternatives of routes of gw", per choice of which at least two edges reach {@code v}. */

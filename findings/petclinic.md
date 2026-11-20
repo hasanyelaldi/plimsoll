@@ -8,7 +8,7 @@ Issue #9. Testbed choice: ADR 0005. The full generated report is in [`petclinic-
 | --- | --- |
 | spring-petclinic-microservices | `1d76b00d683e86b62867a6bf59530f8ab301244f` (7 Oct 2026), Spring Boot 4.0.1, Spring Cloud 2025.1.0 (Gateway 5.0.0) |
 | spring-petclinic-microservices-config | `323993ce2519c6d02df63e08bf4458d123d3b611` (2 May 2026), read by hand only |
-| Plimsoll | `3851edd` (main after #35); report regenerated after #23 (PLM-C1, Coverage section) after #37 (client calls in code), #38 (unlimited timeouts, ADR 0011), #48 (alternative routes, ADR 0012) and #24 (A3 reads retry conditions, ADR 0014), same command |
+| Plimsoll | `3851edd` (main after #35); report regenerated after #23 (PLM-C1, Coverage section) after #37 (client calls in code), #38 (unlimited timeouts, ADR 0011), #48 (alternative routes, ADR 0012) and #24 (A3 reads retry conditions, A1 per-class figures, ADR 0014), same command |
 
 ```bash
 git clone https://github.com/spring-petclinic/spring-petclinic-microservices.git
@@ -41,7 +41,7 @@ After #37: **3 error, 5 warn, 16 info.** The graph has one entry (`api-gateway`)
 | WARN | A4 | api-gateway→customers-service, genai-service, visits-service | zero backoff |
 | WARN | C1 | api-gateway | Spring Cloud CircuitBreaker (programmatic) detected, not modelled |
 | WARN | C1 | genai-service | Spring AI retry detected, not modelled |
-| INFO | A1 | customers-service, visits-service | at least ×3 (fanout of a code edge `UNKNOWN`) |
+| INFO | A1 | customers-service, visits-service | at least ×3 (fanout of a code edge `UNKNOWN`); by failure class ×2 for a 4xx status, ×3 for any other class |
 | INFO | A1 | vets-service | at least ×2 (genai-service ×2); max over 2 alternatives of routes of api-gateway |
 | INFO | A2a | the three retried route edges | cannot evaluate (gateway deadline `UNKNOWN`) |
 | INFO | A2b | all seven edges | cannot evaluate (callee deadline `UNKNOWN`) |
@@ -92,6 +92,7 @@ Each finding was checked against the petclinic sources at the pinned commit and 
 | Finding | Verdict | Notes |
 | --- | --- | --- |
 | A1 ×2 on customers, genai, visits; ×1 on vets | correct for the collected graph | Upper bound over the worst operation of the route: POST is retried once, GET is not. The real graph has more edges (see gaps), so these are lower than the true bound. |
+| A1 per class on customers, visits | correct | Since #24. The gateway route tries twice on what its `Retry` filter retries (connection failure, reset, timeout, 5xx) and once on a 4xx status; the WebClient edge from the gateway's controller tries once. So ×3 for most classes and ×2 for a 4xx. vets-service shows none: both edges into it (the gateway route and genai's WebClient) try once, so every class gives the bound ×2. |
 | A3 on customers, genai, visits | true positive, with a nuance | The filter retries POST on `503` and on the default exceptions `IOException` and `TimeoutException`. A `503` usually means the request was not processed, but a POST that fails with an `IOException` after it was sent can be applied twice (duplicate owner, pet, visit). For genai, a retried `POST /chatclient` also repeats a paid LLM call. Since #24 A3 names a class that makes the retry unsafe: `reset`, from `IOException` (gateway oracle); the finding lists every retried class with its source. |
 | A3 absent on vets | correct | vets-service has no POST; the Retry filter does not apply to its GETs. |
 | A4 zero backoff, no jitter | true positive | No `backoff` arguments on the filter; the config repository does not override them. |

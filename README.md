@@ -245,7 +245,7 @@ Library defaults come from the knowledge base in [`kb/defaults/`](kb/defaults/),
 
 v0.1 gives an upper bound from static configuration. Before acting on a report, know that:
 
-- **Fail-close bound.** A1 assumes every try fails and every failure propagates. It does not intersect the retry conditions of stacked layers (`retryOn`, status codes, exceptions), so it can overstate amplification ([#24](https://github.com/hasanyelaldi/plimsoll/issues/24)).
+- **Fail-close bound.** A1 assumes every try fails and every failure propagates, whatever the retry conditions of stacked layers (`retryOn`, status codes, exceptions), so it can overstate amplification. When every layer into a service has known conditions, the finding adds the figure per failure class at that service (ADR 0014); the severity stays on the bound ([#24](https://github.com/hasanyelaldi/plimsoll/issues/24)).
 - **Circuit breakers are detected, not modelled.** `@CircuitBreaker`, Spring Cloud CircuitBreaker and Istio outlier detection do not reduce amplification in the report ([#18](https://github.com/hasanyelaldi/plimsoll/issues/18), [#22](https://github.com/hasanyelaldi/plimsoll/issues/22)). A breaker's TimeLimiter is not used to cut a try in A2a.
 - **Library versions are not matched.** Defaults come from one version per library (for example Istio 1.31, Spring Cloud Gateway 5.0); an older project gets those defaults ([#51](https://github.com/hasanyelaldi/plimsoll/issues/51)).
 - **Fanout is unknown without a hint.** In a collected graph A1 counts an edge without `fanout` as 1 and reports "at least ×n".

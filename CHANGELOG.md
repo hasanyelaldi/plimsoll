@@ -20,6 +20,10 @@ the report format and the rules.
   request was not sent, n tries". The finding lists the known conditions with their sources. Unknown conditions
   retry every class, so the finding is as before. On TrainTicket the 34 POST routes under the Istio default are now
   `INFO`.
+- PLM-A1 adds the figure per failure class at a service (#24), e.g. "by failure class at c: ×15 for not-sent, ×5
+  for any other class", when every layer on the edges into it has known conditions and some class is below the
+  bound. Above those edges the class is unknown, so they keep their bound; the severity stays on the bound. On
+  petclinic, customers-service and visits-service show ×2 for a 4xx status.
 
 ### Spec format
 
