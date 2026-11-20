@@ -5,6 +5,8 @@ import io.github.hasanyelaldi.plimsoll.analysis.Finding;
 import io.github.hasanyelaldi.plimsoll.analysis.ServiceAmplification;
 import io.github.hasanyelaldi.plimsoll.analysis.Severity;
 import io.github.hasanyelaldi.plimsoll.analysis.UsedValue;
+import io.github.hasanyelaldi.plimsoll.model.CircuitBreaker;
+import io.github.hasanyelaldi.plimsoll.model.Durations;
 import java.util.List;
 
 /** Wording shared by the text and Markdown reports. */
@@ -41,6 +43,23 @@ final class Reports {
 
     static String kinds(List<String> kinds) {
         return kinds.isEmpty() ? "none" : String.join(", ", kinds);
+    }
+
+    /** A breaker's values in a fixed order, with their sources (ADR 0015). */
+    static List<UsedValue> breakerValues(CircuitBreaker b) {
+        String unit = b.slidingWindowType().isKnown() ? " " + b.slidingWindowType().value().unit() : "";
+        return List.of(
+                UsedValue.of("name", b.name()),
+                UsedValue.of("position", b.position()),
+                UsedValue.of("failureRateThreshold", b.failureRateThreshold(), Reports::percent),
+                UsedValue.of("slidingWindowType", b.slidingWindowType()),
+                UsedValue.of("slidingWindowSize", b.slidingWindowSize(), n -> n + unit),
+                UsedValue.of("minimumNumberOfCalls", b.minimumNumberOfCalls()),
+                UsedValue.of("waitDurationInOpenState", b.waitDurationInOpenState(), Durations::format));
+    }
+
+    private static String percent(double v) {
+        return (v == Math.rint(v) ? String.valueOf((long) v) : String.valueOf(v)) + "%";
     }
 
     static String unknowns(Finding f) {

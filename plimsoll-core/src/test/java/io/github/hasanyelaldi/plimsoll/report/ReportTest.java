@@ -87,6 +87,78 @@ class ReportTest {
         assertThat(md).contains("| WARN | PLM-A2a | a→b | budget 2 s > deadline 1 s, 1 of 3 tries fit |");
     }
 
+    /** ADR 0015: breakers are listed after the findings, with their values and sources; no rule reads them. */
+    @Test
+    void circuitBreakersAreListedAfterTheFindings() {
+        String spec = """
+                services:
+                  a: { entry: true }
+                  b: { deadline: 1s }
+                edges:
+                  - from: a
+                    to: b
+                    layers:
+                      - kind: generic
+                        totalAttempts: 1
+                        perTryTimeout: 2s
+                        circuitBreaker: { name: b|cb, position: wraps-all-tries, failureRateThreshold: 12.5, slidingWindowSize: 20, waitDurationInOpenState: 1m }
+                """;
+        AnalysisResult r = Analyzer.analyze(SpecLoader.parse(spec, "cb.yaml"), AnalysisOptions.defaults());
+        assertThat(r.findings()).isEmpty();
+        assertThat(ReportFormat.TEXT.render(r, "cb.yaml", AnalysisOptions.defaults())).contains("""
+                Findings
+                  none
+
+                Circuit breakers
+                  a→b  generic
+                          name = b|cb [EXPLICIT: cb.yaml:11]
+                          position = wraps-all-tries [EXPLICIT: cb.yaml:11]
+                          failureRateThreshold = 12.5% [EXPLICIT: cb.yaml:11]
+                          slidingWindowType = UNKNOWN [UNKNOWN: 'slidingWindowType' absent (cb.yaml:11)]
+                          slidingWindowSize = 20 [EXPLICIT: cb.yaml:11]
+                          minimumNumberOfCalls = UNKNOWN [UNKNOWN: 'minimumNumberOfCalls' absent (cb.yaml:11)]
+                          waitDurationInOpenState = 60 s [EXPLICIT: cb.yaml:11]
+
+                Coverage
+                """);
+        assertThat(ReportFormat.MARKDOWN.render(r, "cb.yaml", AnalysisOptions.defaults())).contains("""
+                None.
+
+                ## Circuit breakers
+
+                ### a→b generic
+
+                - name = b\\|cb [EXPLICIT: cb.yaml:11]
+                - position = wraps-all-tries [EXPLICIT: cb.yaml:11]
+                """);
+    }
+
+    @Test
+    void aKnownWindowTypeGivesTheWindowItsUnit() {
+        String spec = """
+                services: { a: { entry: true }, b: {}, c: {} }
+                edges:
+                  - { from: a, to: b, layers: [ { kind: generic, circuitBreaker: { slidingWindowType: time-based, slidingWindowSize: 60, failureRateThreshold: 50 } } ] }
+                  - { from: b, to: c, layers: [ { kind: generic, circuitBreaker: { slidingWindowType: count-based, slidingWindowSize: 100 } } ] }
+                """;
+        AnalysisResult r = Analyzer.analyze(SpecLoader.parse(spec, "w.yaml"), AnalysisOptions.defaults());
+        assertThat(r.breakers()).extracting(b -> b.edge()).containsExactly("a→b", "b→c");
+        String text = ReportFormat.TEXT.render(r, "w.yaml", AnalysisOptions.defaults());
+        assertThat(text).contains("slidingWindowSize = 60 s [EXPLICIT: w.yaml:3]", "failureRateThreshold = 50% [",
+                "slidingWindowSize = 100 calls [EXPLICIT: w.yaml:4]");
+    }
+
+    @Test
+    void aBreakerChangesNoFinding() {
+        String withBreaker = SPEC.replace("backoff: 100ms }", "backoff: 100ms, circuitBreaker: { position: each-try } }");
+        assertThat(withBreaker).isNotEqualTo(SPEC);
+        AnalysisResult r = Analyzer.analyze(SpecLoader.parse(withBreaker, "demo.yaml"), AnalysisOptions.defaults());
+        assertThat(r.findings()).isEqualTo(result().findings());
+        assertThat(r.amplification()).isEqualTo(result().amplification());
+        assertThat(r.breakers()).hasSize(1);
+        assertThat(result().breakers()).isEmpty();
+    }
+
     @Test
     void noFindingsIsStatedExplicitly() {
         AnalysisResult r = Analyzer.analyze(SpecLoader.parse("services: { a: { entry: true } }\n", "x.yaml"), AnalysisOptions.defaults());

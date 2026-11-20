@@ -2,6 +2,7 @@ package io.github.hasanyelaldi.plimsoll.report;
 
 import io.github.hasanyelaldi.plimsoll.analysis.AnalysisOptions;
 import io.github.hasanyelaldi.plimsoll.analysis.AnalysisResult;
+import io.github.hasanyelaldi.plimsoll.analysis.BreakerListing;
 import io.github.hasanyelaldi.plimsoll.analysis.Finding;
 import io.github.hasanyelaldi.plimsoll.analysis.ServiceAmplification;
 import io.github.hasanyelaldi.plimsoll.analysis.UsedValue;
@@ -28,7 +29,7 @@ final class MarkdownReport {
         out.append("\n## Findings\n\n");
         if (r.findings().isEmpty()) {
             out.append("None.\n");
-            return collected(out, collected);
+            return collected(out, r, collected);
         }
         out.append("| Severity | Rule | Location | Detail |\n| --- | --- | --- | --- |\n");
         for (Finding f : r.findings()) {
@@ -47,10 +48,20 @@ final class MarkdownReport {
                 out.append("- **").append(cell(Reports.unknowns(f))).append("**\n");
             }
         }
-        return collected(out, collected);
+        return collected(out, r, collected);
     }
 
-    private static String collected(StringBuilder out, Collected collected) {
+    private static String collected(StringBuilder out, AnalysisResult r, Collected collected) {
+        if (!r.breakers().isEmpty()) {
+            out.append("\n## Circuit breakers\n");
+            for (BreakerListing b : r.breakers()) {
+                out.append("\n### ").append(cell(b.edge())).append(' ').append(b.layer()).append("\n\n");
+                for (UsedValue v : Reports.breakerValues(b.breaker())) {
+                    out.append("- ").append(cell(v.name())).append(" = ").append(cell(Reports.value(v))).append('\n');
+                }
+            }
+        }
+
         Coverage c = collected.coverage();
         out.append("\n## Coverage\n\n").append("Source: ").append(cell(c.source())).append(".\n");
 

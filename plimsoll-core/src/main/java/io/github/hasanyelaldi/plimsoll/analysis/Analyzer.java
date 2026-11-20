@@ -1,6 +1,8 @@
 package io.github.hasanyelaldi.plimsoll.analysis;
 
 import io.github.hasanyelaldi.plimsoll.model.Detection;
+import io.github.hasanyelaldi.plimsoll.model.Edge;
+import io.github.hasanyelaldi.plimsoll.model.Layer;
 import io.github.hasanyelaldi.plimsoll.model.ServiceGraph;
 import java.util.ArrayList;
 import java.util.List;
@@ -26,6 +28,18 @@ public final class Analyzer {
         findings.addAll(LayeredRetryRule.evaluate(graph));
         findings.addAll(UncollectedMechanismRule.evaluate(detections));
         findings.sort(Finding.ORDER);
-        return new AnalysisResult(amplification.services(), findings);
+        return new AnalysisResult(amplification.services(), findings, breakers(graph));
+    }
+
+    private static List<BreakerListing> breakers(ServiceGraph graph) {
+        List<BreakerListing> out = new ArrayList<>();
+        for (Edge e : graph.edges()) {
+            for (Layer l : e.layers()) {
+                if (l.breaker() != null) {
+                    out.add(new BreakerListing(graph.location(e), l.kind(), l.breaker()));
+                }
+            }
+        }
+        return out;
     }
 }

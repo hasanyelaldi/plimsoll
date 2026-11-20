@@ -29,9 +29,13 @@ the report format and the rules.
 
 - `retryOn` lists failure classes (`not-sent`, `reset`, `timeout`, `status-503`, or a status code such as `503`);
   any other name is invalid input (#24).
+- A layer may have a `circuitBreaker` (name, position relative to the layer's retry, failure rate threshold,
+  sliding window, minimum calls, wait in the open state); an absent field is `UNKNOWN` (ADR 0015, #22).
 
 ### CLI and report
 
+- Text and Markdown reports list the circuit breakers after the findings, each value with its source (#22). No rule
+  reads them yet, and SARIF output is unchanged.
 - SARIF: `tool.driver` carries the Plimsoll version (`version`, `semanticVersion`), so code scanning can tell when
   results changed with the tool (#85).
 

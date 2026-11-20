@@ -2,6 +2,7 @@ package io.github.hasanyelaldi.plimsoll.report;
 
 import io.github.hasanyelaldi.plimsoll.analysis.AnalysisOptions;
 import io.github.hasanyelaldi.plimsoll.analysis.AnalysisResult;
+import io.github.hasanyelaldi.plimsoll.analysis.BreakerListing;
 import io.github.hasanyelaldi.plimsoll.analysis.Finding;
 import io.github.hasanyelaldi.plimsoll.analysis.ServiceAmplification;
 import io.github.hasanyelaldi.plimsoll.analysis.UsedValue;
@@ -36,6 +37,16 @@ final class TextReport {
             }
             if (f.dependsOnUnknown()) {
                 out.append("          ").append(Reports.unknowns(f)).append('\n');
+            }
+        }
+
+        if (!r.breakers().isEmpty()) {
+            out.append("\nCircuit breakers\n");
+            for (BreakerListing b : r.breakers()) {
+                out.append("  ").append(b.edge()).append("  ").append(b.layer()).append('\n');
+                for (UsedValue v : Reports.breakerValues(b.breaker())) {
+                    out.append("          ").append(v.name()).append(" = ").append(Reports.value(v)).append('\n');
+                }
             }
         }
 
