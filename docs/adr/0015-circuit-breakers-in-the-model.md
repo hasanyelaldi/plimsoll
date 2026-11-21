@@ -91,3 +91,7 @@ consecutive errors, and calls go on to the other hosts. It stays a collector not
   field: it bounds what the filter wraps, so it caps the layer's overall timeout when the breaker wraps all tries and
   the per-try timeout otherwise. Every `CircuitBreaker` filter's TimeLimiter applies, including a further breaker
   that is only a note.
+- A breaker that code runs around a request (`ReactiveCircuitBreakerFactory.create("id").run(...)`, #18) is a
+  `resilience4j` layer of its own on that request's edge, outside the HTTP client. It tries once (oracle), so its
+  position is `UNKNOWN` as for a gateway route without `Retry`, and its TimeLimiter is both the per-try and the
+  overall timeout.

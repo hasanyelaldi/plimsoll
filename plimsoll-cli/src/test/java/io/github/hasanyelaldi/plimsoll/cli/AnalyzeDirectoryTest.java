@@ -122,10 +122,10 @@ class AnalyzeDirectoryTest {
         Files.writeString(controller, """
                 package org.example;
 
-                import org.springframework.cloud.client.circuitbreaker.ReactiveCircuitBreakerFactory;
+                import org.springframework.cloud.client.circuitbreaker.CircuitBreakerFactory;
 
                 class OwnerController {
-                    private final ReactiveCircuitBreakerFactory cbFactory = null;
+                    private final CircuitBreakerFactory cbFactory = null;
                 }
                 """);
         Result r = run("analyze", petclinic().toString(), "--fail-on", "WARN");
@@ -133,7 +133,7 @@ class AnalyzeDirectoryTest {
         assertThat(r.out()).contains("  WARN   PLM-C1   api-gateway  Spring Cloud CircuitBreaker (programmatic) "
                 + "detected, not modelled; edges from api-gateway may carry an unseen timeout layer\n"
                 + "          api-gateway Spring Cloud CircuitBreaker (programmatic) = type "
-                + "org.springframework.cloud.client.circuitbreaker.ReactiveCircuitBreakerFactory "
+                + "org.springframework.cloud.client.circuitbreaker.CircuitBreakerFactory "
                 + "[EXPLICIT: api-gateway/src/main/java/org/example/OwnerController.java:6; "
                 + "https://docs.spring.io/spring-cloud-circuitbreaker/reference/]\n");
     }

@@ -8,7 +8,7 @@ Issue #9. Testbed choice: ADR 0005. The full generated report is in [`petclinic-
 | --- | --- |
 | spring-petclinic-microservices | `1d76b00d683e86b62867a6bf59530f8ab301244f` (7 Oct 2026), Spring Boot 4.0.1, Spring Cloud 2025.1.0 (Gateway 5.0.0) |
 | spring-petclinic-microservices-config | `323993ce2519c6d02df63e08bf4458d123d3b611` (2 May 2026), read by hand only |
-| Plimsoll | `3851edd` (main after #35); report regenerated after #23 (PLM-C1, Coverage section) after #37 (client calls in code), #38 (unlimited timeouts, ADR 0011), #48 (alternative routes, ADR 0012), #24 (A3 reads retry conditions, A1 per-class figures, ADR 0014) #22 (circuit breakers listed, ADR 0015) and #18 (Spring Cloud CircuitBreaker `Customizer` read), same command |
+| Plimsoll | `3851edd` (main after #35); report regenerated after #23 (PLM-C1, Coverage section) after #37 (client calls in code), #38 (unlimited timeouts, ADR 0011), #48 (alternative routes, ADR 0012), #24 (A3 reads retry conditions, A1 per-class figures, ADR 0014) #22 (circuit breakers listed, ADR 0015) and #18 (Spring Cloud CircuitBreaker `Customizer` read, then `cbFactory.create` call sites), same command |
 
 ```bash
 git clone https://github.com/spring-petclinic/spring-petclinic-microservices.git
@@ -21,7 +21,7 @@ No file in petclinic was changed and no `edges-hint.yaml` was added: this is wha
 
 ## Result
 
-After #37: **3 error, 5 warn, 16 info.** The graph has one entry (`api-gateway`) and seven edges: four from Gateway routes and three from `@LoadBalanced` WebClient calls found in code. The first run (before #37) gave 3 error, 5 warn, 10 info on the four route edges only; the six new findings are all INFO.
+After #18: **3 error, 4 warn, 16 info**: the C1 on api-gateway is gone, because the reactive Spring Cloud CircuitBreaker it flagged is now modelled. After #37: 3 error, 5 warn, 16 info. The graph has one entry (`api-gateway`) and seven edges: four from Gateway routes and three from `@LoadBalanced` WebClient calls found in code. The first run (before #37) gave 3 error, 5 warn, 10 info on the four route edges only; the six new findings are all INFO.
 
 | Service | Amplification |
 | --- | --- |
@@ -39,7 +39,6 @@ After #37: **3 error, 5 warn, 16 info.** The graph has one entry (`api-gateway`)
 | ERROR | A3 | api-gateway→genai-service | non-idempotent call retried, 2 tries (on reset) |
 | ERROR | A3 | api-gateway→visits-service | non-idempotent call retried, 2 tries (on reset) |
 | WARN | A4 | api-gateway→customers-service, genai-service, visits-service | zero backoff |
-| WARN | C1 | api-gateway | Spring Cloud CircuitBreaker (programmatic) detected, not modelled |
 | WARN | C1 | genai-service | Spring AI retry detected, not modelled |
 | INFO | A1 | customers-service, visits-service | at least ×3 (fanout of a code edge `UNKNOWN`); by failure class ×2 for a 4xx status, ×3 for any other class |
 | INFO | A1 | vets-service | at least ×2 (genai-service ×2); max over 2 alternatives of routes of api-gateway |
@@ -96,7 +95,8 @@ Each finding was checked against the petclinic sources at the pinned commit and 
 | A3 absent on vets | correct | vets-service has no POST; the Retry filter does not apply to its GETs. |
 | A4 zero backoff, no jitter | true positive | No `backoff` arguments on the filter; the config repository does not override them. |
 | A2a / A2b INFO | correct to stay silent | No deadline is configured anywhere; the response timeouts are known to be absent (#38). |
-| C1 on api-gateway and genai-service | true positive | `ReactiveResilience4JCircuitBreakerFactory` in `ApiGatewayApplication.java:85` and `ApiGatewayController.java:44` (#18); a Spring AI model starter in `spring-petclinic-genai-service/pom.xml:27` (#19). |
+| C1 on genai-service | true positive | A Spring AI model starter in `spring-petclinic-genai-service/pom.xml:27` (#19). The C1 on api-gateway (`ReactiveResilience4JCircuitBreakerFactory` in `ApiGatewayApplication.java:85`, `ApiGatewayController.java:44`) was a true positive until #18 modelled it. |
+| `getOwnerDetails` breaker (since #18) | correct | `ApiGatewayController.java:60` runs `cbFactory.create("getOwnerDetails")` on `visitsServiceClient.getVisitsForPets(...)` through `transform`; the request in `VisitsServiceClient.java:44` is the edge api-gateway→visits-service (GET /pets/visits), which now has a `resilience4j` layer outside the WebClient: one try (oracle), the 10 s TimeLimiter as per-try and overall timeout, the breaker with `configureDefault`'s `ofDefaults()` settings. Its fallback (`emptyVisitsForPets()`) answers a failure instead of passing it on, which a note says; A1 still counts the failure as passed on (fail-close). The A1 figures at visits-service do not change: the layer tries once and passes classes on as they are. |
 | Circuit breakers (listed since #22, settings since #18) | correct, one missing | Each route's breaker is `defaultCircuitBreaker` from `default-filters[0]`, listed before the default `Retry`, so it wraps all tries (filter order, gateway oracle #31). Its settings come from `configureDefault` in the `Customizer` at `ApiGatewayApplication.java:85-89`: `CircuitBreakerConfig.ofDefaults()` (50 %, count-based window of 100 calls, 100 minimum calls, 60 s open; `LIBRARY_DEFAULT` with `ApiGatewayApplication.java:87`) and a 10 s TimeLimiter (`EXPLICIT`, `:88`), as `SpringCloudCircuitBreakerOracleTest` resolves them. genai-service's route also has `genaiCircuitBreaker` (`filters[1]`, after `Retry`); a layer carries one breaker, so it is a note, but its TimeLimiter is applied. |
 | Sources not read: config server, profile documents, `profiles.active`, `creds.yaml` | harmless | The skipped `docker` documents only import the config server; the config repository has no retry, timeout or breaker settings. |
 
@@ -107,7 +107,7 @@ No false positives were found.
 | Gap | Where in petclinic | Follow-up |
 | --- | --- | --- |
 | Calls whose host is computed at run time are notes, not edges | genai → customers (`AIDataProvider`, `DiscoveryClient`, incl. two POSTs) | — (by design in #37) |
-| The `getOwnerDetails` breaker around the visits call | `ApiGatewayController.java:60` (`cbFactory.create`); the `Customizer` is read, the call site is not yet, so C1 stays | #18 (next PR) |
+| A fallback makes a failure fail-open | `getOwnerDetails` answers empty visits; A1 counts fail-close by design | — |
 | A second breaker on one route | genai-service route: `genaiCircuitBreaker` inside `defaultCircuitBreaker`; the model holds one breaker per layer (ADR 0015), so the second one is a note | — |
 | Spring AI retry to the LLM provider | genai-service (`spring.ai.retry.*` not set, so the Spring AI defaults apply) | #19 |
 

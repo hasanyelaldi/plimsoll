@@ -1,6 +1,7 @@
 package io.github.hasanyelaldi.plimsoll.collect.oracle;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.catchThrowable;
 
 import io.github.hasanyelaldi.plimsoll.collect.circuitbreaker.CustomizerScanner;
 import io.github.hasanyelaldi.plimsoll.collect.circuitbreaker.CustomizerScanner.Customizations;
@@ -18,6 +19,8 @@ import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
 import io.github.resilience4j.timelimiter.TimeLimiter;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.ConnectException;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -26,6 +29,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Nested;
@@ -39,6 +44,12 @@ import org.springframework.boot.builder.SpringApplicationBuilder;
 import org.springframework.cloud.circuitbreaker.resilience4j.ReactiveResilience4JCircuitBreakerFactory;
 import org.springframework.context.ConfigurableApplicationContext;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.web.reactive.function.client.WebClientRequestException;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
+import reactor.netty.http.client.PrematureCloseException;
+import reactor.core.Exceptions;
 import reactor.core.publisher.Mono;
 
 /**
@@ -59,7 +70,7 @@ class SpringCloudCircuitBreakerOracleTest {
     abstract static class Fixture {
         private final String yml;
         private final Class<?> customizer;
-        private ConfigurableApplicationContext context;
+        ConfigurableApplicationContext context;
         private SpringCloudCircuitBreakers ours;
         Customizations customizations;
 
@@ -134,6 +145,35 @@ class SpringCloudCircuitBreakerOracleTest {
     class Petclinic extends Fixture {
         Petclinic() {
             super(null, PetclinicCustomizer.class);
+        }
+
+        /**
+         * A breaker around a call ({@code cb.run(mono, null)}) subscribes to it once and passes its error on as it is:
+         * a request that was not sent, a reset and a timeout stay what they are (KB {@code givesUpAs}, #18).
+         */
+        @ParameterizedTest
+        @ValueSource(strings = {"not-sent", "reset", "timeout", "status-503"})
+        void aBreakerTriesOnceAndPassesTheErrorOn(String failure) {
+            Throwable error = switch (failure) {
+                case "not-sent" -> new WebClientRequestException(new ConnectException("Connection refused"),
+                        HttpMethod.GET, URI.create("http://visits-service/pets/visits"), new HttpHeaders());
+                case "reset" -> new WebClientRequestException(PrematureCloseException.TEST_EXCEPTION, HttpMethod.GET,
+                        URI.create("http://visits-service/pets/visits"), new HttpHeaders());
+                case "timeout" -> new TimeoutException("Did not observe any item");
+                default -> WebClientResponseException.create(503, "Service Unavailable", new HttpHeaders(), new byte[0],
+                        null);
+            };
+            AtomicInteger tries = new AtomicInteger();
+            Mono<Integer> call = Mono.defer(() -> {
+                tries.incrementAndGet();
+                return Mono.error(error);
+            });
+            ReactiveResilience4JCircuitBreakerFactory factory =
+                    context.getBean(ReactiveResilience4JCircuitBreakerFactory.class);
+            // block() wraps a checked exception; unwrap gives back what the breaker emitted
+            Throwable thrown = catchThrowable(() -> factory.create("passOn-" + failure).run(call, null).block());
+            assertThat(Exceptions.unwrap(thrown)).isSameAs(error);
+            assertThat(tries).hasValue(1);
         }
 
         @Test

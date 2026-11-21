@@ -7,3 +7,28 @@
   unit: boolean
   source: https://github.com/spring-cloud/spring-cloud-circuitbreaker/blob/v5.0.3/spring-cloud-circuitbreaker-resilience4j/src/main/java/org/springframework/cloud/circuitbreaker/resilience4j/Resilience4JConfigurationProperties.java
   verified_by: oracle
+
+# A breaker around a call passes its error on as it is (no fallback): ADR 0014 givesUpAs.
+- library: spring-cloud-circuitbreaker
+  versions: "5.0.3"
+  parameter: givesUpAs.not-sent
+  value: not-sent
+  unit: failure-classes
+  source: https://github.com/hasanyelaldi/plimsoll/blob/main/plimsoll-collectors/src/test/java/io/github/hasanyelaldi/plimsoll/collect/oracle/SpringCloudCircuitBreakerOracleTest.java
+  verified_by: oracle
+
+- library: spring-cloud-circuitbreaker
+  versions: "5.0.3"
+  parameter: givesUpAs.reset
+  value: reset
+  unit: failure-classes
+  source: https://github.com/hasanyelaldi/plimsoll/blob/main/plimsoll-collectors/src/test/java/io/github/hasanyelaldi/plimsoll/collect/oracle/SpringCloudCircuitBreakerOracleTest.java
+  verified_by: oracle
+
+- library: spring-cloud-circuitbreaker
+  versions: "5.0.3"
+  parameter: givesUpAs.timeout
+  value: timeout
+  unit: failure-classes
+  source: https://github.com/hasanyelaldi/plimsoll/blob/main/plimsoll-collectors/src/test/java/io/github/hasanyelaldi/plimsoll/collect/oracle/SpringCloudCircuitBreakerOracleTest.java
+  verified_by: oracle

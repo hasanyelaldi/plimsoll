@@ -1,6 +1,10 @@
 package io.github.hasanyelaldi.plimsoll.collect;
 
+import io.github.hasanyelaldi.plimsoll.collect.circuitbreaker.BreakerCallScanner;
 import io.github.hasanyelaldi.plimsoll.collect.circuitbreaker.CustomizerScanner;
+import io.github.hasanyelaldi.plimsoll.collect.circuitbreaker.CustomizerScanner.Customizations;
+import io.github.hasanyelaldi.plimsoll.collect.circuitbreaker.SpringCloudCircuitBreakers;
+import io.github.hasanyelaldi.plimsoll.collect.circuitbreaker.WrappedCalls;
 import io.github.hasanyelaldi.plimsoll.collect.circuitbreaker.CustomizerScanner.Factory;
 import io.github.hasanyelaldi.plimsoll.collect.detect.Detector;
 import io.github.hasanyelaldi.plimsoll.collect.gateway.GatewayCollector;
@@ -161,19 +165,25 @@ public final class ProjectCollector {
                 httpLayers.putAll(http.layers());
                 http.notes().forEach(n -> notes.add(m.name() + ": " + n));
             }
+            Customizations customizations =
+                    CustomizerScanner.scan(root, m.root().resolve("src/main/java"), kb).get(Factory.REACTIVE);
             if (GatewayCollector.configuresGateway(m.props())) {
                 GatewayCollector.Result gateway = GatewayCollector.collect(m.props(), m.name(), served, m.hint(),
-                        CustomizerScanner.scan(root, m.root().resolve("src/main/java"), kb).get(Factory.REACTIVE), kb);
+                        customizations, kb);
                 gateways.add(gateway);
                 edges.addAll(gateway.edges());
                 gateway.edges().forEach(e -> searched.add(List.of("spring-cloud-gateway")));
                 gateway.notes().forEach(n -> notes.add(m.name() + ": " + n));
             }
+            WrappedCalls wrapped = new WrappedCalls(BreakerCallScanner.scan(root, m.root().resolve("src/main/java")),
+                    SpringCloudCircuitBreakers.of(m.props(), customizations, kb), kb);
             HttpClientCollector.Discovered found = HttpClientCollector.discover(m.name(),
                     ClientCallScanner.scan(root, m.root().resolve("src/main/java")), modules.keySet(), m.hint(),
-                    m.props(), kb);
+                    m.props(), kb, wrapped::layersFor);
+            wrapped.notes().forEach(n -> notes.add(m.name() + ": " + n));
             edges.addAll(found.edges());
-            found.edges().forEach(e -> searched.add(List.of("http-client")));
+            // code-found edges are searched for Spring Cloud CircuitBreaker runs too (#18)
+            found.edges().forEach(e -> searched.add(List.of(WrappedCalls.KIND, "http-client")));
             httpLayers.putAll(found.http().layers());
             found.http().notes().forEach(n -> notes.add(m.name() + ": " + n));
         }
