@@ -1,0 +1,41 @@
+# Resilience4j CircuitBreaker defaults (CircuitBreakerConfig.DEFAULT_*), the fields ADR 0015 models.
+# verified_by: oracle -> plimsoll-collectors/src/test/java/io/github/hasanyelaldi/plimsoll/collect/oracle/CircuitBreakerConfigOracleTest.java
+- library: resilience4j-circuitbreaker
+  versions: "2.4.0"
+  parameter: failureRateThreshold
+  value: 50
+  unit: percent
+  source: https://resilience4j.readme.io/docs/circuitbreaker
+  verified_by: oracle
+
+- library: resilience4j-circuitbreaker
+  versions: "2.4.0"
+  parameter: slidingWindowType
+  value: COUNT_BASED
+  unit: window-type
+  source: https://resilience4j.readme.io/docs/circuitbreaker
+  verified_by: oracle
+
+- library: resilience4j-circuitbreaker
+  versions: "2.4.0"
+  parameter: slidingWindowSize
+  value: 100
+  unit: calls-or-seconds      # calls for COUNT_BASED, seconds for TIME_BASED
+  source: https://resilience4j.readme.io/docs/circuitbreaker
+  verified_by: oracle
+
+- library: resilience4j-circuitbreaker
+  versions: "2.4.0"
+  parameter: minimumNumberOfCalls
+  value: 100
+  unit: calls
+  source: https://resilience4j.readme.io/docs/circuitbreaker
+  verified_by: oracle
+
+- library: resilience4j-circuitbreaker
+  versions: "2.4.0"
+  parameter: waitDurationInOpenState
+  value: 60s
+  unit: duration
+  source: https://resilience4j.readme.io/docs/circuitbreaker
+  verified_by: oracle

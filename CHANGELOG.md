@@ -25,6 +25,15 @@ the report format and the rules.
   bound. Above those edges the class is unknown, so they keep their bound; the severity stays on the bound. On
   petclinic, customers-service and visits-service show ×2 for a 4xx status.
 
+### Collectors
+
+- Resilience4j: `@CircuitBreaker` becomes the layer's breaker (ADR 0015, #22), with its settings from
+  `resilience4j.circuitbreaker.instances` and `configs` and its position from the aspect orders (by default Retry
+  wraps the breaker, so it counts each try). Defaults are in `kb/defaults/resilience4j-circuitbreaker.yaml`; how
+  Spring Boot resolves an instance (its `baseConfig`, a config of its own name, `configs.default`) is checked by
+  `CircuitBreakerConfigOracleTest`. A wait in the open state with exponential backoff or randomized wait is
+  `UNKNOWN`, and one below 1 ms is invalid input, as Resilience4j refuses to start. The "not modelled yet" note is gone.
+
 ### Spec format
 
 - `retryOn` lists failure classes (`not-sent`, `reset`, `timeout`, `status-503`, or a status code such as `503`);

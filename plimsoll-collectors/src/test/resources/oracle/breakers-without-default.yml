@@ -1,0 +1,10 @@
+# No configs.default: unconfigured values come from the library defaults.
+resilience4j.circuitbreaker:
+  configs:
+    solo:
+      sliding-window-size: 9
+  instances:
+    rateOnly:
+      failure-rate-threshold: 60
+    millis:
+      wait-duration-in-open-state: 2500

@@ -1,0 +1,44 @@
+# CircuitBreaker instances resolved against configs.default, a config of the instance's own name and baseConfig chains.
+resilience4j.circuitbreaker:
+  configs:
+    default:
+      failure-rate-threshold: 25
+      sliding-window-size: 20
+    shared:
+      sliding-window-type: TIME_BASED
+      sliding-window-size: 30
+      wait-duration-in-open-state: 5s
+    layered:
+      base-config: shared
+      minimum-number-of-calls: 7
+    direct:
+      failure-rate-threshold: 80
+      minimum-number-of-calls: 3
+    exponential:
+      wait-duration-in-open-state: 2s
+      enable-exponential-backoff: true
+  instances:
+    plain:
+      minimum-number-of-calls: 5
+    fromBase:
+      base-config: shared
+      failure-rate-threshold: 12.5
+    fromLayered:
+      base-config: layered
+    direct:
+      sliding-window-size: 4
+    fromExponential:
+      base-config: exponential
+    ownExponential:
+      wait-duration-in-open-state: 3s
+      enable-exponential-backoff: true
+    ownRandomized:
+      wait-duration-in-open-state: 3s
+      enable-randomized-wait: true
+    relaxed:
+      slidingWindowType: time-based
+      waitDurationInOpenState: 1500ms
+      minimumNumberOfCalls: 2
+    minAboveWindow:
+      sliding-window-size: 3
+      minimum-number-of-calls: 10

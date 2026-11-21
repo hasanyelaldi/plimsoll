@@ -5,6 +5,8 @@ import io.github.hasanyelaldi.plimsoll.collect.spring.SpringDurations;
 import io.github.hasanyelaldi.plimsoll.collect.spring.SpringProperties;
 import io.github.hasanyelaldi.plimsoll.collect.spring.SpringProperties.Property;
 import io.github.hasanyelaldi.plimsoll.io.InvalidSpecException;
+import io.github.hasanyelaldi.plimsoll.model.CircuitBreaker.WindowType;
+import io.github.hasanyelaldi.plimsoll.model.Durations;
 import io.github.hasanyelaldi.plimsoll.model.RetryPolicy;
 import io.github.hasanyelaldi.plimsoll.model.Val;
 import java.time.Duration;
@@ -15,7 +17,7 @@ import java.util.TreeSet;
 import java.util.function.Function;
 
 /**
- * Effective Resilience4j Retry and TimeLimiter settings of named instances, resolved from Spring Boot properties
+ * Effective Resilience4j Retry, TimeLimiter and CircuitBreaker settings of named instances, resolved from Spring Boot properties
  * the way {@code resilience4j-spring-boot4} resolves them:
  *
  * <ul>
@@ -38,12 +40,15 @@ public final class Resilience4jConfig {
     static final String RETRY_KB = "resilience4j-retry";
     static final String SPRING_KB = "resilience4j-spring-boot4";
     static final String TIME_LIMITER_KB = "resilience4j-timelimiter";
+    static final String BREAKER_KB = "resilience4j-circuitbreaker";
     private static final String DEFAULT = "default";
 
     private static final List<String> RETRY_CONFIGS = List.of("resilience4j", "retry", "configs");
     private static final List<String> RETRY_INSTANCES = List.of("resilience4j", "retry", "instances");
     private static final List<String> TL_CONFIGS = List.of("resilience4j", "timelimiter", "configs");
     private static final List<String> TL_INSTANCES = List.of("resilience4j", "timelimiter", "instances");
+    private static final List<String> CB_CONFIGS = List.of("resilience4j", "circuitbreaker", "configs");
+    private static final List<String> CB_INSTANCES = List.of("resilience4j", "circuitbreaker", "instances");
 
     private final SpringProperties props;
     private final DefaultsKb kb;
@@ -259,6 +264,115 @@ public final class Resilience4jConfig {
                 "timeoutDuration not configured");
     }
 
+    // ---- CircuitBreaker --------------------------------------------------
+
+    /** The settings of a CircuitBreaker instance that ADR 0015 models; name and position come from the annotation. */
+    public record BreakerConfig(Val<Double> failureRateThreshold, Val<WindowType> slidingWindowType,
+            Val<Integer> slidingWindowSize, Val<Integer> minimumNumberOfCalls, Val<Duration> waitDurationInOpenState) {}
+
+    /**
+     * The effective settings of a CircuitBreaker instance ({@code CommonCircuitBreakerConfigurationProperties
+     * .createCircuitBreakerConfig}). A configured instance starts from its {@code baseConfig}; else from a config
+     * of its own name; else from {@code configs.default}; else from the library defaults. An instance that is not
+     * configured gets {@code configs.default} or the library defaults, even when a config has its name. A config
+     * without {@code baseConfig} starts from the library defaults, not from {@code configs.default}. Each block
+     * then sets the fields it names. A {@code waitDurationInOpenState} below 1 ms stops the application; with
+     * exponential backoff or a randomized wait the wait changes between openings and is UNKNOWN. Checked by
+     * {@code CircuitBreakerConfigOracleTest}.
+     */
+    public BreakerConfig circuitBreaker(String instance) {
+        if (!configured(CB_INSTANCES, instance)) {
+            return configured(CB_CONFIGS, DEFAULT)
+                    ? breakerConfig(DEFAULT, CB_CONFIGS, new LinkedHashSet<>())
+                    : breakerDefaults();
+        }
+        return breakerConfig(instance, CB_INSTANCES, new LinkedHashSet<>());
+    }
+
+    /** @param section where the block {@code name} is, or null when it is not configured */
+    private BreakerConfig breakerConfig(String name, List<String> section, Set<String> visiting) {
+        Property baseConfig = section == null ? null : field(section, name, "baseConfig");
+        BreakerConfig base = null;
+        if (baseConfig != null && !(baseConfig.text() != null && baseConfig.text().isEmpty())) {
+            String baseName = known(baseConfig).text();
+            if (!configured(CB_CONFIGS, baseName)) {
+                throw new InvalidSpecException(baseConfig.evidence() + ": baseConfig '" + baseName
+                        + "' not found under resilience4j.circuitbreaker.configs");
+            }
+            if (baseName.equals(name) || !visiting.add(baseName)) {
+                throw new InvalidSpecException(baseConfig.evidence() + ": baseConfig cycle " + visiting);
+            }
+            base = breakerConfig(baseName, CB_CONFIGS, visiting);
+        } else if (configured(CB_CONFIGS, name)) {
+            base = breakerBlock(breakerDefaults(), CB_CONFIGS, name);
+        } else if (configured(CB_CONFIGS, DEFAULT)) {
+            base = breakerConfig(DEFAULT, CB_CONFIGS, visiting);
+        }
+        return breakerBlock(base != null ? base : breakerDefaults(), section, name);
+    }
+
+    private BreakerConfig breakerDefaults() {
+        String absent = "not configured";
+        return new BreakerConfig(
+                kb.defaultOr(BREAKER_KB, "failureRateThreshold", Double::valueOf, absent),
+                kb.defaultOr(BREAKER_KB, "slidingWindowType", WindowType::valueOf, absent),
+                kb.defaultOr(BREAKER_KB, "slidingWindowSize", Integer::valueOf, absent),
+                kb.defaultOr(BREAKER_KB, "minimumNumberOfCalls", Integer::valueOf, absent),
+                kb.defaultOr(BREAKER_KB, "waitDurationInOpenState", Resilience4jConfig::kbDuration, absent));
+    }
+
+    /** {@code buildConfig}: the fields one block sets, on top of its base. */
+    private BreakerConfig breakerBlock(BreakerConfig base, List<String> section, String name) {
+        if (section == null) {
+            return base;
+        }
+        Property rate = field(section, name, "failureRateThreshold");
+        Property type = field(section, name, "slidingWindowType");
+        Property size = field(section, name, "slidingWindowSize");
+        Property calls = field(section, name, "minimumNumberOfCalls");
+        return new BreakerConfig(
+                rate == null ? base.failureRateThreshold() : value(rate, Resilience4jConfig::percentage),
+                type == null ? base.slidingWindowType() : value(type, Resilience4jConfig::windowType),
+                size == null ? base.slidingWindowSize() : value(size, q -> atLeastOne(q, "slidingWindowSize")),
+                calls == null ? base.minimumNumberOfCalls() : value(calls, q -> atLeastOne(q, "minimumNumberOfCalls")),
+                waitInOpenState(base.waitDurationInOpenState(), section, name));
+    }
+
+    /** {@code configureCircuitBreakerOpenStateIntervalFunction}. */
+    private Val<Duration> waitInOpenState(Val<Duration> base, List<String> section, String name) {
+        Property wait = field(section, name, "waitDurationInOpenState");
+        if (wait == null) {
+            return base;
+        }
+        if (wait.isPlaceholder()) {
+            return placeholder(wait);
+        }
+        Duration d = duration(wait);
+        if (d.toMillis() < 1) {
+            throw invalid(wait, "at least 1 ms (Resilience4j refuses to start)");
+        }
+        Property exponential = field(section, name, "enableExponentialBackoff");
+        Property randomized = field(section, name, "enableRandomizedWait");
+        for (Property flag : new Property[] {exponential, randomized}) {
+            if (flag != null && flag.isPlaceholder()) {
+                return Val.unknown(flag.evidence() + ": placeholder " + flag.text()
+                        + " decides whether the wait in the open state is fixed");
+            }
+        }
+        boolean exp = exponential != null && bool(exponential);
+        boolean rand = randomized != null && bool(randomized);
+        if (exp && rand) {
+            throw new InvalidSpecException(exponential.evidence() + ": enableExponentialBackoff and "
+                    + "enableRandomizedWait cannot both be true (Resilience4j refuses to start)");
+        }
+        if (exp || rand) {
+            Property flag = exp ? exponential : randomized;
+            return Val.unknown(flag.evidence() + ": the wait in the open state starts at " + Durations.format(d)
+                    + " (" + wait.evidence() + ") and " + (exp ? "grows" : "varies") + " between openings");
+        }
+        return Val.explicit(d, wait.evidence());
+    }
+
     // ---- aspect order ----------------------------------------------------
 
     /** {@code resilience4j.retry.retryAspectOrder}; lower order = outer aspect. */
@@ -269,6 +383,12 @@ public final class Resilience4jConfig {
     /** {@code resilience4j.timelimiter.timeLimiterAspectOrder}; lower order = outer aspect. */
     public Val<Integer> timeLimiterAspectOrder() {
         return aspectOrder("timelimiter", "timeLimiterAspectOrder", "resilience4j.timelimiter.time-limiter-aspect-order");
+    }
+
+    /** {@code resilience4j.circuitbreaker.circuitBreakerAspectOrder}; lower order = outer aspect. */
+    public Val<Integer> circuitBreakerAspectOrder() {
+        return aspectOrder("circuitbreaker", "circuitBreakerAspectOrder",
+                "resilience4j.circuitbreaker.circuit-breaker-aspect-order");
     }
 
     private Val<Integer> aspectOrder(String module, String field, String kbName) {
@@ -301,6 +421,33 @@ public final class Resilience4jConfig {
         } catch (NumberFormatException e) {
             throw invalid(p, "an integer");
         }
+    }
+
+    private static double percentage(Property p) {
+        double v = number(p);
+        if (!(v > 0 && v <= 100)) {
+            throw invalid(p, "a percentage above 0 and at most 100 (Resilience4j refuses to start)");
+        }
+        return v;
+    }
+
+    private static int atLeastOne(Property p, String field) {
+        int v = integer(p);
+        if (v < 1) {
+            throw invalid(p, "at least 1 (Resilience4j refuses to start)");
+        }
+        return v;
+    }
+
+    /** Spring binds enums leniently: case and separators do not matter. */
+    private static WindowType windowType(Property p) {
+        String key = scalar(p).replaceAll("[^A-Za-z0-9]", "").toLowerCase(java.util.Locale.ROOT);
+        for (WindowType t : WindowType.values()) {
+            if (t.name().replace("_", "").toLowerCase(java.util.Locale.ROOT).equals(key)) {
+                return t;
+            }
+        }
+        throw invalid(p, "COUNT_BASED or TIME_BASED");
     }
 
     private static double number(Property p) {

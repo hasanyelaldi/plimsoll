@@ -73,3 +73,9 @@ consecutive errors, and calls go on to the other hosts. It stays a collector not
   defaults in `kb/defaults/resilience4j-circuitbreaker.yaml` checked by an oracle and the position from the aspect
   orders. The gateway collector turns `CircuitBreaker` filters into breakers, the position from the filter order;
   their values come from Spring Cloud CircuitBreaker configuration, which stays `UNKNOWN` until #18.
+- The Resilience4j oracle (#22, `CircuitBreakerConfigOracleTest`) shows how Spring Boot resolves a configured
+  instance: its `baseConfig`, else a config of its own name, else `configs.default`, else the library defaults.
+  An instance that is not configured gets `configs.default` or the library defaults, even when a config has its
+  name, and a config without `baseConfig` does not start from `configs.default`. A `waitDurationInOpenState`
+  below 1 ms stops the application. With exponential backoff or a randomized wait the wait in the open state
+  changes between openings, so the model records it as `UNKNOWN`.

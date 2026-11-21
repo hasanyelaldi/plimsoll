@@ -9,10 +9,13 @@ import io.github.hasanyelaldi.plimsoll.collect.resilience4j.AnnotationScanner.Sc
 import io.github.hasanyelaldi.plimsoll.collect.resilience4j.EdgesHint.Hint;
 import io.github.hasanyelaldi.plimsoll.collect.spring.SpringProperties;
 import io.github.hasanyelaldi.plimsoll.io.InvalidSpecException;
+import io.github.hasanyelaldi.plimsoll.collect.resilience4j.Resilience4jConfig.BreakerConfig;
+import io.github.hasanyelaldi.plimsoll.model.CircuitBreaker;
 import io.github.hasanyelaldi.plimsoll.model.Edge;
 import io.github.hasanyelaldi.plimsoll.model.Layer;
 import io.github.hasanyelaldi.plimsoll.model.RetryConditions;
 import io.github.hasanyelaldi.plimsoll.model.RetryPolicy;
+import io.github.hasanyelaldi.plimsoll.model.Source;
 import io.github.hasanyelaldi.plimsoll.model.Val;
 import java.nio.file.Path;
 import java.time.Duration;
@@ -30,8 +33,8 @@ import java.util.Set;
  *
  * <p>Per edge, one {@code resilience4j} layer. {@code @Retry} gives the retry policy. {@code @TimeLimiter} gives
  * the per-try timeout when its aspect runs inside Retry (the default order), else the overall timeout; it applies
- * only to methods returning {@code CompletionStage}. {@code @CircuitBreaker} is detected and reported in the notes
- * but not modelled yet.
+ * only to methods returning {@code CompletionStage}. {@code @CircuitBreaker} gives the layer's breaker, its settings
+ * from the instance configuration and its position from the aspect orders (ADR 0015).
  *
  * <p>The edge is idempotent as the hint says; without {@code idempotent} in the hint, as its HTTP method is per
  * RFC 9110 ({@link HttpMethods}). The method is the one the hint's {@code operation} starts with
@@ -154,11 +157,6 @@ public final class Resilience4jCollector {
         Val<String> breakerName = annotations.get(Kind.CIRCUIT_BREAKER);
         Val<String> limiterName = annotations.get(Kind.TIME_LIMITER);
 
-        if (breakerName != null) {
-            notes.add(breakerName.evidence() + ": @CircuitBreaker" + named(breakerName) + " on " + h.qualifiedMethod()
-                    + " found; circuit breakers are not modelled yet");
-        }
-
         RetryPolicy retry;
         if (retryName == null) {
             retry = noRetry(site + " (no @Retry on " + h.qualifiedMethod() + ")");
@@ -208,11 +206,42 @@ public final class Resilience4jCollector {
         // ADR 0014: listed retryExceptions have no mapping, so they leave the classes UNKNOWN.
         return new Layer("resilience4j", withTimeout, overall, new RetryConditions(
                 kb.retried(Resilience4jConfig.RETRY_KB, retry.retryOn(), c -> null),
-                kb.givesUpAs(Resilience4jConfig.RETRY_KB)));
+                kb.givesUpAs(Resilience4jConfig.RETRY_KB)),
+                breakerName == null ? null : breaker(breakerName, retryName != null, where));
     }
 
-    private static String named(Val<String> name) {
-        return name.isKnown() ? "(name = \"" + name.value() + "\")" : "";
+    /**
+     * ADR 0015: the breaker of {@code @CircuitBreaker}, its settings from the instance configuration and its position
+     * from the aspect orders (lower order = outer aspect; by default Retry wraps CircuitBreaker, so each try passes
+     * through the breaker).
+     */
+    private CircuitBreaker breaker(Val<String> name, boolean hasRetry, String where) {
+        BreakerConfig c = name.isKnown() ? config.circuitBreaker(name.value()) : null;
+        Val<Integer> retryOrder = config.retryAspectOrder();
+        Val<Integer> breakerOrder = config.circuitBreakerAspectOrder();
+        String orders = retryOrder.evidence() + "; " + breakerOrder.evidence()
+                + (hasRetry ? "" : "; no @Retry on " + where + ", so both positions count the same calls");
+        Val<CircuitBreaker.Position> position;
+        if (!retryOrder.isKnown() || !breakerOrder.isKnown()) {
+            position = Val.unknown("aspect order not known: " + orders);
+        } else if (retryOrder.value().equals(breakerOrder.value())) {
+            position = Val.unknown("Retry and CircuitBreaker have the same aspect order; Spring does not define "
+                    + "which wraps the other (" + orders + ")");
+        } else {
+            CircuitBreaker.Position p = retryOrder.value() < breakerOrder.value()
+                    ? CircuitBreaker.Position.EACH_TRY : CircuitBreaker.Position.WRAPS_ALL_TRIES;
+            Source source = retryOrder.source() == Source.EXPLICIT || breakerOrder.source() == Source.EXPLICIT
+                    ? Source.EXPLICIT : Source.LIBRARY_DEFAULT;
+            position = new Val<>(p, source, "aspect orders: retry " + retryOrder.value() + ", circuit breaker "
+                    + breakerOrder.value() + " (" + orders + ")");
+        }
+        if (c == null) {
+            String why = "@CircuitBreaker instance not known: " + name.evidence();
+            return new CircuitBreaker(name, position, Val.unknown(why), Val.unknown(why), Val.unknown(why),
+                    Val.unknown(why), Val.unknown(why));
+        }
+        return new CircuitBreaker(name, position, c.failureRateThreshold(), c.slidingWindowType(),
+                c.slidingWindowSize(), c.minimumNumberOfCalls(), c.waitDurationInOpenState());
     }
 
     private static RetryPolicy noRetry(String evidence) {
