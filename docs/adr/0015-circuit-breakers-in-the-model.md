@@ -83,3 +83,11 @@ consecutive errors, and calls go on to the other hosts. It stays a collector not
   position comes from the filter order (no `Retry` filter: `UNKNOWN`). A further breaker on the same route, such as
   petclinic's `genaiCircuitBreaker` inside `defaultCircuitBreaker`, is a note, because a layer carries one breaker.
   The gateway oracle shows that the shortcut form `CircuitBreaker=cb` names the breaker `cb`.
+- #18 reads the gateway breakers' settings from Spring Cloud CircuitBreaker. `SpringCloudCircuitBreakerOracleTest`
+  shows the order in which `ReactiveResilience4JCircuitBreakerFactory` 5.0.3 picks an id's breaker and TimeLimiter:
+  a Resilience4j instance of that name, else a Resilience4j config of that name, else the `Customizer`'s
+  `configure(..., id)`, else its `configureDefault` (a builder that leaves a config out starts from `ofDefaults()`,
+  not from `configs.default`), else the registry's default config. The TimeLimiter is a timeout, not a breaker
+  field: it bounds what the filter wraps, so it caps the layer's overall timeout when the breaker wraps all tries and
+  the per-try timeout otherwise. Every `CircuitBreaker` filter's TimeLimiter applies, including a further breaker
+  that is only a note.

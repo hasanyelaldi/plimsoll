@@ -41,7 +41,7 @@ class ProjectCollectorTest {
                         Files.createDirectories(to);
                     } else {
                         Files.createDirectories(to.getParent());
-                        Files.copy(p, to);
+                        Files.copy(p, to, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
                     }
                 } catch (IOException e) {
                     throw new UncheckedIOException(e);
@@ -100,8 +100,9 @@ class ProjectCollectorTest {
                 "api-gateway: entry, Spring Cloud Gateway routing to customers-service, genai-service, vets-service, "
                         + "visits-service (ADR 0009)",
                 "visits-service: no VirtualService; assumed to be in the mesh, so the Istio default retry policy applies");
-        assertThat(r.notes()).anyMatch(n -> n.startsWith(
-                "api-gateway: api-gateway/src/main/resources/application.yml:12: CircuitBreaker 'defaultCircuitBreaker'"));
+        assertThat(r.notes()).contains("api-gateway: route vets-service: the TimeLimiter (10 s) of CircuitBreaker "
+                + "'defaultCircuitBreaker' (default-filters[0], api-gateway/src/main/resources/application.yml:12) bounds "
+                + "all tries of Retry (default-filters[1]), so it caps that layer's overall timeout");
     }
 
     @Test
@@ -274,6 +275,9 @@ class ProjectCollectorTest {
         assertThat(r.detections()).extracting(Detection::service, Detection::mechanism, Detection::evidence)
                 .containsExactly(
                         tuple("api-gateway", "Reactor retry", "api-gateway/src/main/java/org/example/Client.java:4"),
+                        // the Customizer is read (#18), but cbFactory.create(...) call sites are not modelled yet
+                        tuple("api-gateway", "Spring Cloud CircuitBreaker (programmatic)", "api-gateway/src/main/java/"
+                                + "org/springframework/samples/petclinic/api/ApiGatewayApplication.java:42"),
                         tuple("visits-service", "Spring Retry", "visits-service/pom.xml:5"));
         assertThat(ProjectCollector.collect(dir)).isEqualTo(r);
     }

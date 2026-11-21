@@ -39,8 +39,8 @@ public final class Resilience4jConfig {
 
     static final String RETRY_KB = "resilience4j-retry";
     static final String SPRING_KB = "resilience4j-spring-boot4";
-    static final String TIME_LIMITER_KB = "resilience4j-timelimiter";
-    static final String BREAKER_KB = "resilience4j-circuitbreaker";
+    public static final String TIME_LIMITER_KB = "resilience4j-timelimiter";
+    public static final String BREAKER_KB = "resilience4j-circuitbreaker";
     private static final String DEFAULT = "default";
 
     private static final List<String> RETRY_CONFIGS = List.of("resilience4j", "retry", "configs");
@@ -239,6 +239,21 @@ public final class Resilience4jConfig {
         return timeLimiterTimeout(TL_INSTANCES, instance, new LinkedHashSet<>());
     }
 
+    /** Whether {@code resilience4j.timelimiter.instances.<name>} is configured. */
+    public boolean hasTimeLimiterInstance(String name) {
+        return configured(TL_INSTANCES, name);
+    }
+
+    /** Whether {@code resilience4j.timelimiter.configs.<name>} is configured. */
+    public boolean hasTimeLimiterConfig(String name) {
+        return configured(TL_CONFIGS, name);
+    }
+
+    /** The {@code timeoutDuration} of the shared config {@code resilience4j.timelimiter.configs.<name>}. */
+    public Val<Duration> timeLimiterConfigTimeout(String name) {
+        return timeLimiterTimeout(TL_CONFIGS, name, new LinkedHashSet<>());
+    }
+
     private Val<Duration> timeLimiterTimeout(List<String> section, String name, Set<String> visiting) {
         boolean configured = configured(section, name);
         Property baseConfig = configured ? field(section, name, "baseConfig") : null;
@@ -287,6 +302,24 @@ public final class Resilience4jConfig {
                     : breakerDefaults();
         }
         return breakerConfig(instance, CB_INSTANCES, new LinkedHashSet<>());
+    }
+
+    /** Whether {@code resilience4j.circuitbreaker.instances.<name>} is configured. */
+    public boolean hasCircuitBreakerInstance(String name) {
+        return configured(CB_INSTANCES, name);
+    }
+
+    /** Whether {@code resilience4j.circuitbreaker.configs.<name>} is configured. */
+    public boolean hasCircuitBreakerConfig(String name) {
+        return configured(CB_CONFIGS, name);
+    }
+
+    /**
+     * The settings of the shared config {@code resilience4j.circuitbreaker.configs.<name>}, as the registry holds it:
+     * from its {@code baseConfig}, else from the library defaults.
+     */
+    public BreakerConfig circuitBreakerConfig(String name) {
+        return breakerConfig(name, CB_CONFIGS, new LinkedHashSet<>());
     }
 
     /** @param section where the block {@code name} is, or null when it is not configured */
