@@ -58,7 +58,9 @@ final class SarifReport {
             new Rule("PLM-A5", "LayeredRetries",
                     "One edge retried by two or more layers, or one path with retries on two or more edges."),
             new Rule("PLM-C1", "MechanismNotModelled",
-                    "A retry, timeout or breaker mechanism was found that no collector models."));
+                    "A retry, timeout or breaker mechanism was found that no collector models."),
+            new Rule("PLM-C2", "EffectiveConfigDiffers",
+                    "A setting in a running environment differs from the one the repository declares."));
 
     /**
      * A relative path ending in a file extension, then a line. It may not follow a word character, '.', '/', ':' or

@@ -212,6 +212,7 @@ Runs on real projects, with a hand check of every finding: [spring-petclinic-mic
 | **PLM-A4** Backoff hygiene | Retries with zero backoff; retries without jitter. | `WARN`; `INFO` |
 | **PLM-A5** Layered retries | One edge retried by two or more layers (e.g. Resilience4j and Istio); one path with retries on two or more edges. | `WARN` |
 | **PLM-C1** Mechanism detected but not modelled | A retry, timeout or breaker mechanism no collector models yet, found by the patterns in [`kb/detectors/mechanisms.yaml`](kb/detectors/mechanisms.yaml). Only collected directories produce it. | `WARN` |
+| **PLM-C2** Declared configuration differs from what runs | A setting in a dump of the running environment differs from the one the repository declares ([ADR 0016](docs/adr/0016-effective-configuration-inputs.md)). The dump readers are in progress ([#25](https://github.com/hasanyelaldi/plimsoll/issues/25)). | `WARN` |
 
 Findings are sorted by severity, then rule, then location. A finding that used an `UNKNOWN` value is computed with what is known, tagged `depends-on-unknown`, and names the unknown value; nothing is guessed.
 

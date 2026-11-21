@@ -48,7 +48,7 @@ plimsoll-collectors/  read real config into the model: Spring Boot properties, R
 plimsoll-cli/     picocli entry point: `plimsoll analyze <spec-or-dir>` (a directory is collected; a Coverage section lists the files read per service, the layer kinds searched and found per edge, and the configuration it did not read (config imports and config server, profile documents and activations, other config files, placeholders under collected prefixes) under Sources not read; then collector notes sorted in a Notes section; several repositories are analysed by checking them out side by side under one directory, ADR 0010)
 examples/         hand-written specs; checkout.yaml is the canonical demo and acceptance test
 findings/         runs on real testbeds (pinned commit, generated report, hand check, gaps); petclinic.md for #9, trainticket.md for #28
-docs/adr/         decisions in MADR format (0001–0015 below)
+docs/adr/         decisions in MADR format (0001–0016 below)
 kb/defaults/      library defaults knowledge base, one YAML file per library
 kb/detectors/     patterns of mechanisms no collector models (PLM-C1); `Detector` in `…collect.detect`
 ```
@@ -92,7 +92,7 @@ The Resilience4j row is checked by `RetryAttemptCountingOracleTest`; the Istio r
 
 ## Analyzer rules (v0.1)
 
-Rule ids `PLM-A1` … `PLM-A5`, plus `PLM-C1` for coverage. Severities: `ERROR`, `WARN`, `INFO`.
+Rule ids `PLM-A1` … `PLM-A5`, plus `PLM-C1` and `PLM-C2` for coverage. Severities: `ERROR`, `WARN`, `INFO`.
 
 - **A1 Amplification.** Upper bound, assuming every try fails and failure propagates upward (fail-close). For each entry `s`, in topological order: `L(s) = 1`, `L(v) = Σ over edges u→v of L(u) × E(u→v) × fanout(u→v)`, where `E` is the product of `totalAttempts` across the edge's layers. Diamonds are handled by the sum. Edges from one service with the same `choice` are alternatives (ADR 0012): per target `v`, `R_v(u)` sums the edges without a choice and adds, per choice, the max over its edges of `E × fanout × R_v(to)`; `L(v) = max over entries of R_v(s)`. Without choices this is the sum. Report `L(v)` per service; `ERROR` if above the limit (default 10, `--max-amp`). A cycle reachable from an entry gives `ERROR UNBOUNDED`, and the analysis still terminates. Per failure class (ADR 0014): `L_c(v)` uses `E_c`, the tries for a failure of class `c` at `v`; shown when every layer into `v` has known conditions (a layer that tries once needs only its translation) and some class is below `L(v)`; the severity stays on `L(v)`.
 - **A2a Retry budget exceeds the caller's deadline.** `W_k = k × perTry + Σ_{j=1..k-1} min(initial × multiplier^(j-1), maxBackoff)`. If `W_n > deadline(caller)`: `WARN`, "only k of n tries fit", where k is the largest with `W_k ≤ deadline`.
@@ -100,6 +100,7 @@ Rule ids `PLM-A1` … `PLM-A5`, plus `PLM-C1` for coverage. Severities: `ERROR`,
 - **A3 Retry on a non-idempotent edge.** `ERROR`; `INFO` when only `not-sent` failures are retried; the tries are the most over the other classes, named when every layer's conditions are known (ADR 0014).
 - **A4 Backoff hygiene.** Retries with zero backoff: `WARN`. Retries without jitter: `INFO`.
 - **A5 Layered retries.** One edge with ≥ 2 layers where `totalAttempts > 1`: `WARN`. One path with retries on ≥ 2 edges: `WARN`.
+- **C2 Declared configuration differs from what runs** (ADR 0016). A setting read from a dump of the running environment (`--effective <service>=<file>`: `/actuator/configprops`, Envoy route dump) that differs from the declared value (or from the default the analysis would use): `WARN`, one finding per service and setting, both values with their evidence. The effective value is the one in the graph.
 - **C1 Mechanism detected but not modelled.** A retry, timeout or breaker mechanism no collector models, found by the patterns in `kb/detectors/mechanisms.yaml` (dependency, annotation, type, call, config key; each with a doc link): `WARN`, one finding per service and mechanism, every match with `file:line`. Only collected directories produce it, so hand-written specs never do.
 
 Unknown inputs: compute with what is known, tag the finding `depends-on-unknown` and name the unknown value. Never substitute a guess.
@@ -197,6 +198,7 @@ Seed entries, all `verified_by: none` until checked against primary sources:
 - 0013 SARIF locations: a finding is placed at the first `file:line` in its values' evidence (EXPLICIT first), the rest are related locations; without one, line 1 of the spec or of the service's first file read; paths relative to `SRCROOT`.
 - 0014 Failure classes and retry conditions: each layer's `retryOn` maps (sourced KB, oracles) to failure classes (`not-sent`, `reset`, `timeout`, statuses); Istio turns connection failure/reset into 503 and per-try timeout into 504; across services the class is unknown. A1 keeps its bound and adds per-class figures when every condition is known; A3 is `INFO` when only `not-sent` is retried.
 - 0015 Circuit breakers in the model: a `Layer` may carry a `CircuitBreaker` (Resilience4j fields, each a `Val`) and its position relative to the layer's own retry (`wraps-all-tries` | `each-try`); listed in the report, read by no rule yet; Istio `outlierDetection` is not a breaker.
+- 0016 Effective configuration inputs: dumps from a running environment (`--effective <service>=<file>`, no network) replace declared values in the graph (`EXPLICIT`, `<dump>:<line> (<JSON pointer>)`); each difference is PLM-C2 `WARN`; MeshConfig `defaultHttpRetryPolicy` is read statically from manifests.
 
 ## Related work (cite it, do not duplicate it)
 
