@@ -10,6 +10,7 @@ import io.github.hasanyelaldi.plimsoll.analysis.ServiceAmplification;
 import io.github.hasanyelaldi.plimsoll.collect.kb.DefaultsKb;
 import io.github.hasanyelaldi.plimsoll.collect.resilience4j.Resilience4jCollector.Result;
 import io.github.hasanyelaldi.plimsoll.io.InvalidSpecException;
+import io.github.hasanyelaldi.plimsoll.model.CircuitBreaker;
 import io.github.hasanyelaldi.plimsoll.model.Edge;
 import io.github.hasanyelaldi.plimsoll.model.FailureClass;
 import io.github.hasanyelaldi.plimsoll.model.Layer;
@@ -121,11 +122,81 @@ class Resilience4jCollectorTest {
         assertThat(edge("com.example.gateway.CustomersClient#plain").layers()).isEmpty();
     }
 
+    /** ADR 0015: the breaker's settings come from its instance, its position from the aspect orders. */
     @Test
-    void circuitBreakersAreDetectedButNotModelled() {
-        assertThat(result.notes()).contains("src/main/java/com/example/gateway/CustomersClient.java:13: "
-                + "@CircuitBreaker(name = \"customers\") on com.example.gateway.CustomersClient#getOwner found; "
-                + "circuit breakers are not modelled yet");
+    void circuitBreakerBecomesTheLayersBreaker() {
+        CircuitBreaker b = edge("GET /owners/{id}").layers().get(0).breaker();
+        assertThat(b.name()).isEqualTo(Val.explicit("customers", "src/main/java/com/example/gateway/CustomersClient.java:13"));
+        assertThat(b.position().value()).isEqualTo(CircuitBreaker.Position.EACH_TRY);
+        assertThat(b.position().source()).isEqualTo(Source.LIBRARY_DEFAULT);
+        assertThat(b.position().evidence()).startsWith("aspect orders: retry 2147483642, circuit breaker 2147483643 (");
+        assertThat(b.slidingWindowSize()).isEqualTo(Val.explicit(10, "src/main/resources/application.yml:19"));
+        assertThat(b.failureRateThreshold().value()).isEqualTo(50.0);
+        assertThat(b.failureRateThreshold().source()).isEqualTo(Source.LIBRARY_DEFAULT);
+        assertThat(b.failureRateThreshold().evidence()).contains("https://resilience4j.readme.io/docs/circuitbreaker");
+        assertThat(b.waitDurationInOpenState().value()).isEqualTo(Duration.ofSeconds(60));
+        assertThat(result.notes()).noneMatch(n -> n.contains("@CircuitBreaker"));
+        assertThat(edge("GET /owners/{id}").layers().get(0).retry().totalAttempts().value()).isEqualTo(3);
+        assertThat(edge("com.example.gateway.CustomersClient#getVisits").layers().get(0).breaker()).isNull();
+    }
+
+    @Test
+    void anAspectOrderPutsTheBreakerOutsideTheRetry(@TempDir Path tmp) throws IOException {
+        Result r = Resilience4jCollector.collect(project(tmp, """
+                resilience4j.circuitbreaker.circuit-breaker-aspect-order: 1
+                resilience4j.retry.retry-aspect-order: 2
+                """, "@Retry(name = \"a\") @CircuitBreaker(name = \"a\")"), tmp.resolve("edges-hint.yaml"));
+        Val<CircuitBreaker.Position> position = r.edges().get(0).layers().get(0).breaker().position();
+        assertThat(position.value()).isEqualTo(CircuitBreaker.Position.WRAPS_ALL_TRIES);
+        assertThat(position.source()).isEqualTo(Source.EXPLICIT);
+        assertThat(position.evidence()).startsWith("aspect orders: retry 2, circuit breaker 1 (src/main/resources/application.yml:3; src/main/resources/application.yml:2)");
+    }
+
+    @Test
+    void equalAspectOrdersLeaveThePositionUnknown(@TempDir Path tmp) throws IOException {
+        Result r = Resilience4jCollector.collect(project(tmp, """
+                resilience4j.circuitbreaker.circuit-breaker-aspect-order: 5
+                resilience4j.retry.retry-aspect-order: 5
+                """, "@Retry(name = \"a\") @CircuitBreaker(name = \"a\")"), tmp.resolve("edges-hint.yaml"));
+        Val<CircuitBreaker.Position> position = r.edges().get(0).layers().get(0).breaker().position();
+        assertThat(position.source()).isEqualTo(Source.UNKNOWN);
+        assertThat(position.evidence()).startsWith("Retry and CircuitBreaker have the same aspect order");
+    }
+
+    @Test
+    void aBreakerWithoutRetryOrKnownNameIsStillListed(@TempDir Path tmp) throws IOException {
+        Result r = Resilience4jCollector.collect(project(tmp, "x: 1\n",
+                "@CircuitBreaker(name = NAME)"), tmp.resolve("edges-hint.yaml"));
+        Layer layer = r.edges().get(0).layers().get(0);
+        assertThat(layer.retry().totalAttempts().value()).isEqualTo(1);
+        CircuitBreaker b = layer.breaker();
+        assertThat(b.name().source()).isEqualTo(Source.UNKNOWN);
+        assertThat(b.position().evidence()).contains("no @Retry on c.C#call", "both positions count the same calls");
+        assertThat(b.failureRateThreshold().evidence()).startsWith("@CircuitBreaker instance not known: ");
+    }
+
+    /** A one-method service {@code c.C#call} calling {@code b} with the given annotations. */
+    private static Path project(Path tmp, String applicationYml, String annotations) throws IOException {
+        Path java = Files.createDirectories(tmp.resolve("src/main/java/c"));
+        Files.writeString(java.resolve("C.java"), """
+                package c;
+
+                import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+                import io.github.resilience4j.retry.annotation.Retry;
+
+                public class C {
+                    static final String NAME = "a";
+
+                    %s
+                    public String call() {
+                        return null;
+                    }
+                }
+                """.formatted(annotations));
+        Path resources = Files.createDirectories(tmp.resolve("src/main/resources"));
+        Files.writeString(resources.resolve("application.yml"), "spring.application.name: c\n" + applicationYml);
+        Files.writeString(tmp.resolve("edges-hint.yaml"), "service: c\nmethods:\n  - { method: c.C#call, to: b }\n");
+        return tmp;
     }
 
     @Test
