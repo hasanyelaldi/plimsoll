@@ -146,6 +146,16 @@ public final class HttpClientCollector {
      */
     public static Discovered discover(String service, List<ClientCallScanner.ClientCall> calls, Set<String> services,
             EdgesHint hint, SpringProperties props, DefaultsKb kb) {
+        return discover(service, calls, services, hint, props, kb, call -> List.of());
+    }
+
+    /**
+     * @param outer the layers that wrap a request in code, outermost first, such as a Spring Cloud CircuitBreaker
+     *              (#18); asked once for each request that becomes an edge
+     */
+    public static Discovered discover(String service, List<ClientCallScanner.ClientCall> calls, Set<String> services,
+            EdgesHint hint, SpringProperties props, DefaultsKb kb,
+            java.util.function.Function<ClientCallScanner.ClientCall, List<Layer>> outer) {
         HttpClientCollector c = new HttpClientCollector(props, kb);
         Set<String> hinted = new TreeSet<>();
         Set<EdgeKey> hintEdges = new HashSet<>();
@@ -199,7 +209,7 @@ public final class HttpClientCollector {
                     : Val.unknown(call.method().evidence());
             Val<Integer> fanout = Val.unknown("found in code at " + call.evidence()
                     + "; no edges-hint.yaml entry gives its fanout (ADR 0009)");
-            edges.add(new Edge(service, to, call.operation(), idempotent, fanout, List.of()));
+            edges.add(new Edge(service, to, call.operation(), idempotent, fanout, outer.apply(call)));
             layers.put(key, call.client().equals("WebClient")
                     ? c.loadBalancedWebClient(to, call.qualifiedMethod(), call.loadBalanced().evidence())
                     : c.unverifiedLoadBalanced(call));

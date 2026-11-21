@@ -150,6 +150,22 @@ class ProjectCollectorTest {
         assertThat(visits.idempotent().value()).isTrue();
         assertThat(visits.idempotent().evidence()).contains(gw + "application/VisitsServiceClient.java:45",
                 "field hostname is also assigned at " + gw + "application/VisitsServiceClient.java:56");
+        // #18: ApiGatewayController wraps getVisitsForPets in the 'getOwnerDetails' breaker
+        assertThat(visits.layers()).extracting(Layer::kind).containsExactly("resilience4j", "http-client", "istio");
+        Layer breaker = visits.layers().get(0);
+        assertThat(breaker.breaker().name()).isEqualTo(Val.explicit("getOwnerDetails",
+                gw + "boundary/web/ApiGatewayController.java:61"));
+        assertThat(breaker.retry().totalAttempts().value()).isEqualTo(1);
+        assertThat(breaker.overallTimeout().value()).isEqualTo(Duration.ofSeconds(10));
+        assertThat(breaker.retry().perTryTimeout().evidence()).startsWith(gw + "ApiGatewayApplication.java:89: "
+                + "timeoutDuration(Duration.ofSeconds(10)) in configureDefault of @Bean defaultCustomizer");
+        assertThat(breaker.conditions().givesUpAs().isKnown()).isTrue();
+        assertThat(owner.layers()).extracting(Layer::kind).containsExactly("http-client", "istio");
+        assertThat(r.notes()).contains("api-gateway: " + gw + "boundary/web/ApiGatewayController.java:61: the run of "
+                + "Spring Cloud CircuitBreaker 'getOwnerDetails' (" + gw + "boundary/web/ApiGatewayController.java:61) "
+                + "wraps visitsServiceClient.getVisitsForPets(owner.getPetIds()) has a fallback (throwable -> "
+                + "emptyVisitsForPets()), so a failure there is answered, not passed on; the analysis still counts "
+                + "it as passed on (fail-close)");
 
         Edge vets = edge(r, "vets-service", "GET /vets");
         assertThat(vets.from()).isEqualTo("genai-service");
@@ -170,7 +186,7 @@ class ProjectCollectorTest {
 
         assertThat(r.coverage().edges()).filteredOn(e -> "GET /vets".equals(e.operation())).singleElement()
                 .satisfies(e -> {
-                    assertThat(e.searched()).containsExactly("http-client", "istio");
+                    assertThat(e.searched()).containsExactly("resilience4j", "http-client", "istio");
                     assertThat(e.found()).containsExactly("http-client", "istio");
                 });
     }
@@ -275,9 +291,6 @@ class ProjectCollectorTest {
         assertThat(r.detections()).extracting(Detection::service, Detection::mechanism, Detection::evidence)
                 .containsExactly(
                         tuple("api-gateway", "Reactor retry", "api-gateway/src/main/java/org/example/Client.java:4"),
-                        // the Customizer is read (#18), but cbFactory.create(...) call sites are not modelled yet
-                        tuple("api-gateway", "Spring Cloud CircuitBreaker (programmatic)", "api-gateway/src/main/java/"
-                                + "org/springframework/samples/petclinic/api/ApiGatewayApplication.java:42"),
                         tuple("visits-service", "Spring Retry", "visits-service/pom.xml:5"));
         assertThat(ProjectCollector.collect(dir)).isEqualTo(r);
     }

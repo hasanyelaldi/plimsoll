@@ -13,7 +13,8 @@
 # effect: the kind of layer it can add (retry, timeout, breaker)
 #
 # Mechanisms Plimsoll collects (Resilience4j annotations and properties, Spring Cloud Gateway Retry, Spring Cloud
-# LoadBalancer retry, Istio) are not listed here.
+# LoadBalancer retry, the reactive Spring Cloud CircuitBreaker factories (#18), Istio) are not listed here; the
+# blocking CircuitBreaker factories are, as their create(...) calls are not modelled.
 
 - mechanism: Spring Retry
   effect: retry
@@ -115,18 +116,6 @@
   effect: timeout
   kind: type
   pattern: org.springframework.cloud.client.circuitbreaker.CircuitBreakerFactory
-  source: https://docs.spring.io/spring-cloud-circuitbreaker/reference/
-
-- mechanism: Spring Cloud CircuitBreaker (programmatic)
-  effect: timeout
-  kind: type
-  pattern: org.springframework.cloud.client.circuitbreaker.ReactiveCircuitBreakerFactory
-  source: https://docs.spring.io/spring-cloud-circuitbreaker/reference/
-
-- mechanism: Spring Cloud CircuitBreaker (programmatic)
-  effect: timeout
-  kind: type
-  pattern: org.springframework.cloud.circuitbreaker.resilience4j.ReactiveResilience4JCircuitBreakerFactory
   source: https://docs.spring.io/spring-cloud-circuitbreaker/reference/
 
 - mechanism: Spring Cloud CircuitBreaker (programmatic)
