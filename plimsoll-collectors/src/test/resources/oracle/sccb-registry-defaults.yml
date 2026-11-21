@@ -1,0 +1,18 @@
+# SpringCloudCircuitBreakerOracleTest without a Customizer: the factory takes the registry's default configs, and the
+# TimeLimiter is off except where the per-id map turns it back on.
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        failureRateThreshold: 70
+  timelimiter:
+    configs:
+      default:
+        timeoutDuration: 2500ms
+spring:
+  cloud:
+    circuitbreaker:
+      resilience4j:
+        disable-time-limiter: true
+        disable-time-limiter-map:
+          withLimiter: false

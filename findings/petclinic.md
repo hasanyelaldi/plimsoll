@@ -8,7 +8,7 @@ Issue #9. Testbed choice: ADR 0005. The full generated report is in [`petclinic-
 | --- | --- |
 | spring-petclinic-microservices | `1d76b00d683e86b62867a6bf59530f8ab301244f` (7 Oct 2026), Spring Boot 4.0.1, Spring Cloud 2025.1.0 (Gateway 5.0.0) |
 | spring-petclinic-microservices-config | `323993ce2519c6d02df63e08bf4458d123d3b611` (2 May 2026), read by hand only |
-| Plimsoll | `3851edd` (main after #35); report regenerated after #23 (PLM-C1, Coverage section) after #37 (client calls in code), #38 (unlimited timeouts, ADR 0011), #48 (alternative routes, ADR 0012), #24 (A3 reads retry conditions, A1 per-class figures, ADR 0014) and #22 (circuit breakers listed, ADR 0015), same command |
+| Plimsoll | `3851edd` (main after #35); report regenerated after #23 (PLM-C1, Coverage section) after #37 (client calls in code), #38 (unlimited timeouts, ADR 0011), #48 (alternative routes, ADR 0012), #24 (A3 reads retry conditions, A1 per-class figures, ADR 0014) #22 (circuit breakers listed, ADR 0015) and #18 (Spring Cloud CircuitBreaker `Customizer` read), same command |
 
 ```bash
 git clone https://github.com/spring-petclinic/spring-petclinic-microservices.git
@@ -81,9 +81,8 @@ All four edges come from one `Retry` default filter (`spring-petclinic-api-gatew
 | Value | Why |
 | --- | --- |
 | `deadline` of every service | no `edges-hint.yaml` anywhere; ADR 0009 takes deadlines only from hints |
-| TimeLimiter of `defaultCircuitBreaker` and `genaiCircuitBreaker` | set in code (10 s in `ApiGatewayApplication.java:88`), not read (#18) |
 
-Since #38 the per-try timeouts are known (unlimited), so the deadlines are the only missing A2 inputs and A2a and A2b name only them. What-if, not part of the report above: with just `deadline: 10s` in an `edges-hint.yaml` for api-gateway, A2a reports `WARN budget unlimited > deadline 10 s, 0 of 2 tries fit (no per-try timeout)` on the three retried routes (3 error, 8 warn, 13 info). That is the real behaviour: a try that hangs is never cut short by the gateway's HTTP client, so the `Retry` filter cannot run; only the 10 s TimeLimiter of `defaultCircuitBreaker` ends it, and that timeout is not retried (#31).
+Since #38 the per-try timeouts are known (unlimited), so the deadlines are the only missing A2 inputs and A2a and A2b name only them. Since #18 the 10 s TimeLimiter of `ApiGatewayApplication.java:88` is in the graph: `defaultCircuitBreaker`, listed before `Retry`, caps the overall timeout of every route's gateway layer, which no rule reads; `genaiCircuitBreaker`, listed after it, caps each try on the genai-service route, so its per-try timeout is 10 s. What-if, not part of the report above: with just `deadline: 10s` in an `edges-hint.yaml` for api-gateway, A2a reports `WARN budget unlimited > deadline 10 s, 0 of 2 tries fit (no per-try timeout)` on the three retried routes (3 error, 8 warn, 13 info). That is the real behaviour: a try that hangs is never cut short by the gateway's HTTP client, so the `Retry` filter cannot run; only the 10 s TimeLimiter of `defaultCircuitBreaker` ends it, and that timeout is not retried (#31).
 
 ## Hand check
 
@@ -98,7 +97,7 @@ Each finding was checked against the petclinic sources at the pinned commit and 
 | A4 zero backoff, no jitter | true positive | No `backoff` arguments on the filter; the config repository does not override them. |
 | A2a / A2b INFO | correct to stay silent | No deadline is configured anywhere; the response timeouts are known to be absent (#38). |
 | C1 on api-gateway and genai-service | true positive | `ReactiveResilience4JCircuitBreakerFactory` in `ApiGatewayApplication.java:85` and `ApiGatewayController.java:44` (#18); a Spring AI model starter in `spring-petclinic-genai-service/pom.xml:27` (#19). |
-| Circuit breakers (listed since #22) | correct, one missing | Each route's breaker is `defaultCircuitBreaker` from `default-filters[0]`, listed before the default `Retry`, so it wraps all tries (filter order, gateway oracle #31). Its settings are `UNKNOWN`: they come from the `Customizer` in `ApiGatewayApplication.java:85-88` (`CircuitBreakerConfig.ofDefaults()`, 10 s TimeLimiter), which #18 will read. genai-service's route also has `genaiCircuitBreaker` (`filters[1]`, after `Retry`); a layer carries one breaker, so it is a note. |
+| Circuit breakers (listed since #22, settings since #18) | correct, one missing | Each route's breaker is `defaultCircuitBreaker` from `default-filters[0]`, listed before the default `Retry`, so it wraps all tries (filter order, gateway oracle #31). Its settings come from `configureDefault` in the `Customizer` at `ApiGatewayApplication.java:85-89`: `CircuitBreakerConfig.ofDefaults()` (50 %, count-based window of 100 calls, 100 minimum calls, 60 s open; `LIBRARY_DEFAULT` with `ApiGatewayApplication.java:87`) and a 10 s TimeLimiter (`EXPLICIT`, `:88`), as `SpringCloudCircuitBreakerOracleTest` resolves them. genai-service's route also has `genaiCircuitBreaker` (`filters[1]`, after `Retry`); a layer carries one breaker, so it is a note, but its TimeLimiter is applied. |
 | Sources not read: config server, profile documents, `profiles.active`, `creds.yaml` | harmless | The skipped `docker` documents only import the config server; the config repository has no retry, timeout or breaker settings. |
 
 No false positives were found.
@@ -108,7 +107,7 @@ No false positives were found.
 | Gap | Where in petclinic | Follow-up |
 | --- | --- | --- |
 | Calls whose host is computed at run time are notes, not edges | genai → customers (`AIDataProvider`, `DiscoveryClient`, incl. two POSTs) | — (by design in #37) |
-| Programmatic Spring Cloud CircuitBreaker and its 10 s TimeLimiter | `ApiGatewayApplication.java:85-88`, `ApiGatewayController` (`getOwnerDetails` breaker) | #18 |
+| The `getOwnerDetails` breaker around the visits call | `ApiGatewayController.java:60` (`cbFactory.create`); the `Customizer` is read, the call site is not yet, so C1 stays | #18 (next PR) |
 | A second breaker on one route | genai-service route: `genaiCircuitBreaker` inside `defaultCircuitBreaker`; the model holds one breaker per layer (ADR 0015), so the second one is a note | — |
 | Spring AI retry to the LLM provider | genai-service (`spring.ai.retry.*` not set, so the Spring AI defaults apply) | #19 |
 

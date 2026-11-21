@@ -1,5 +1,7 @@
 package io.github.hasanyelaldi.plimsoll.collect;
 
+import io.github.hasanyelaldi.plimsoll.collect.circuitbreaker.CustomizerScanner;
+import io.github.hasanyelaldi.plimsoll.collect.circuitbreaker.CustomizerScanner.Factory;
 import io.github.hasanyelaldi.plimsoll.collect.detect.Detector;
 import io.github.hasanyelaldi.plimsoll.collect.gateway.GatewayCollector;
 import io.github.hasanyelaldi.plimsoll.collect.http.ClientCallScanner;
@@ -160,7 +162,8 @@ public final class ProjectCollector {
                 http.notes().forEach(n -> notes.add(m.name() + ": " + n));
             }
             if (GatewayCollector.configuresGateway(m.props())) {
-                GatewayCollector.Result gateway = GatewayCollector.collect(m.props(), m.name(), served, m.hint(), kb);
+                GatewayCollector.Result gateway = GatewayCollector.collect(m.props(), m.name(), served, m.hint(),
+                        CustomizerScanner.scan(root, m.root().resolve("src/main/java"), kb).get(Factory.REACTIVE), kb);
                 gateways.add(gateway);
                 edges.addAll(gateway.edges());
                 gateway.edges().forEach(e -> searched.add(List.of("spring-cloud-gateway")));

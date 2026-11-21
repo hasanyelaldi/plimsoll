@@ -8,6 +8,8 @@ import io.github.hasanyelaldi.plimsoll.analysis.AnalysisResult;
 import io.github.hasanyelaldi.plimsoll.analysis.Analyzer;
 import io.github.hasanyelaldi.plimsoll.analysis.Finding;
 import io.github.hasanyelaldi.plimsoll.analysis.Severity;
+import io.github.hasanyelaldi.plimsoll.collect.circuitbreaker.CustomizerScanner;
+import io.github.hasanyelaldi.plimsoll.collect.circuitbreaker.CustomizerScanner.Factory;
 import io.github.hasanyelaldi.plimsoll.collect.kb.DefaultsKb;
 import io.github.hasanyelaldi.plimsoll.collect.resilience4j.EdgesHint;
 import io.github.hasanyelaldi.plimsoll.collect.spring.RequestMappingScanner;
@@ -36,6 +38,8 @@ import org.junit.jupiter.api.Test;
 class GatewayCollectorTest {
 
     private static final Path PETCLINIC = Path.of("src/test/resources/projects/petclinic-gateway");
+    private static final String PETCLINIC_APP =
+            "src/main/java/org/springframework/samples/petclinic/api/ApiGatewayApplication.java";
     private static final String OWNERS =
             "src/main/java/org/springframework/samples/petclinic/customers/web/OwnerResource.java";
 
@@ -128,14 +132,22 @@ class GatewayCollectorTest {
             assertThat(retry.initialBackoff().value()).isEqualTo(Duration.ZERO);
             assertThat(retry.initialBackoff().source()).isEqualTo(Source.LIBRARY_DEFAULT);
             assertThat(retry.jitter().value()).isFalse();
+            if (e.to().equals("genai-service")) {
+                // genaiCircuitBreaker is listed after Retry, so its TimeLimiter bounds each try (#18)
+                assertThat(retry.perTryTimeout().value()).isEqualTo(Duration.ofSeconds(10));
+                assertThat(retry.perTryTimeout().evidence()).contains("'genaiCircuitBreaker'");
+                continue;
+            }
             assertThat(retry.perTryTimeout().value()).isEqualTo(Durations.UNLIMITED);
             assertThat(retry.perTryTimeout().source()).isEqualTo(Source.LIBRARY_DEFAULT);
             assertThat(retry.perTryTimeout().evidence()).startsWith(
                     "spring.cloud.gateway.server.webflux.httpclient.response-timeout not set; spring-cloud-gateway "
                             + "5.0.0, 5.0.3 default (verified by oracle)");
-            assertThat(layer.overallTimeout().value()).isEqualTo(Durations.UNLIMITED);
-            assertThat(layer.overallTimeout().source()).isEqualTo(Source.LIBRARY_DEFAULT);
-            assertThat(layer.overallTimeout().evidence()).contains("timeout not set", "(verified by doc)");
+            // the TimeLimiter of defaultCircuitBreaker, listed before Retry, bounds all tries (#18)
+            assertThat(layer.overallTimeout().value()).isEqualTo(Duration.ofSeconds(10));
+            assertThat(layer.overallTimeout().source()).isEqualTo(Source.EXPLICIT);
+            assertThat(layer.overallTimeout().evidence()).startsWith(PETCLINIC_APP + ":45: "
+                    + "timeoutDuration(Duration.ofSeconds(10)) in configureDefault of @Bean defaultCustomizer");
         }
     }
 
@@ -159,13 +171,25 @@ class GatewayCollectorTest {
                 "CircuitBreaker (default-filters[0], src/main/resources/application.yml:12) is listed before Retry "
                         + "(default-filters[1], src/main/resources/application.yml:16); filters run in list order, "
                         + "default-filters first"));
-        assertThat(b.failureRateThreshold()).isEqualTo(Val.unknown("CircuitBreaker (default-filters[0], "
-                + "src/main/resources/application.yml:12): set through Spring Cloud CircuitBreaker, not read yet (#18)"));
+        // #18: configureDefault sets CircuitBreakerConfig.ofDefaults()
+        assertThat(b.failureRateThreshold().value()).isEqualTo(50.0);
+        assertThat(b.failureRateThreshold().source()).isEqualTo(Source.LIBRARY_DEFAULT);
+        assertThat(b.failureRateThreshold().evidence()).startsWith(PETCLINIC_APP + ":44: CircuitBreakerConfig.ofDefaults() "
+                + "in configureDefault of @Bean defaultCustomizer; resilience4j-circuitbreaker 2.4.0 default (verified by "
+                + "oracle)").endsWith("(Spring Cloud CircuitBreaker 'defaultCircuitBreaker' takes the Customizer's "
+                + "configureDefault)");
+        assertThat(b.slidingWindowSize().value()).isEqualTo(100);
+        assertThat(b.waitDurationInOpenState().value()).isEqualTo(Duration.ofSeconds(60));
         assertThat(r.edges()).allSatisfy(e -> assertThat(e.layers().get(0).breaker().name().value())
                 .isEqualTo("defaultCircuitBreaker"));
         assertThat(r.notes())
-                .anyMatch(n -> n.contains("CircuitBreaker 'defaultCircuitBreaker' (default-filters[0]) on route "
-                        + "vets-service: its settings and TimeLimiter come from Spring Cloud CircuitBreaker"))
+                .contains("route vets-service: the TimeLimiter (10 s) of CircuitBreaker 'defaultCircuitBreaker' "
+                        + "(default-filters[0], src/main/resources/application.yml:12) bounds all tries of Retry "
+                        + "(default-filters[1]), so it caps that layer's overall timeout")
+                .contains("route genai-service: the TimeLimiter (10 s) of CircuitBreaker 'genaiCircuitBreaker' (route "
+                        + "genai-service filters[1], src/main/resources/application.yml:46) bounds each try of Retry "
+                        + "(default-filters[1]), so it caps the per-try timeout")
+                .noneMatch(n -> n.contains("#18"))
                 .anyMatch(n -> n.contains("CircuitBreaker 'genaiCircuitBreaker' (route genai-service filters[1]) on "
                         + "route genai-service is a further breaker; a layer carries one (ADR 0015), so only "
                         + "CircuitBreaker 'defaultCircuitBreaker' (default-filters[0]) is listed")
@@ -203,6 +227,98 @@ class GatewayCollectorTest {
                 - Retry=1
                 """));
         assertThat(r.edges().get(0).layers()).allSatisfy(l -> assertThat(l.breaker()).isNull());
+    }
+
+    // ---- Spring Cloud CircuitBreaker settings and TimeLimiter (#18) -------
+
+    private static final String CUSTOMIZER = """
+            class Gw {
+                @Bean
+                Customizer<ReactiveResilience4JCircuitBreakerFactory> c() {
+                    return f -> f.configureDefault(id -> new Resilience4JConfigBuilder(id)
+                            .circuitBreakerConfig(CircuitBreakerConfig.custom().slidingWindowSize(20).build())
+                            .timeLimiterConfig(TimeLimiterConfig.custom().timeoutDuration(Duration.ofSeconds(2)).build())
+                            .build());
+                }
+            }
+            """;
+
+    private static GatewayCollector.Result withJava(String yaml, String java) {
+        DefaultsKb kb = DefaultsKb.classpath();
+        return GatewayCollector.collect(SpringProperties.parse(yaml, "application.yml"), "gw", Map.of(), null,
+                CustomizerScanner.parse(Map.of("Gw.java", java), kb).get(Factory.REACTIVE), kb);
+    }
+
+    @Test
+    void theCustomizerSetsTheBreakerSettings() {
+        CircuitBreaker b = withJava(route("- CircuitBreaker=cb\n- Retry=1"), CUSTOMIZER).edges().get(0).layers().get(0)
+                .breaker();
+        assertThat(b.slidingWindowSize()).isEqualTo(Val.explicit(20, "Gw.java:5: slidingWindowSize(20) in "
+                + "configureDefault of @Bean c (Spring Cloud CircuitBreaker 'cb' takes the Customizer's configureDefault)"));
+        assertThat(b.failureRateThreshold().source()).isEqualTo(Source.LIBRARY_DEFAULT);
+    }
+
+    @Test
+    void aTimeLimiterListedBeforeRetryCapsTheOverallTimeout() {
+        Layer l = only(withJava(route("- CircuitBreaker=cb\n- Retry=1"), CUSTOMIZER));
+        assertThat(l.overallTimeout().value()).isEqualTo(Duration.ofSeconds(2));
+        assertThat(l.overallTimeout().evidence()).startsWith("Gw.java:6: timeoutDuration(Duration.ofSeconds(2))");
+        assertThat(l.retry().perTryTimeout().value()).isEqualTo(Durations.UNLIMITED);
+    }
+
+    @Test
+    void aTimeLimiterListedAfterRetryCapsEachTry() {
+        GatewayCollector.Result r = withJava(route("- Retry=1\n- CircuitBreaker=cb"), CUSTOMIZER);
+        Layer l = only(r);
+        assertThat(l.retry().perTryTimeout().value()).isEqualTo(Duration.ofSeconds(2));
+        assertThat(l.overallTimeout().value()).isEqualTo(Durations.UNLIMITED);
+        assertThat(r.notes()).anyMatch(n -> n.contains("bounds each try of Retry (route a filters[0]), so it caps the "
+                + "per-try timeout"));
+    }
+
+    @Test
+    void withoutRetryTheTimeLimiterCapsTheRequest() {
+        GatewayCollector.Result r = withJava(route("- CircuitBreaker=cb"), CUSTOMIZER);
+        assertThat(only(r).retry().perTryTimeout().value()).isEqualTo(Duration.ofSeconds(2));
+        assertThat(r.notes()).anyMatch(n -> n.contains("bounds the request, so it caps the per-try timeout"));
+    }
+
+    @Test
+    void aShorterResponseTimeoutStaysThePerTryTimeout() {
+        Layer l = only(withJava("spring.cloud.gateway.server.webflux.httpclient.response-timeout: 1s\n"
+                + route("- Retry=1\n- CircuitBreaker=cb"), CUSTOMIZER));
+        assertThat(l.retry().perTryTimeout().value()).isEqualTo(Duration.ofSeconds(1));
+        assertThat(l.retry().perTryTimeout().evidence()).startsWith("application.yml:1");
+    }
+
+    @Test
+    void aSwitchedOffTimeLimiterChangesNoTimeout() {
+        GatewayCollector.Result r = withJava("spring.cloud.circuitbreaker.resilience4j.disable-time-limiter: true\n"
+                + route("- Retry=1\n- CircuitBreaker=cb"), CUSTOMIZER);
+        assertThat(only(r).retry().perTryTimeout().source()).isEqualTo(Source.LIBRARY_DEFAULT);
+        assertThat(r.notes()).noneMatch(n -> n.contains("TimeLimiter ("));
+    }
+
+    @Test
+    void withoutACustomizerTheRegistryDefaultsApply() {
+        Layer l = only(withJava(route("- Retry=1\n- CircuitBreaker=cb"), "class Gw {}"));
+        assertThat(l.retry().perTryTimeout().value()).isEqualTo(Duration.ofSeconds(1));
+        assertThat(l.retry().perTryTimeout().source()).isEqualTo(Source.LIBRARY_DEFAULT);
+        assertThat(l.retry().perTryTimeout().evidence()).contains("timeoutDuration not configured",
+                "no Customizer sets it, so the registry's default config applies");
+        assertThat(l.breaker().minimumNumberOfCalls().value()).isEqualTo(100);
+    }
+
+    @Test
+    void withoutJavaSourcesOnlyResilience4jPropertiesOfTheIdAreKnown() {
+        CircuitBreaker unknown = collect(route("- CircuitBreaker=cb")).edges().get(0).layers().get(0).breaker();
+        assertThat(unknown.failureRateThreshold().source()).isEqualTo(Source.UNKNOWN);
+        assertThat(unknown.failureRateThreshold().evidence()).contains("not searched for Customizer beans");
+        CircuitBreaker known = collect("resilience4j.circuitbreaker.instances.cb.failure-rate-threshold: 25\n"
+                + route("- CircuitBreaker=cb")).edges().get(0).layers().get(0).breaker();
+        assertThat(known.failureRateThreshold().value()).isEqualTo(25.0);
+        assertThat(known.failureRateThreshold().evidence()).startsWith("application.yml:1 (Spring Cloud "
+                + "CircuitBreaker 'cb' reuses Resilience4j instance resilience4j.circuitbreaker.instances.cb)");
     }
 
     // ---- operations and idempotency --------------------------------------

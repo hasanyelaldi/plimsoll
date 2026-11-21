@@ -1,0 +1,9 @@
+# Spring Cloud CircuitBreaker Resilience4j defaults (Resilience4JConfigurationProperties), #18.
+# verified_by: oracle -> plimsoll-collectors/src/test/java/io/github/hasanyelaldi/plimsoll/collect/oracle/SpringCloudCircuitBreakerOracleTest.java
+- library: spring-cloud-circuitbreaker
+  versions: "5.0.3"
+  parameter: disableTimeLimiter
+  value: false
+  unit: boolean
+  source: https://github.com/spring-cloud/spring-cloud-circuitbreaker/blob/v5.0.3/spring-cloud-circuitbreaker-resilience4j/src/main/java/org/springframework/cloud/circuitbreaker/resilience4j/Resilience4JConfigurationProperties.java
+  verified_by: oracle

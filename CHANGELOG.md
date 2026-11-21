@@ -37,8 +37,16 @@ the report format and the rules.
   (ADR 0015, #22). Its position comes from the filter order (listed before `Retry`: it wraps all tries; after: it
   counts each try; no `Retry`: `UNKNOWN`), as the gateway oracle checks. Its name is the `name` argument, or the first
   argument of the shortcut form `CircuitBreaker=cb` (oracle). Its settings come from Spring Cloud CircuitBreaker
-  and stay `UNKNOWN` until #18. A further breaker on the same route is a note. On petclinic every route lists
+  (#18, below). A further breaker on the same route is a note. On petclinic every route lists
   `defaultCircuitBreaker`; the findings are unchanged.
+- Spring Cloud CircuitBreaker (#18): the gateway's `Customizer<ReactiveResilience4JCircuitBreakerFactory>` beans are
+  read (`configureDefault`, `configure(..., ids)`, `CircuitBreakerConfig` and `TimeLimiterConfig` as `ofDefaults()` or
+  `custom()...build()` with literal values), together with Resilience4j instances and configs named like the id and
+  `spring.cloud.circuitbreaker.resilience4j.disable-time-limiter(-map)`. They give gateway breakers their settings.
+  Each `CircuitBreaker` filter's TimeLimiter caps the overall timeout of a `Retry` listed after it and the per-try
+  timeout otherwise. What cannot be followed is `UNKNOWN` and named. The resolution order is checked against the
+  real factory by `SpringCloudCircuitBreakerOracleTest`. On petclinic the breakers get `CircuitBreakerConfig.ofDefaults()`
+  and the 10 s TimeLimiter; the findings are unchanged. `cbFactory.create(...)` call sites are not read yet.
 
 ### Spec format
 
@@ -122,6 +130,7 @@ Oracle tests run the real libraries in test scope and pin the behaviour Plimsoll
 - Resilience4j: attempt counting, decorator order, configuration binding, TimeLimiter order (#4, #5).
 - Spring Cloud Gateway: Retry attempt counting and defaults, filter order (a CircuitBreaker before Retry wraps all
   tries), a TimeLimiter timeout is never retried, response timeouts, first matching route only (#31, #38, #48).
+- Spring Cloud CircuitBreaker: how the Resilience4j factory picks an id's breaker and TimeLimiter (#18).
 - Spring Cloud LoadBalancer: retry counting; exceptions retried for every method, status codes for GET only (#8).
 - Spring: duration parsing, annotation order, HTTP client timeouts.
 

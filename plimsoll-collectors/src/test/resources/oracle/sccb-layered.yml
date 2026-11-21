@@ -1,0 +1,28 @@
+# SpringCloudCircuitBreakerOracleTest with LayeredCustomizer: Resilience4j instances and configs named like an id
+# win over the Customizer; configs.default does not reach a configureDefault that leaves the breaker out.
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        failureRateThreshold: 60
+        slidingWindowSize: 40
+      yamlConfig:
+        slidingWindowSize: 12
+    instances:
+      yamlInstance:
+        minimumNumberOfCalls: 8
+  timelimiter:
+    configs:
+      default:
+        timeoutDuration: 4s
+      tlConfig:
+        timeoutDuration: 5s
+    instances:
+      tlInstance:
+        timeoutDuration: 6s
+spring:
+  cloud:
+    circuitbreaker:
+      resilience4j:
+        disable-time-limiter-map:
+          noLimiter: true
