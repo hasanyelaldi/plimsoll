@@ -9,6 +9,7 @@ import io.github.hasanyelaldi.plimsoll.collect.spring.SpringProperties;
 import io.github.hasanyelaldi.plimsoll.collect.spring.SpringProperties.Property;
 import io.github.hasanyelaldi.plimsoll.collect.spring.RequestMappingScanner.Mapping;
 import io.github.hasanyelaldi.plimsoll.io.InvalidSpecException;
+import io.github.hasanyelaldi.plimsoll.model.CircuitBreaker;
 import io.github.hasanyelaldi.plimsoll.model.Durations;
 import io.github.hasanyelaldi.plimsoll.model.Edge;
 import io.github.hasanyelaldi.plimsoll.model.FailureClass;
@@ -60,10 +61,11 @@ import java.util.regex.Pattern;
  * <p>The routes of one gateway are alternatives: a request takes the first route whose predicates match, so every
  * edge carries the choice {@code routes of <gateway>} (ADR 0012, checked by {@code GatewayRetryOracleTest}).
  *
- * <p>CircuitBreaker filters are noted, not modelled. Filters run in the order they are listed, default-filters first,
- * so a CircuitBreaker listed before Retry wraps all tries and one listed after it wraps each try. Either way a
- * TimeLimiter timeout ends the request after that try: the breaker turns it into a 504, which Retry does not repeat.
- * Both are checked against the real gateway by {@code GatewayRetryOracleTest}.
+ * <p>The first CircuitBreaker filter of a route is the breaker of its outermost gateway layer (ADR 0015); a further
+ * one is noted. Filters run in the order they are listed, default-filters first, so a CircuitBreaker listed before
+ * Retry wraps all tries and one listed after it wraps each try. Either way a TimeLimiter timeout ends the request
+ * after that try: the breaker turns it into a 504, which Retry does not repeat. Both are checked against the real
+ * gateway by {@code GatewayRetryOracleTest}. The breaker's settings are UNKNOWN until #18 reads them.
  */
 public final class GatewayCollector {
 
@@ -279,15 +281,17 @@ public final class GatewayCollector {
         List<Filter> retries = filters.stream().filter(f -> f.name().equals("Retry")).toList();
         List<Filter> breakers = filters.stream().filter(f -> f.name().equals("CircuitBreaker")).toList();
         for (Filter b : breakers) {
-            String breaker = b.args().containsKey("name") ? " '" + b.args().get("name").text() + "'" : "";
-            notes.add(b.evidence() + ": CircuitBreaker" + breaker + " (" + b.where() + ") on route " + id
-                    + " is not modelled; its TimeLimiter is UNKNOWN");
+            notes.add(b.evidence() + ": CircuitBreaker" + quoted(b) + " (" + b.where() + ") on route " + id
+                    + ": its settings and TimeLimiter come from Spring Cloud CircuitBreaker and are not read (#18)");
+        }
+        for (Filter b : breakers.subList(Math.min(1, breakers.size()), breakers.size())) {
+            notes.add(b.evidence() + ": CircuitBreaker" + quoted(b) + " (" + b.where() + ") on route " + id
+                    + " is a further breaker; a layer carries one (ADR 0015), so only CircuitBreaker"
+                    + quoted(breakers.get(0)) + " (" + breakers.get(0).where() + ") is listed");
         }
         if (!breakers.isEmpty() && !retries.isEmpty()) {
-            boolean outer = filters.indexOf(breakers.get(0)) < filters.indexOf(retries.get(0));
-            notes.add("route " + id + ": CircuitBreaker listed " + (outer ? "before" : "after") + " Retry, so it "
-                    + (outer ? "wraps all tries" : "wraps each try") + "; a TimeLimiter timeout ends the request "
-                    + "without a retry (the breaker answers 504, which Retry does not repeat)");
+            notes.add("route " + id + ": a TimeLimiter timeout of CircuitBreaker" + quoted(breakers.get(0))
+                    + " ends the request without a retry (the breaker answers 504, which Retry does not repeat)");
         }
         if (retries.size() > 1) {
             notes.add("route " + id + ": " + retries.size() + " Retry filters; listed default-filters first, "
@@ -326,6 +330,11 @@ public final class GatewayCollector {
             layers.add(new Layer(KIND, noRetry(Val.explicit(1, why), perTry), Val.unknown("no Retry filter"),
                     conditions(Val.unknown(why))));
         }
+        if (!breakers.isEmpty()) {
+            Layer outer = layers.get(0);
+            layers.set(0, new Layer(outer.kind(), outer.retry(), outer.overallTimeout(), outer.conditions(),
+                    breaker(breakers.get(0), retries.isEmpty() ? null : retries.get(0), filters, id)));
+        }
         Val<Boolean> idempotent;
         if (!operations.isKnown()) {
             idempotent = Val.unknown(operations.evidence());
@@ -339,6 +348,43 @@ public final class GatewayCollector {
         Val<String> choice = Val.explicit("routes of " + service, evidenceOf(path(prefix, "routes"))
                 + ": a request takes the first route whose predicates match (ADR 0012)");
         return new Edge(service, to, operation, idempotent, fanout, layers, choice);
+    }
+
+    /**
+     * ADR 0015: a CircuitBreaker filter as the breaker of the route's outermost gateway layer. Filters run in the order
+     * they are listed (checked by {@code GatewayRetryOracleTest}), so a breaker listed before that layer's Retry wraps
+     * all tries and one listed after it counts each try. Its settings come from Spring Cloud CircuitBreaker
+     * (configuration properties or a {@code Customizer} bean), which is not read yet (#18), so they are UNKNOWN.
+     */
+    private CircuitBreaker breaker(Filter b, Filter retry, List<Filter> filters, String id) {
+        String where = "CircuitBreaker (" + b.where() + ", " + b.evidence() + ")";
+        Property nameArg = breakerName(b);
+        Val<String> name = nameArg == null || nameArg.text() == null
+                ? Val.unknown(where + " has no name argument")
+                : nameArg.isPlaceholder() ? Val.unknown(nameArg.evidence() + ": placeholder " + nameArg.text()
+                        + " depends on the environment") : Val.explicit(nameArg.text(), nameArg.evidence());
+        Val<CircuitBreaker.Position> position;
+        if (retry == null) {
+            position = Val.unknown("no Retry filter on route " + id + ", so both positions count the same calls");
+        } else {
+            boolean outer = filters.indexOf(b) < filters.indexOf(retry);
+            position = Val.explicit(outer ? CircuitBreaker.Position.WRAPS_ALL_TRIES : CircuitBreaker.Position.EACH_TRY,
+                    where + " is listed " + (outer ? "before" : "after") + " Retry (" + retry.where() + ", "
+                            + retry.evidence() + "); filters run in list order, default-filters first");
+        }
+        String why = where + ": set through Spring Cloud CircuitBreaker, not read yet (#18)";
+        return new CircuitBreaker(name, position, Val.unknown(why), Val.unknown(why), Val.unknown(why),
+                Val.unknown(why), Val.unknown(why));
+    }
+
+    /** The {@code name} argument; in the shortcut form {@code CircuitBreaker=cb} it is the first positional one. */
+    private static Property breakerName(Filter b) {
+        return b.args().containsKey("name") ? b.args().get("name") : b.args().get("genkey0");
+    }
+
+    private static String quoted(Filter b) {
+        Property name = breakerName(b);
+        return name != null && name.text() != null ? " '" + name.text() + "'" : "";
     }
 
     /** The callee's mappings that the route reaches, or UNKNOWN saying why they cannot be told. */

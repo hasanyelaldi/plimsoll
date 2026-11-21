@@ -33,6 +33,12 @@ the report format and the rules.
   Spring Boot resolves an instance (its `baseConfig`, a config of its own name, `configs.default`) is checked by
   `CircuitBreakerConfigOracleTest`. A wait in the open state with exponential backoff or randomized wait is
   `UNKNOWN`, and one below 1 ms is invalid input, as Resilience4j refuses to start. The "not modelled yet" note is gone.
+- Spring Cloud Gateway: a route's first `CircuitBreaker` filter becomes the breaker of its outermost gateway layer
+  (ADR 0015, #22). Its position comes from the filter order (listed before `Retry`: it wraps all tries; after: it
+  counts each try; no `Retry`: `UNKNOWN`), as the gateway oracle checks. Its name is the `name` argument, or the first
+  argument of the shortcut form `CircuitBreaker=cb` (oracle). Its settings come from Spring Cloud CircuitBreaker
+  and stay `UNKNOWN` until #18. A further breaker on the same route is a note. On petclinic every route lists
+  `defaultCircuitBreaker`; the findings are unchanged.
 
 ### Spec format
 
