@@ -8,7 +8,7 @@ Issue #9. Testbed choice: ADR 0005. The full generated report is in [`petclinic-
 | --- | --- |
 | spring-petclinic-microservices | `1d76b00d683e86b62867a6bf59530f8ab301244f` (7 Oct 2026), Spring Boot 4.0.1, Spring Cloud 2025.1.0 (Gateway 5.0.0) |
 | spring-petclinic-microservices-config | `323993ce2519c6d02df63e08bf4458d123d3b611` (2 May 2026), read by hand only |
-| Plimsoll | `3851edd` (main after #35); report regenerated after #23 (PLM-C1, Coverage section) after #37 (client calls in code), #38 (unlimited timeouts, ADR 0011), #48 (alternative routes, ADR 0012) and #24 (A3 reads retry conditions, A1 per-class figures, ADR 0014), same command |
+| Plimsoll | `3851edd` (main after #35); report regenerated after #23 (PLM-C1, Coverage section) after #37 (client calls in code), #38 (unlimited timeouts, ADR 0011), #48 (alternative routes, ADR 0012), #24 (A3 reads retry conditions, A1 per-class figures, ADR 0014) and #22 (circuit breakers listed, ADR 0015), same command |
 
 ```bash
 git clone https://github.com/spring-petclinic/spring-petclinic-microservices.git
@@ -98,6 +98,7 @@ Each finding was checked against the petclinic sources at the pinned commit and 
 | A4 zero backoff, no jitter | true positive | No `backoff` arguments on the filter; the config repository does not override them. |
 | A2a / A2b INFO | correct to stay silent | No deadline is configured anywhere; the response timeouts are known to be absent (#38). |
 | C1 on api-gateway and genai-service | true positive | `ReactiveResilience4JCircuitBreakerFactory` in `ApiGatewayApplication.java:85` and `ApiGatewayController.java:44` (#18); a Spring AI model starter in `spring-petclinic-genai-service/pom.xml:27` (#19). |
+| Circuit breakers (listed since #22) | correct, one missing | Each route's breaker is `defaultCircuitBreaker` from `default-filters[0]`, listed before the default `Retry`, so it wraps all tries (filter order, gateway oracle #31). Its settings are `UNKNOWN`: they come from the `Customizer` in `ApiGatewayApplication.java:85-88` (`CircuitBreakerConfig.ofDefaults()`, 10 s TimeLimiter), which #18 will read. genai-service's route also has `genaiCircuitBreaker` (`filters[1]`, after `Retry`); a layer carries one breaker, so it is a note. |
 | Sources not read: config server, profile documents, `profiles.active`, `creds.yaml` | harmless | The skipped `docker` documents only import the config server; the config repository has no retry, timeout or breaker settings. |
 
 No false positives were found.
@@ -108,7 +109,7 @@ No false positives were found.
 | --- | --- | --- |
 | Calls whose host is computed at run time are notes, not edges | genai → customers (`AIDataProvider`, `DiscoveryClient`, incl. two POSTs) | — (by design in #37) |
 | Programmatic Spring Cloud CircuitBreaker and its 10 s TimeLimiter | `ApiGatewayApplication.java:85-88`, `ApiGatewayController` (`getOwnerDetails` breaker) | #18 |
-| Breakers in the model | `CircuitBreaker` default filter and `genaiCircuitBreaker` with fallbacks; the order is known since #31 (listed before `Retry`, so it wraps all tries, and a timeout is not retried) | #22 |
+| A second breaker on one route | genai-service route: `genaiCircuitBreaker` inside `defaultCircuitBreaker`; the model holds one breaker per layer (ADR 0015), so the second one is a note | — |
 | Spring AI retry to the LLM provider | genai-service (`spring.ai.retry.*` not set, so the Spring AI defaults apply) | #19 |
 
 The Coverage section of the report lists the files read for each of the 8 modules, the layer kinds searched on each of the 7 edges (`spring-cloud-gateway` on routes, `http-client` on code edges; there is no edges hint and no Istio manifest) and the 17 sources not read (#23).

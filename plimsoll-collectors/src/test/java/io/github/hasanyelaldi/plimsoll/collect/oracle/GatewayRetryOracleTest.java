@@ -131,7 +131,8 @@ class GatewayRetryOracleTest {
         }
     }
 
-    private record Outcome(int tries, HttpStatus status, List<String> routes) {}
+    /** @param breakers the names of the breakers the gateway created, sorted */
+    private record Outcome(int tries, HttpStatus status, List<String> routes, List<String> breakers) {}
 
     /**
      * @param filters the route's filters, outermost first, as {@code filters[i].…=…} property suffixes
@@ -167,8 +168,11 @@ class GatewayRetryOracleTest {
             Response response = new Response();
             handler.handle(new Request(method, URI.create("http://gateway/api/owners/1")), response)
                     .block(Duration.ofSeconds(10));
+            List<String> breakers = context.getBean(ReactiveResilience4JCircuitBreakerFactory.class)
+                    .getCircuitBreakerRegistry().getAllCircuitBreakers().stream()
+                    .map(io.github.resilience4j.circuitbreaker.CircuitBreaker::getName).sorted().toList();
             return new Outcome(upstream.tries.get(), HttpStatus.resolve(response.getStatusCode().value()),
-                    List.copyOf(upstream.routes));
+                    List.copyOf(upstream.routes), breakers);
         }
     }
 
@@ -317,6 +321,13 @@ class GatewayRetryOracleTest {
     void breakerListedAfterRetryLetsRetryRepeatFailedStatuses() {
         assertThat(send(HttpMethod.GET, Answer.STATUS, HttpStatus.SERVICE_UNAVAILABLE, RETRY_THEN_BREAKER).tries())
                 .isEqualTo(3);
+    }
+
+    /** The shortcut form's first argument is the breaker's name (ADR 0015: GatewayCollector reads it so). */
+    @Test
+    void theShortcutFormNamesTheBreakerFirst() {
+        Outcome o = send(HttpMethod.GET, Answer.STATUS, HttpStatus.OK, "filters[0]=CircuitBreaker=shortcutcb");
+        assertThat(o.breakers()).containsExactly("shortcutcb");
     }
 
     // ---- an in-memory exchange -------------------------------------------

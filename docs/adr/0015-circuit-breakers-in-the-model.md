@@ -79,3 +79,7 @@ consecutive errors, and calls go on to the other hosts. It stays a collector not
   name, and a config without `baseConfig` does not start from `configs.default`. A `waitDurationInOpenState`
   below 1 ms stops the application. With exponential backoff or a randomized wait the wait in the open state
   changes between openings, so the model records it as `UNKNOWN`.
+- The gateway collector (#22) puts a route's first `CircuitBreaker` filter on its outermost gateway layer; the
+  position comes from the filter order (no `Retry` filter: `UNKNOWN`). A further breaker on the same route, such as
+  petclinic's `genaiCircuitBreaker` inside `defaultCircuitBreaker`, is a note, because a layer carries one breaker.
+  The gateway oracle shows that the shortcut form `CircuitBreaker=cb` names the breaker `cb`.

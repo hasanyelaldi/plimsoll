@@ -15,6 +15,7 @@ import io.github.hasanyelaldi.plimsoll.collect.spring.RequestMappingScanner.Mapp
 import io.github.hasanyelaldi.plimsoll.collect.spring.SpringProperties;
 import io.github.hasanyelaldi.plimsoll.io.InvalidSpecException;
 import io.github.hasanyelaldi.plimsoll.model.Durations;
+import io.github.hasanyelaldi.plimsoll.model.CircuitBreaker;
 import io.github.hasanyelaldi.plimsoll.model.Edge;
 import io.github.hasanyelaldi.plimsoll.model.FailureClass;
 import io.github.hasanyelaldi.plimsoll.model.Layer;
@@ -148,27 +149,60 @@ class GatewayCollectorTest {
         });
     }
 
+    /** ADR 0015: the first CircuitBreaker filter is the breaker of the route's outermost gateway layer. */
     @Test
-    void petclinicBreakersAreNotedWithTheirVerifiedOrder() {
+    void petclinicBreakersAreListedWithTheirVerifiedOrder() {
         GatewayCollector.Result r = GatewayCollector.collect(PETCLINIC);
+        CircuitBreaker b = petclinicEdge("vets-service").layers().get(0).breaker();
+        assertThat(b.name()).isEqualTo(Val.explicit("defaultCircuitBreaker", "src/main/resources/application.yml:14"));
+        assertThat(b.position()).isEqualTo(Val.explicit(CircuitBreaker.Position.WRAPS_ALL_TRIES,
+                "CircuitBreaker (default-filters[0], src/main/resources/application.yml:12) is listed before Retry "
+                        + "(default-filters[1], src/main/resources/application.yml:16); filters run in list order, "
+                        + "default-filters first"));
+        assertThat(b.failureRateThreshold()).isEqualTo(Val.unknown("CircuitBreaker (default-filters[0], "
+                + "src/main/resources/application.yml:12): set through Spring Cloud CircuitBreaker, not read yet (#18)"));
+        assertThat(r.edges()).allSatisfy(e -> assertThat(e.layers().get(0).breaker().name().value())
+                .isEqualTo("defaultCircuitBreaker"));
         assertThat(r.notes())
-                .anyMatch(n -> n.contains("CircuitBreaker 'defaultCircuitBreaker' (default-filters[0])")
-                        && n.contains("route vets-service"))
-                .anyMatch(n -> n.contains("CircuitBreaker 'genaiCircuitBreaker' (route genai-service filters[1])")
+                .anyMatch(n -> n.contains("CircuitBreaker 'defaultCircuitBreaker' (default-filters[0]) on route "
+                        + "vets-service: its settings and TimeLimiter come from Spring Cloud CircuitBreaker"))
+                .anyMatch(n -> n.contains("CircuitBreaker 'genaiCircuitBreaker' (route genai-service filters[1]) on "
+                        + "route genai-service is a further breaker; a layer carries one (ADR 0015), so only "
+                        + "CircuitBreaker 'defaultCircuitBreaker' (default-filters[0]) is listed")
                         && n.contains("application.yml:46"))
-                .contains("route genai-service: CircuitBreaker listed before Retry, so it wraps all tries; a "
-                        + "TimeLimiter timeout ends the request without a retry (the breaker answers 504, which Retry "
-                        + "does not repeat)");
+                .contains("route genai-service: a TimeLimiter timeout of CircuitBreaker 'defaultCircuitBreaker' ends "
+                        + "the request without a retry (the breaker answers 504, which Retry does not repeat)");
     }
 
     @Test
-    void breakerListedAfterRetryWrapsEachTry() {
+    void breakerListedAfterRetryCountsEachTry() {
         GatewayCollector.Result r = collect(route("""
                 - Retry=1
                 - CircuitBreaker=cb
                 """));
-        assertThat(r.notes()).anyMatch(n -> n.startsWith("route a: CircuitBreaker listed after Retry, so it wraps "
-                + "each try; a TimeLimiter timeout ends the request without a retry"));
+        CircuitBreaker b = r.edges().get(0).layers().get(0).breaker();
+        assertThat(b.position().value()).isEqualTo(CircuitBreaker.Position.EACH_TRY);
+        assertThat(b.position().evidence()).contains("is listed after Retry");
+        assertThat(b.name().value()).isEqualTo("cb");
+    }
+
+    @Test
+    void breakerWithoutRetryHasAnUnknownPosition() {
+        GatewayCollector.Result r = collect(route("""
+                - CircuitBreaker=cb
+                """));
+        Layer layer = r.edges().get(0).layers().get(0);
+        assertThat(layer.retry().totalAttempts().value()).isEqualTo(1);
+        assertThat(layer.breaker().position()).isEqualTo(Val.unknown(
+                "no Retry filter on route a, so both positions count the same calls"));
+    }
+
+    @Test
+    void aRouteWithoutBreakerHasNone() {
+        GatewayCollector.Result r = collect(route("""
+                - Retry=1
+                """));
+        assertThat(r.edges().get(0).layers()).allSatisfy(l -> assertThat(l.breaker()).isNull());
     }
 
     // ---- operations and idempotency --------------------------------------

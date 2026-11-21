@@ -209,6 +209,48 @@ Limit: 10
 - api-gateway→visits-service (/api/visit/**) layer 1 (spring-cloud-gateway) totalAttempts = 2 [EXPLICIT: Retry (default-filters[1], spring-petclinic-api-gateway/src/main/resources/application.yml:15): retries 1 + 1; spring-petclinic-api-gateway/src/main/resources/application.yml:17]
 - api-gateway→visits-service (/api/visit/**) layer 1 (spring-cloud-gateway) jitter = false [LIBRARY_DEFAULT: Retry (default-filters[1], spring-petclinic-api-gateway/src/main/resources/application.yml:15): jitter not set; spring-cloud-gateway 5.0.0, 5.0.3 default (verified by doc), https://docs.spring.io/spring-cloud-gateway/reference/spring-cloud-gateway-server-webflux/gatewayfilter-factories/retry-factory.html]
 
+## Circuit breakers
+
+### api-gateway→vets-service spring-cloud-gateway
+
+- name = defaultCircuitBreaker [EXPLICIT: spring-petclinic-api-gateway/src/main/resources/application.yml:13]
+- position = wraps-all-tries [EXPLICIT: CircuitBreaker (default-filters[0], spring-petclinic-api-gateway/src/main/resources/application.yml:11) is listed before Retry (default-filters[1], spring-petclinic-api-gateway/src/main/resources/application.yml:15); filters run in list order, default-filters first]
+- failureRateThreshold = UNKNOWN [UNKNOWN: CircuitBreaker (default-filters[0], spring-petclinic-api-gateway/src/main/resources/application.yml:11): set through Spring Cloud CircuitBreaker, not read yet (#18)]
+- slidingWindowType = UNKNOWN [UNKNOWN: CircuitBreaker (default-filters[0], spring-petclinic-api-gateway/src/main/resources/application.yml:11): set through Spring Cloud CircuitBreaker, not read yet (#18)]
+- slidingWindowSize = UNKNOWN [UNKNOWN: CircuitBreaker (default-filters[0], spring-petclinic-api-gateway/src/main/resources/application.yml:11): set through Spring Cloud CircuitBreaker, not read yet (#18)]
+- minimumNumberOfCalls = UNKNOWN [UNKNOWN: CircuitBreaker (default-filters[0], spring-petclinic-api-gateway/src/main/resources/application.yml:11): set through Spring Cloud CircuitBreaker, not read yet (#18)]
+- waitDurationInOpenState = UNKNOWN [UNKNOWN: CircuitBreaker (default-filters[0], spring-petclinic-api-gateway/src/main/resources/application.yml:11): set through Spring Cloud CircuitBreaker, not read yet (#18)]
+
+### api-gateway→visits-service (/api/visit/**) spring-cloud-gateway
+
+- name = defaultCircuitBreaker [EXPLICIT: spring-petclinic-api-gateway/src/main/resources/application.yml:13]
+- position = wraps-all-tries [EXPLICIT: CircuitBreaker (default-filters[0], spring-petclinic-api-gateway/src/main/resources/application.yml:11) is listed before Retry (default-filters[1], spring-petclinic-api-gateway/src/main/resources/application.yml:15); filters run in list order, default-filters first]
+- failureRateThreshold = UNKNOWN [UNKNOWN: CircuitBreaker (default-filters[0], spring-petclinic-api-gateway/src/main/resources/application.yml:11): set through Spring Cloud CircuitBreaker, not read yet (#18)]
+- slidingWindowType = UNKNOWN [UNKNOWN: CircuitBreaker (default-filters[0], spring-petclinic-api-gateway/src/main/resources/application.yml:11): set through Spring Cloud CircuitBreaker, not read yet (#18)]
+- slidingWindowSize = UNKNOWN [UNKNOWN: CircuitBreaker (default-filters[0], spring-petclinic-api-gateway/src/main/resources/application.yml:11): set through Spring Cloud CircuitBreaker, not read yet (#18)]
+- minimumNumberOfCalls = UNKNOWN [UNKNOWN: CircuitBreaker (default-filters[0], spring-petclinic-api-gateway/src/main/resources/application.yml:11): set through Spring Cloud CircuitBreaker, not read yet (#18)]
+- waitDurationInOpenState = UNKNOWN [UNKNOWN: CircuitBreaker (default-filters[0], spring-petclinic-api-gateway/src/main/resources/application.yml:11): set through Spring Cloud CircuitBreaker, not read yet (#18)]
+
+### api-gateway→customers-service (/api/customer/**) spring-cloud-gateway
+
+- name = defaultCircuitBreaker [EXPLICIT: spring-petclinic-api-gateway/src/main/resources/application.yml:13]
+- position = wraps-all-tries [EXPLICIT: CircuitBreaker (default-filters[0], spring-petclinic-api-gateway/src/main/resources/application.yml:11) is listed before Retry (default-filters[1], spring-petclinic-api-gateway/src/main/resources/application.yml:15); filters run in list order, default-filters first]
+- failureRateThreshold = UNKNOWN [UNKNOWN: CircuitBreaker (default-filters[0], spring-petclinic-api-gateway/src/main/resources/application.yml:11): set through Spring Cloud CircuitBreaker, not read yet (#18)]
+- slidingWindowType = UNKNOWN [UNKNOWN: CircuitBreaker (default-filters[0], spring-petclinic-api-gateway/src/main/resources/application.yml:11): set through Spring Cloud CircuitBreaker, not read yet (#18)]
+- slidingWindowSize = UNKNOWN [UNKNOWN: CircuitBreaker (default-filters[0], spring-petclinic-api-gateway/src/main/resources/application.yml:11): set through Spring Cloud CircuitBreaker, not read yet (#18)]
+- minimumNumberOfCalls = UNKNOWN [UNKNOWN: CircuitBreaker (default-filters[0], spring-petclinic-api-gateway/src/main/resources/application.yml:11): set through Spring Cloud CircuitBreaker, not read yet (#18)]
+- waitDurationInOpenState = UNKNOWN [UNKNOWN: CircuitBreaker (default-filters[0], spring-petclinic-api-gateway/src/main/resources/application.yml:11): set through Spring Cloud CircuitBreaker, not read yet (#18)]
+
+### api-gateway→genai-service spring-cloud-gateway
+
+- name = defaultCircuitBreaker [EXPLICIT: spring-petclinic-api-gateway/src/main/resources/application.yml:13]
+- position = wraps-all-tries [EXPLICIT: CircuitBreaker (default-filters[0], spring-petclinic-api-gateway/src/main/resources/application.yml:11) is listed before Retry (default-filters[1], spring-petclinic-api-gateway/src/main/resources/application.yml:15); filters run in list order, default-filters first]
+- failureRateThreshold = UNKNOWN [UNKNOWN: CircuitBreaker (default-filters[0], spring-petclinic-api-gateway/src/main/resources/application.yml:11): set through Spring Cloud CircuitBreaker, not read yet (#18)]
+- slidingWindowType = UNKNOWN [UNKNOWN: CircuitBreaker (default-filters[0], spring-petclinic-api-gateway/src/main/resources/application.yml:11): set through Spring Cloud CircuitBreaker, not read yet (#18)]
+- slidingWindowSize = UNKNOWN [UNKNOWN: CircuitBreaker (default-filters[0], spring-petclinic-api-gateway/src/main/resources/application.yml:11): set through Spring Cloud CircuitBreaker, not read yet (#18)]
+- minimumNumberOfCalls = UNKNOWN [UNKNOWN: CircuitBreaker (default-filters[0], spring-petclinic-api-gateway/src/main/resources/application.yml:11): set through Spring Cloud CircuitBreaker, not read yet (#18)]
+- waitDurationInOpenState = UNKNOWN [UNKNOWN: CircuitBreaker (default-filters[0], spring-petclinic-api-gateway/src/main/resources/application.yml:11): set through Spring Cloud CircuitBreaker, not read yet (#18)]
+
 ## Coverage
 
 Source: collected from 8 service modules.
@@ -265,15 +307,16 @@ Istio manifests: none.
 ## Notes
 
 - api-gateway: entry, Spring Cloud Gateway routing to customers-service, genai-service, vets-service, visits-service (ADR 0009)
-- api-gateway: route customers-service: CircuitBreaker listed before Retry, so it wraps all tries; a TimeLimiter timeout ends the request without a retry (the breaker answers 504, which Retry does not repeat)
-- api-gateway: route genai-service: CircuitBreaker listed before Retry, so it wraps all tries; a TimeLimiter timeout ends the request without a retry (the breaker answers 504, which Retry does not repeat)
-- api-gateway: route vets-service: CircuitBreaker listed before Retry, so it wraps all tries; a TimeLimiter timeout ends the request without a retry (the breaker answers 504, which Retry does not repeat)
-- api-gateway: route visits-service: CircuitBreaker listed before Retry, so it wraps all tries; a TimeLimiter timeout ends the request without a retry (the breaker answers 504, which Retry does not repeat)
-- api-gateway: spring-petclinic-api-gateway/src/main/resources/application.yml:11: CircuitBreaker 'defaultCircuitBreaker' (default-filters[0]) on route customers-service is not modelled; its TimeLimiter is UNKNOWN
-- api-gateway: spring-petclinic-api-gateway/src/main/resources/application.yml:11: CircuitBreaker 'defaultCircuitBreaker' (default-filters[0]) on route genai-service is not modelled; its TimeLimiter is UNKNOWN
-- api-gateway: spring-petclinic-api-gateway/src/main/resources/application.yml:11: CircuitBreaker 'defaultCircuitBreaker' (default-filters[0]) on route vets-service is not modelled; its TimeLimiter is UNKNOWN
-- api-gateway: spring-petclinic-api-gateway/src/main/resources/application.yml:11: CircuitBreaker 'defaultCircuitBreaker' (default-filters[0]) on route visits-service is not modelled; its TimeLimiter is UNKNOWN
-- api-gateway: spring-petclinic-api-gateway/src/main/resources/application.yml:45: CircuitBreaker 'genaiCircuitBreaker' (route genai-service filters[1]) on route genai-service is not modelled; its TimeLimiter is UNKNOWN
+- api-gateway: route customers-service: a TimeLimiter timeout of CircuitBreaker 'defaultCircuitBreaker' ends the request without a retry (the breaker answers 504, which Retry does not repeat)
+- api-gateway: route genai-service: a TimeLimiter timeout of CircuitBreaker 'defaultCircuitBreaker' ends the request without a retry (the breaker answers 504, which Retry does not repeat)
+- api-gateway: route vets-service: a TimeLimiter timeout of CircuitBreaker 'defaultCircuitBreaker' ends the request without a retry (the breaker answers 504, which Retry does not repeat)
+- api-gateway: route visits-service: a TimeLimiter timeout of CircuitBreaker 'defaultCircuitBreaker' ends the request without a retry (the breaker answers 504, which Retry does not repeat)
+- api-gateway: spring-petclinic-api-gateway/src/main/resources/application.yml:11: CircuitBreaker 'defaultCircuitBreaker' (default-filters[0]) on route customers-service: its settings and TimeLimiter come from Spring Cloud CircuitBreaker and are not read (#18)
+- api-gateway: spring-petclinic-api-gateway/src/main/resources/application.yml:11: CircuitBreaker 'defaultCircuitBreaker' (default-filters[0]) on route genai-service: its settings and TimeLimiter come from Spring Cloud CircuitBreaker and are not read (#18)
+- api-gateway: spring-petclinic-api-gateway/src/main/resources/application.yml:11: CircuitBreaker 'defaultCircuitBreaker' (default-filters[0]) on route vets-service: its settings and TimeLimiter come from Spring Cloud CircuitBreaker and are not read (#18)
+- api-gateway: spring-petclinic-api-gateway/src/main/resources/application.yml:11: CircuitBreaker 'defaultCircuitBreaker' (default-filters[0]) on route visits-service: its settings and TimeLimiter come from Spring Cloud CircuitBreaker and are not read (#18)
+- api-gateway: spring-petclinic-api-gateway/src/main/resources/application.yml:45: CircuitBreaker 'genaiCircuitBreaker' (route genai-service filters[1]) on route genai-service is a further breaker; a layer carries one (ADR 0015), so only CircuitBreaker 'defaultCircuitBreaker' (default-filters[0]) is listed
+- api-gateway: spring-petclinic-api-gateway/src/main/resources/application.yml:45: CircuitBreaker 'genaiCircuitBreaker' (route genai-service filters[1]) on route genai-service: its settings and TimeLimiter come from Spring Cloud CircuitBreaker and are not read (#18)
 - genai-service: spring-petclinic-genai-service/src/main/java/org/springframework/samples/petclinic/genai/AIDataProvider.java:44: org.springframework.samples.petclinic.genai.AIDataProvider#getAllOwners calls GET {?}/owners through RestClient with a host computed at run time (getCustomerServiceUri() + "/owners"); not an edge
 - genai-service: spring-petclinic-genai-service/src/main/java/org/springframework/samples/petclinic/genai/AIDataProvider.java:72: org.springframework.samples.petclinic.genai.AIDataProvider#addPetToOwner calls POST {?}/owners/{ownerId}/pets through RestClient with a host computed at run time (getCustomerServiceUri() + "/owners/" + ownerId + "/pets"); not an edge
 - genai-service: spring-petclinic-genai-service/src/main/java/org/springframework/samples/petclinic/genai/AIDataProvider.java:81: org.springframework.samples.petclinic.genai.AIDataProvider#addOwnerToPetclinic calls POST {?}/owners through RestClient with a host computed at run time (getCustomerServiceUri() + "/owners"); not an edge
