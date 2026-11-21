@@ -1,5 +1,6 @@
 package io.github.hasanyelaldi.plimsoll.analysis;
 
+import io.github.hasanyelaldi.plimsoll.model.ConfigDifference;
 import io.github.hasanyelaldi.plimsoll.model.Detection;
 import io.github.hasanyelaldi.plimsoll.model.Edge;
 import io.github.hasanyelaldi.plimsoll.model.Layer;
@@ -18,6 +19,15 @@ public final class Analyzer {
 
     /** @param detections mechanisms found by the collectors but not modelled (PLM-C1) */
     public static AnalysisResult analyze(ServiceGraph graph, AnalysisOptions options, List<Detection> detections) {
+        return analyze(graph, options, detections, List.of());
+    }
+
+    /**
+     * @param detections  mechanisms found by the collectors but not modelled (PLM-C1)
+     * @param differences settings whose effective value differs from the declared one (PLM-C2, ADR 0016)
+     */
+    public static AnalysisResult analyze(ServiceGraph graph, AnalysisOptions options, List<Detection> detections,
+            List<ConfigDifference> differences) {
         List<Finding> findings = new ArrayList<>();
         AmplificationRule.Outcome amplification = AmplificationRule.evaluate(graph, options);
         findings.addAll(amplification.findings());
@@ -27,6 +37,7 @@ public final class Analyzer {
         findings.addAll(BackoffHygieneRule.evaluate(graph));
         findings.addAll(LayeredRetryRule.evaluate(graph));
         findings.addAll(UncollectedMechanismRule.evaluate(detections));
+        findings.addAll(EffectiveConfigRule.evaluate(differences));
         findings.sort(Finding.ORDER);
         return new AnalysisResult(amplification.services(), findings, breakers(graph));
     }

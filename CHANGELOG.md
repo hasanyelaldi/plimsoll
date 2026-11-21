@@ -8,6 +8,9 @@ the report format and the rules.
 
 ### Analysis
 
+- PLM-C2 Declared configuration differs from what runs (ADR 0016, #25): `WARN`, one finding per service and
+  setting, with the declared value and the one that runs, each with its source. No input produces it yet: the
+  readers for `/actuator/configprops` and Envoy route dumps follow.
 - Failure classes (ADR 0014, #24): a layer records which failures it retries and what it passes on once it gives up.
   Istio's `retryOn` conditions and its 503/504 answers are mapped from the Envoy source of Istio 1.31's proxy;
   Spring Cloud Gateway's `Retry` conditions and its answers (500 after a connection failure or reset, 503 for a

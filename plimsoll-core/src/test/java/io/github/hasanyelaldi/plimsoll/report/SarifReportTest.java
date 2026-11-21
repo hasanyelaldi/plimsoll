@@ -198,7 +198,7 @@ class SarifReportTest {
                 ids.add((String) id.get(null));
             }
         }
-        assertThat(ids).hasSize(7);
+        assertThat(ids).hasSize(8);
         assertThat(described).containsExactlyInAnyOrderElementsOf(ids);
     }
 }
