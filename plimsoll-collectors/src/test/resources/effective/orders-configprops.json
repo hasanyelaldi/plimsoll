@@ -1,0 +1,677 @@
+{
+  "contexts": {
+    "orders": {
+      "beans": {
+        "spring.cloud.loadbalancer-org.springframework.cloud.client.loadbalancer.LoadBalancerClientsProperties": {
+          "inputs": {
+            "apiVersion": {
+              "fallbackToAvailableInstances": {},
+              "mediaTypeParameters": {},
+              "required": {}
+            },
+            "clients": {},
+            "hintHeaderName": {},
+            "stats": {
+              "includePath": {}
+            },
+            "xForwarded": {
+              "enabled": {}
+            },
+            "healthCheck": {
+              "initialDelay": {},
+              "interval": {},
+              "path": {},
+              "refetchInstances": {},
+              "refetchInstancesInterval": {},
+              "repeatHealthCheck": {},
+              "updateResultsList": {}
+            },
+            "hint": {},
+            "callGetWithRequestOnDelegates": {},
+            "stickySession": {
+              "addServiceInstanceCookie": {},
+              "instanceIdCookieName": {}
+            },
+            "retry": {
+              "backoff": {
+                "enabled": {},
+                "jitter": {},
+                "maxBackoff": {},
+                "minBackoff": {}
+              },
+              "enabled": {
+                "value": true,
+                "origin": "class path resource [oracle/configprops-app.yml] - 19:18"
+              },
+              "maxRetriesOnNextServiceInstance": {
+                "value": 2,
+                "origin": "class path resource [oracle/configprops-app.yml] - 20:47"
+              },
+              "maxRetriesOnSameServiceInstance": {},
+              "retryOnAllExceptions": {},
+              "retryOnAllOperations": {},
+              "retryableExceptions": [
+                {},
+                {},
+                {},
+                {}
+              ],
+              "retryableStatusCodes": []
+            },
+            "subset": {
+              "instanceId": {},
+              "size": {}
+            }
+          },
+          "prefix": "spring.cloud.loadbalancer",
+          "properties": {
+            "apiVersion": {
+              "fallbackToAvailableInstances": false,
+              "mediaTypeParameters": {},
+              "required": false
+            },
+            "clients": {},
+            "hintHeaderName": "X-SC-LB-Hint",
+            "stats": {
+              "includePath": true
+            },
+            "xForwarded": {
+              "enabled": false
+            },
+            "healthCheck": {
+              "initialDelay": "PT0S",
+              "interval": "PT25S",
+              "path": {},
+              "refetchInstances": false,
+              "refetchInstancesInterval": "PT25S",
+              "repeatHealthCheck": true,
+              "updateResultsList": true
+            },
+            "hint": {},
+            "callGetWithRequestOnDelegates": true,
+            "stickySession": {
+              "addServiceInstanceCookie": false,
+              "instanceIdCookieName": "sc-lb-instance-id"
+            },
+            "retry": {
+              "backoff": {
+                "enabled": false,
+                "jitter": 0.5,
+                "maxBackoff": "PT2562047788015H12M55.807S",
+                "minBackoff": "PT0.005S"
+              },
+              "enabled": true,
+              "maxRetriesOnNextServiceInstance": 2,
+              "maxRetriesOnSameServiceInstance": 0,
+              "retryOnAllExceptions": false,
+              "retryOnAllOperations": false,
+              "retryableExceptions": [
+                "java.util.concurrent.TimeoutException",
+                "org.springframework.cloud.client.loadbalancer.RetryableStatusCodeException",
+                "org.springframework.cloud.client.loadbalancer.reactive.RetryableStatusCodeException",
+                "java.io.IOException"
+              ],
+              "retryableStatusCodes": []
+            },
+            "subset": {
+              "instanceId": "",
+              "size": 100
+            }
+          }
+        },
+        "spring.cloud.loadbalancer.eager-load-org.springframework.cloud.client.loadbalancer.LoadBalancerEagerLoadProperties": {
+          "inputs": {
+            "clients": []
+          },
+          "prefix": "spring.cloud.loadbalancer.eager-load",
+          "properties": {
+            "clients": []
+          }
+        },
+        "spring.cloud.gateway.server.webflux.loadbalancer-org.springframework.cloud.gateway.config.GatewayLoadBalancerProperties": {
+          "inputs": {
+            "use404": {}
+          },
+          "prefix": "spring.cloud.gateway.server.webflux.loadbalancer",
+          "properties": {
+            "use404": false
+          }
+        },
+        "discoveryLocatorProperties": {
+          "inputs": {
+            "urlExpression": {},
+            "predicates": [
+              {
+                "args": {
+                  "pattern": {}
+                },
+                "name": {}
+              }
+            ],
+            "filters": [
+              {
+                "args": {
+                  "regexp": {},
+                  "replacement": {}
+                },
+                "name": {}
+              }
+            ],
+            "includeExpression": {},
+            "lowerCaseServiceId": {},
+            "enabled": {}
+          },
+          "prefix": "spring.cloud.gateway.server.webflux.discovery.locator",
+          "properties": {
+            "urlExpression": "'lb://'+serviceId",
+            "predicates": [
+              {
+                "args": {
+                  "pattern": "'/'+serviceId+'/**'"
+                },
+                "name": "Path"
+              }
+            ],
+            "filters": [
+              {
+                "args": {
+                  "regexp": "'/' + serviceId + '/?(?<remaining>.*)'",
+                  "replacement": "'/${remaining}'"
+                },
+                "name": "RewritePath"
+              }
+            ],
+            "includeExpression": "true",
+            "lowerCaseServiceId": false,
+            "enabled": false
+          }
+        },
+        "httpClientProperties": {
+          "inputs": {
+            "pool": {
+              "acquireTimeout": {},
+              "evictionInterval": {},
+              "leasingStrategy": {},
+              "maxConnections": {},
+              "metrics": {},
+              "name": {},
+              "type": {}
+            },
+            "proxy": {
+              "type": {}
+            },
+            "compression": {},
+            "ssl": {
+              "closeNotifyFlushTimeout": {},
+              "closeNotifyReadTimeout": {},
+              "handshakeTimeout": {},
+              "keyStoreType": {},
+              "trustedX509Certificates": [],
+              "useInsecureTrustManager": {}
+            },
+            "websocket": {
+              "proxyPing": {}
+            },
+            "wiretap": {}
+          },
+          "prefix": "spring.cloud.gateway.server.webflux.httpclient",
+          "properties": {
+            "pool": {
+              "acquireTimeout": 45000,
+              "evictionInterval": "PT0S",
+              "leasingStrategy": "FIFO",
+              "maxConnections": 16,
+              "metrics": false,
+              "name": "proxy",
+              "type": "ELASTIC"
+            },
+            "proxy": {
+              "type": "HTTP"
+            },
+            "compression": false,
+            "ssl": {
+              "closeNotifyFlushTimeout": "PT3S",
+              "closeNotifyReadTimeout": "PT0S",
+              "handshakeTimeout": "PT10S",
+              "keyStoreType": "JKS",
+              "trustedX509Certificates": [],
+              "useInsecureTrustManager": false
+            },
+            "websocket": {
+              "proxyPing": true
+            },
+            "wiretap": false
+          }
+        },
+        "httpServerProperties": {
+          "inputs": {
+            "wiretap": {},
+            "customizerEnabled": {}
+          },
+          "prefix": "spring.cloud.gateway.server.webflux.httpserver",
+          "properties": {
+            "wiretap": false,
+            "customizerEnabled": false
+          }
+        },
+        "globalCorsProperties": {
+          "inputs": {
+            "corsConfigurations": {}
+          },
+          "prefix": "spring.cloud.gateway.server.webflux.globalcors",
+          "properties": {
+            "corsConfigurations": {}
+          }
+        },
+        "gatewayProperties": {
+          "inputs": {
+            "failOnRouteDefinitionError": {},
+            "streamingMediaTypes": [
+              {
+                "parameters": {}
+              },
+              {
+                "parameters": {}
+              },
+              {
+                "parameters": {}
+              },
+              {
+                "parameters": {}
+              },
+              {
+                "parameters": {}
+              }
+            ],
+            "routes": [
+              {
+                "enabled": {},
+                "filters": [
+                  {
+                    "args": {
+                      "retries": {
+                        "value": 2,
+                        "origin": "class path resource [oracle/configprops-app.yml] - 16:30"
+                      }
+                    },
+                    "name": {
+                      "value": "Retry",
+                      "origin": "class path resource [oracle/configprops-app.yml] - 14:25"
+                    }
+                  }
+                ],
+                "id": {
+                  "value": "payments",
+                  "origin": "class path resource [oracle/configprops-app.yml] - 10:19"
+                },
+                "metadata": {},
+                "order": {},
+                "predicates": [
+                  {
+                    "args": {
+                      "_genkey_0": {}
+                    },
+                    "name": {}
+                  }
+                ],
+                "uri": {
+                  "value": "lb://payments-service",
+                  "origin": "class path resource [oracle/configprops-app.yml] - 11:20"
+                }
+              }
+            ],
+            "defaultFilters": [],
+            "routeFilterCacheEnabled": {}
+          },
+          "prefix": "spring.cloud.gateway.server.webflux",
+          "properties": {
+            "failOnRouteDefinitionError": true,
+            "streamingMediaTypes": [
+              {
+                "parameters": {}
+              },
+              {
+                "parameters": {}
+              },
+              {
+                "parameters": {}
+              },
+              {
+                "parameters": {}
+              },
+              {
+                "parameters": {}
+              }
+            ],
+            "routes": [
+              {
+                "enabled": true,
+                "filters": [
+                  {
+                    "args": {
+                      "retries": "2"
+                    },
+                    "name": "Retry"
+                  }
+                ],
+                "id": "payments",
+                "metadata": {},
+                "order": 0,
+                "predicates": [
+                  {
+                    "args": {
+                      "_genkey_0": "/api/payments/**"
+                    },
+                    "name": "Path"
+                  }
+                ],
+                "uri": "lb://payments-service"
+              }
+            ],
+            "defaultFilters": [],
+            "routeFilterCacheEnabled": false
+          }
+        },
+        "secureHeadersProperties": {
+          "inputs": {
+            "permissionsPolicy": {},
+            "permittedCrossDomainPolicies": {},
+            "referrerPolicy": {},
+            "downloadOptions": {},
+            "contentSecurityPolicy": {},
+            "xssProtectionHeader": {},
+            "contentTypeOptions": {},
+            "disable": [],
+            "disabledHeaders": [],
+            "frameOptions": {},
+            "defaultHeaders": [
+              {},
+              {},
+              {},
+              {},
+              {},
+              {},
+              {},
+              {}
+            ],
+            "enabledHeaders": [],
+            "strictTransportSecurity": {}
+          },
+          "prefix": "spring.cloud.gateway.server.webflux.filter.secure-headers",
+          "properties": {
+            "permissionsPolicy": "accelerometer=(), ambient-light-sensor=(), autoplay=(), battery=(), camera=(), cross-origin-isolated=(), display-capture=(), document-domain=(), encrypted-media=(), execution-while-not-rendered=(), execution-while-out-of-viewport=(), fullscreen=(), geolocation=(), gyroscope=(), keyboard-map=(), magnetometer=(), microphone=(), midi=(), navigation-override=(), payment=(), picture-in-picture=(), publickey-credentials-get=(), screen-wake-lock=(), sync-xhr=(), usb=(), web-share=(), xr-spatial-tracking=()",
+            "permittedCrossDomainPolicies": "none",
+            "referrerPolicy": "no-referrer",
+            "downloadOptions": "noopen",
+            "contentSecurityPolicy": "default-src 'self' https:; font-src 'self' https: data:; img-src 'self' https: data:; object-src 'none'; script-src https:; style-src 'self' https: 'unsafe-inline'",
+            "xssProtectionHeader": "1 ; mode=block",
+            "contentTypeOptions": "nosniff",
+            "disable": [],
+            "disabledHeaders": [],
+            "frameOptions": "DENY",
+            "defaultHeaders": [
+              "content-security-policy",
+              "x-frame-options",
+              "strict-transport-security",
+              "x-content-type-options",
+              "x-xss-protection",
+              "x-permitted-cross-domain-policies",
+              "referrer-policy",
+              "x-download-options"
+            ],
+            "enabledHeaders": [],
+            "strictTransportSecurity": "max-age=631138519"
+          }
+        },
+        "versionProperties": {
+          "inputs": {
+            "detectSupportedVersions": {},
+            "required": {},
+            "supportedVersions": []
+          },
+          "prefix": "spring.cloud.gateway.server.webflux.version",
+          "properties": {
+            "detectSupportedVersions": true,
+            "required": false,
+            "supportedVersions": []
+          }
+        },
+        "removeHopByHopHeadersFilter": {
+          "inputs": {
+            "headers": [
+              {},
+              {},
+              {},
+              {},
+              {},
+              {},
+              {},
+              {},
+              {}
+            ],
+            "order": {}
+          },
+          "prefix": "spring.cloud.gateway.server.webflux.filter.remove-hop-by-hop",
+          "properties": {
+            "headers": [
+              "trailer",
+              "te",
+              "keep-alive",
+              "transfer-encoding",
+              "upgrade",
+              "proxy-authenticate",
+              "connection",
+              "proxy-authorization",
+              "x-application-context"
+            ],
+            "order": 2147483646
+          }
+        },
+        "setStatusGatewayFilterFactory": {
+          "inputs": {},
+          "prefix": "spring.cloud.gateway.server.webflux.set-status",
+          "properties": {}
+        },
+        "spring.cloud.gateway.server.webflux.metrics-org.springframework.cloud.gateway.config.GatewayMetricsProperties": {
+          "inputs": {
+            "enabled": {},
+            "prefix": {},
+            "tags": {}
+          },
+          "prefix": "spring.cloud.gateway.server.webflux.metrics",
+          "properties": {
+            "enabled": false,
+            "prefix": "spring.cloud.gateway",
+            "tags": {}
+          }
+        },
+        "resilience4j.thread-pool-bulkhead-io.github.resilience4j.springboot.bulkhead.autoconfigure.ThreadPoolBulkheadProperties": {
+          "inputs": {
+            "configs": {},
+            "backends": {},
+            "instances": {},
+            "tags": {}
+          },
+          "prefix": "resilience4j.thread-pool-bulkhead",
+          "properties": {
+            "configs": {},
+            "backends": {},
+            "instances": {},
+            "tags": {}
+          }
+        },
+        "resilience4j.bulkhead-io.github.resilience4j.springboot.bulkhead.autoconfigure.BulkheadProperties": {
+          "inputs": {
+            "configs": {},
+            "backends": {},
+            "instances": {},
+            "tags": {}
+          },
+          "prefix": "resilience4j.bulkhead",
+          "properties": {
+            "configs": {},
+            "backends": {},
+            "instances": {},
+            "tags": {}
+          }
+        },
+        "resilience4j.circuitbreaker-io.github.resilience4j.springboot.circuitbreaker.autoconfigure.CircuitBreakerProperties": {
+          "inputs": {
+            "configs": {},
+            "backends": {
+              "backend": {
+                "slidingWindowSize": {}
+              }
+            },
+            "instances": {
+              "backend": {
+                "slidingWindowSize": {
+                  "value": 20,
+                  "origin": "class path resource [oracle/configprops-app.yml] - 30:30"
+                }
+              }
+            },
+            "circuitBreakerAspectOrder": {},
+            "tags": {}
+          },
+          "prefix": "resilience4j.circuitbreaker",
+          "properties": {
+            "configs": {},
+            "backends": {
+              "backend": {
+                "slidingWindowSize": 20
+              }
+            },
+            "instances": {
+              "backend": {
+                "slidingWindowSize": 20
+              }
+            },
+            "circuitBreakerAspectOrder": 2147483643,
+            "tags": {}
+          }
+        },
+        "resilience4j.micrometer.timer-io.github.resilience4j.springboot.micrometer.autoconfigure.TimerProperties": {
+          "inputs": {
+            "configs": {},
+            "timerAspectOrder": {},
+            "instances": {},
+            "tags": {}
+          },
+          "prefix": "resilience4j.micrometer.timer",
+          "properties": {
+            "configs": {},
+            "timerAspectOrder": 2147483647,
+            "instances": {},
+            "tags": {}
+          }
+        },
+        "resilience4j.ratelimiter-io.github.resilience4j.springboot.ratelimiter.autoconfigure.RateLimiterProperties": {
+          "inputs": {
+            "limiters": {},
+            "configs": {},
+            "instances": {},
+            "rateLimiterAspectOrder": {},
+            "tags": {}
+          },
+          "prefix": "resilience4j.ratelimiter",
+          "properties": {
+            "limiters": {},
+            "configs": {},
+            "instances": {},
+            "rateLimiterAspectOrder": 2147483644,
+            "tags": {}
+          }
+        },
+        "resilience4j.retry-io.github.resilience4j.springboot.retry.autoconfigure.RetryProperties": {
+          "inputs": {
+            "configs": {},
+            "retryAspectOrder": {},
+            "backends": {
+              "backend": {
+                "maxAttempts": {},
+                "waitDuration": {}
+              }
+            },
+            "instances": {
+              "backend": {
+                "maxAttempts": {
+                  "value": 5,
+                  "origin": "class path resource [oracle/configprops-app.yml] - 25:23"
+                },
+                "waitDuration": {
+                  "value": "250ms",
+                  "origin": "class path resource [oracle/configprops-app.yml] - 26:24"
+                }
+              }
+            },
+            "tags": {}
+          },
+          "prefix": "resilience4j.retry",
+          "properties": {
+            "configs": {},
+            "retryAspectOrder": 2147483642,
+            "backends": {
+              "backend": {
+                "maxAttempts": 5,
+                "waitDuration": "PT0.25S"
+              }
+            },
+            "instances": {
+              "backend": {
+                "maxAttempts": 5,
+                "waitDuration": "PT0.25S"
+              }
+            },
+            "tags": {}
+          }
+        },
+        "resilience4j.timelimiter-io.github.resilience4j.springboot.timelimiter.autoconfigure.TimeLimiterProperties": {
+          "inputs": {
+            "configs": {},
+            "timeLimiterAspectOrder": {},
+            "instances": {
+              "backend": {
+                "timeoutDuration": {
+                  "value": "2s",
+                  "origin": "class path resource [oracle/configprops-app.yml] - 34:27"
+                }
+              }
+            },
+            "tags": {}
+          },
+          "prefix": "resilience4j.timelimiter",
+          "properties": {
+            "configs": {},
+            "timeLimiterAspectOrder": 2147483645,
+            "instances": {
+              "backend": {
+                "timeoutDuration": "PT2S"
+              }
+            },
+            "tags": {}
+          }
+        },
+        "spring.cloud.circuitbreaker.resilience4j-org.springframework.cloud.circuitbreaker.resilience4j.Resilience4JConfigurationProperties": {
+          "inputs": {
+            "disableTimeLimiter": {},
+            "disableTimeLimiterMap": {},
+            "defaultGroupTag": {},
+            "disableThreadPool": {},
+            "enableGroupMeterFilter": {},
+            "enableSemaphoreDefaultBulkhead": {}
+          },
+          "prefix": "spring.cloud.circuitbreaker.resilience4j",
+          "properties": {
+            "disableTimeLimiter": false,
+            "disableTimeLimiterMap": {},
+            "defaultGroupTag": "none",
+            "disableThreadPool": false,
+            "enableGroupMeterFilter": true,
+            "enableSemaphoreDefaultBulkhead": false
+          }
+        }
+      }
+    }
+  }
+}

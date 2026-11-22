@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
 
+import io.github.hasanyelaldi.plimsoll.collect.detect.Detector;
+import io.github.hasanyelaldi.plimsoll.collect.kb.DefaultsKb;
 import io.github.hasanyelaldi.plimsoll.io.InvalidSpecException;
 import io.github.hasanyelaldi.plimsoll.model.Detection;
 import io.github.hasanyelaldi.plimsoll.model.Edge;
@@ -19,6 +21,7 @@ import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.util.Map;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -330,5 +333,48 @@ class ProjectCollectorTest {
         assertThatThrownBy(() -> ProjectCollector.collect(dir)).isInstanceOf(InvalidSpecException.class)
                 .hasMessage("svc/edges-hint.yaml: service orders but spring.application.name is billing "
                         + "(svc/src/main/resources/application.yml:1)");
+    }
+
+    // ---- effective configuration (ADR 0016, #25) --------------------------
+
+    @Test
+    void aDumpOfTheRunningServiceReplacesItsDeclaredValuesAndEachDifferenceIsListed() throws IOException {
+        copy("projects/effective/orders", "orders");
+        copy("effective", "dumps");
+        ProjectCollector.Result declared = ProjectCollector.collect(dir);
+        assertThat(declared.differences()).isEmpty();
+        assertThat(edge(declared, "payments-service", "/api/payments/**").layers().get(0).retry().totalAttempts()
+                .value()).isEqualTo(2);
+
+        ProjectCollector.Result r = ProjectCollector.collect(dir, DefaultsKb.classpath(), Detector.classpath(),
+                Map.of("orders", dir.resolve("dumps/orders-configprops.json")));
+        Edge payments = edge(r, "payments-service", "/api/payments/**");
+        assertThat(payments.layers().get(0).retry().totalAttempts().value()).isEqualTo(3);
+        assertThat(r.differences()).singleElement().satisfies(d -> {
+            assertThat(d.service()).isEqualTo("orders");
+            assertThat(d.setting()).isEqualTo("orders→payments-service layer 1 (spring-cloud-gateway) totalAttempts");
+            assertThat(d.declared()).isEqualTo("2");
+            assertThat(d.declaredEvidence()).endsWith("orders/src/main/resources/application.yml:16");
+            assertThat(d.effective()).isEqualTo("3");
+            assertThat(d.effectiveEvidence()).startsWith("Retry (route payments filters[0], "
+                    + "dumps/orders-configprops.json:352 (/contexts/orders/beans/gatewayProperties/properties/routes/0/"
+                    + "filters/0/args/retries; origin: ");
+        });
+        assertThat(r.coverage().services()).filteredOn(s -> s.service().equals("orders")).singleElement()
+                .satisfies(s -> assertThat(s.read()).contains("dumps/orders-configprops.json",
+                        "orders/src/main/resources/application.yml"));
+    }
+
+    @Test
+    void aDumpMustNameAServiceModuleAndBeADumpPlimsollReads() throws IOException {
+        copy("projects/effective/orders", "orders");
+        copy("effective", "dumps");
+        assertThatThrownBy(() -> ProjectCollector.collect(dir, DefaultsKb.classpath(), Detector.classpath(),
+                Map.of("billing", dir.resolve("dumps/orders-configprops.json"))))
+                .isInstanceOf(InvalidSpecException.class).hasMessageContaining("no service module named billing");
+        write("dumps/health.json", "{ \"status\": \"UP\" }");
+        assertThatThrownBy(() -> ProjectCollector.collect(dir, DefaultsKb.classpath(), Detector.classpath(),
+                Map.of("orders", dir.resolve("dumps/health.json"))))
+                .isInstanceOf(InvalidSpecException.class).hasMessageContaining("not a dump Plimsoll reads");
     }
 }

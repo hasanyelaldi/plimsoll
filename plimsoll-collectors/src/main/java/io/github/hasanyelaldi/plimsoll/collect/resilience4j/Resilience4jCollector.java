@@ -80,8 +80,11 @@ public final class Resilience4jCollector {
 
     /** @param base file names in evidence and notes are relative to it */
     public static Result collect(Path base, Path serviceRoot, EdgesHint hint, DefaultsKb kb) {
-        SpringProperties props = SpringProperties.forService(base, serviceRoot);
+        return collect(base, serviceRoot, SpringProperties.forService(base, serviceRoot), hint, kb);
+    }
 
+    /** @param props the service's properties, e.g. with a dump of the running service applied (ADR 0016) */
+    public static Result collect(Path base, Path serviceRoot, SpringProperties props, EdgesHint hint, DefaultsKb kb) {
         Resilience4jCollector c = new Resilience4jCollector(Resilience4jConfig.of(props, kb), kb);
 
         List<ScannedClass> classes = AnnotationScanner.scan(base, serviceRoot.resolve("src/main/java"));

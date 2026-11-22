@@ -1,0 +1,42 @@
+# ConfigPropsOracleTest: what a running service binds, dumped by /actuator/configprops.
+spring:
+  application:
+    name: orders
+  cloud:
+    gateway:
+      server:
+        webflux:
+          routes:
+            - id: payments
+              uri: lb://payments-service
+              predicates: [ "Path=/api/payments/**" ]
+              filters:
+                - name: Retry
+                  args:
+                    retries: 2
+    loadbalancer:
+      retry:
+        enabled: true
+        max-retries-on-next-service-instance: 2
+resilience4j:
+  retry:
+    instances:
+      backend:
+        max-attempts: 5
+        wait-duration: 250ms
+  circuitbreaker:
+    instances:
+      backend:
+        sliding-window-size: 20
+  timelimiter:
+    instances:
+      backend:
+        timeout-duration: 2s
+management:
+  endpoints:
+    web:
+      exposure:
+        include: configprops
+  endpoint:
+    configprops:
+      show-values: always

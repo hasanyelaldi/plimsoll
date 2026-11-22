@@ -7,6 +7,9 @@ import io.github.hasanyelaldi.plimsoll.collect.circuitbreaker.SpringCloudCircuit
 import io.github.hasanyelaldi.plimsoll.collect.circuitbreaker.WrappedCalls;
 import io.github.hasanyelaldi.plimsoll.collect.circuitbreaker.CustomizerScanner.Factory;
 import io.github.hasanyelaldi.plimsoll.collect.detect.Detector;
+import io.github.hasanyelaldi.plimsoll.collect.effective.ConfigPropsDump.Dump;
+import io.github.hasanyelaldi.plimsoll.collect.effective.EffectiveDiff;
+import io.github.hasanyelaldi.plimsoll.collect.effective.EffectiveDumps;
 import io.github.hasanyelaldi.plimsoll.collect.gateway.GatewayCollector;
 import io.github.hasanyelaldi.plimsoll.collect.http.ClientCallScanner;
 import io.github.hasanyelaldi.plimsoll.collect.http.HttpClientCollector;
@@ -20,6 +23,7 @@ import io.github.hasanyelaldi.plimsoll.collect.spring.RequestMappingScanner.Mapp
 import io.github.hasanyelaldi.plimsoll.collect.spring.SpringProperties;
 import io.github.hasanyelaldi.plimsoll.collect.spring.SpringProperties.Property;
 import io.github.hasanyelaldi.plimsoll.io.InvalidSpecException;
+import io.github.hasanyelaldi.plimsoll.model.ConfigDifference;
 import io.github.hasanyelaldi.plimsoll.model.Detection;
 import io.github.hasanyelaldi.plimsoll.model.Edge;
 import io.github.hasanyelaldi.plimsoll.model.Layer;
@@ -87,11 +91,19 @@ public final class ProjectCollector {
      * @param notes every collector's and assembler's notes; sorted, without repeats
      * @param detections mechanisms found in the modules that no collector models; sorted, without repeats
      * @param coverage what was read per service and searched for per edge, and what was not read; each list sorted
+     * @param differences settings whose value in a dump of the running service differs from the declared one
+     *                    (ADR 0016); sorted
      */
-    public record Result(ServiceGraph graph, List<String> notes, List<Detection> detections, Coverage coverage) {
+    public record Result(ServiceGraph graph, List<String> notes, List<Detection> detections, Coverage coverage,
+            List<ConfigDifference> differences) {
         public Result {
             notes = List.copyOf(notes);
             detections = List.copyOf(detections);
+            differences = differences.stream().sorted(ConfigDifference.ORDER).distinct().toList();
+        }
+
+        public Result(ServiceGraph graph, List<String> notes, List<Detection> detections, Coverage coverage) {
+            this(graph, notes, detections, coverage, List.of());
         }
 
         /** Configuration the modules refer to or ship but that was not read; sorted, without repeats. */
@@ -109,6 +121,46 @@ public final class ProjectCollector {
     }
 
     public static Result collect(Path dir, DefaultsKb kb, Detector detector) {
+        return collect(dir, kb, detector, Map.of());
+    }
+
+    /**
+     * ADR 0016: with dumps of running services, the graph is the one that runs, and {@link Result#differences()} lists
+     * where it departs from the declared one.
+     *
+     * @param effective a dump file per service ({@code --effective <service>=<file>})
+     */
+    public static Result collect(Path dir, DefaultsKb kb, Detector detector, Map<String, Path> effective) {
+        Run declared = run(dir, kb, detector, Map.of());
+        if (effective.isEmpty()) {
+            return declared.result();
+        }
+        Path root = dir.toAbsolutePath().normalize();
+        Map<String, Dump> dumps = new TreeMap<>();
+        effective.forEach((service, file) -> {
+            if (!declared.props().containsKey(service)) {
+                throw new InvalidSpecException("--effective " + service + "=" + file + ": no service module named "
+                        + service + " (" + String.join(", ", declared.props().keySet()) + ")");
+            }
+            dumps.put(service, EffectiveDumps.read(root, service, file));
+        });
+        Result running = run(dir, kb, detector, dumps).result();
+        List<ConfigDifference> differences = new ArrayList<>();
+        List<String> notes = new ArrayList<>(running.notes());
+        dumps.forEach((service, dump) -> {
+            differences.addAll(EffectiveDiff.between(declared.result().graph(), running.graph(), service));
+            differences.addAll(EffectiveDiff.compared(service, dump, declared.props().get(service)));
+            dump.notes().forEach(n -> notes.add(service + ": " + n));
+        });
+        return new Result(running.graph(), notes.stream().sorted().distinct().toList(), running.detections(),
+                running.coverage(), differences);
+    }
+
+    /** One collection, with the declared properties of each module. */
+    private record Run(Result result, Map<String, SpringProperties> props) {}
+
+    /** @param dumps per service, applied to its declared properties before anything is collected */
+    private static Run run(Path dir, DefaultsKb kb, Detector detector, Map<String, Dump> dumps) {
         Path root = dir.toAbsolutePath().normalize();
         if (!Files.isDirectory(root)) {
             throw new InvalidSpecException(dir + ": not a directory");
@@ -131,6 +183,13 @@ public final class ProjectCollector {
                         + " and " + m.path());
             }
         }
+
+        Map<String, SpringProperties> declaredProps = new TreeMap<>();
+        modules.replaceAll((name, m) -> {
+            declaredProps.put(name, m.props());
+            Dump dump = dumps.get(name);
+            return dump == null ? m : new Module(m.root(), m.path(), m.name(), dump.applyTo(m.props()), m.hint());
+        });
 
         Map<String, List<Mapping>> served = new TreeMap<>();
         for (Module m : modules.values()) {
@@ -155,7 +214,7 @@ public final class ProjectCollector {
         for (Module m : sortedByPath(modules)) {
             if (m.hint() != null) {
                 hints.add(m.hint());
-                Resilience4jCollector.Result r4j = Resilience4jCollector.collect(root, m.root(), m.hint(), kb);
+                Resilience4jCollector.Result r4j = Resilience4jCollector.collect(root, m.root(), m.props(), m.hint(), kb);
                 edges.addAll(r4j.edges());
                 r4j.edges().forEach(e -> searched.add(List.of("resilience4j", "http-client")));
                 r4j.notes().forEach(n -> notes.add(m.name() + ": " + n));
@@ -205,8 +264,8 @@ public final class ProjectCollector {
                 manifests.stream().map(p -> relative(root, p)).toList(),
                 edgeSearches(assembled.edges(), searched, istio != null),
                 unread.stream().sorted(UnreadSource.ORDER).distinct().toList());
-        return new Result(services.graph(), notes.stream().sorted().distinct().toList(),
-                detections.stream().sorted(Detection.ORDER).distinct().toList(), coverage);
+        return new Run(new Result(services.graph(), notes.stream().sorted().distinct().toList(),
+                detections.stream().sorted(Detection.ORDER).distinct().toList(), coverage), declaredProps);
     }
 
     /** Every service of the graph, with the files of its module that were read; none when it has no module. */
