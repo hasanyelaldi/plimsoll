@@ -9,8 +9,7 @@ the report format and the rules.
 ### Analysis
 
 - PLM-C2 Declared configuration differs from what runs (ADR 0016, #25): `WARN`, one finding per service and
-  setting, with the declared value and the one that runs, each with its source. No input produces it yet: the
-  readers for `/actuator/configprops` and Envoy route dumps follow.
+  setting, with the declared value and the one that runs, each with its source.
 - Failure classes (ADR 0014, #24): a layer records which failures it retries and what it passes on once it gives up.
   Istio's `retryOn` conditions and its 503/504 answers are mapped from the Envoy source of Istio 1.31's proxy;
   Spring Cloud Gateway's `Retry` conditions and its answers (500 after a connection failure or reset, 503 for a
@@ -30,6 +29,14 @@ the report format and the rules.
 
 ### Collectors
 
+- `/actuator/configprops` dumps (ADR 0016, #25): `plimsoll analyze <dir> --effective <service>=<file>` reads the
+  JSON of a running service's configprops endpoint. Its Resilience4j, Spring Cloud Gateway, LoadBalancer and
+  CircuitBreaker beans replace the declared properties under their prefixes, so the graph is the one that runs;
+  each value's evidence is `<dump>:<line> (<JSON pointer>; origin: ...)`. Each value of an edge from that service
+  that differs from the declared graph (tries, timeouts, backoff, retry conditions, breaker, or an edge that only one
+  side has) is a PLM-C2 finding; `spring.ai.*` values set at run time are compared key by key. Masked values (the
+  Spring Boot default) are noted and keep their declared value. `ConfigPropsOracleTest` checks against Spring Boot
+  4.1 with Actuator that the values read are the ones the libraries use. The Coverage section lists the dump.
 - Resilience4j: `@CircuitBreaker` becomes the layer's breaker (ADR 0015, #22), with its settings from
   `resilience4j.circuitbreaker.instances` and `configs` and its position from the aspect orders (by default Retry
   wraps the breaker, so it counts each try). Defaults are in `kb/defaults/resilience4j-circuitbreaker.yaml`; how

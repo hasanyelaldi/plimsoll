@@ -266,6 +266,26 @@ public final class SpringProperties {
         return true;
     }
 
+    /**
+     * ADR 0016: these properties with everything under {@code prefixes} replaced by {@code replacement}, read from
+     * {@code file}, a dump of the running service. Properties outside the prefixes stay as declared.
+     */
+    public SpringProperties overlay(String file, List<List<String>> prefixes, List<Property> replacement) {
+        List<Property> kept = properties.stream()
+                .filter(p -> prefixes.stream().noneMatch(prefix -> startsWith(p.path(), prefix.toArray(String[]::new))))
+                .toList();
+        List<Property> all = new ArrayList<>(kept);
+        all.addAll(replacement);
+        List<String> names = new ArrayList<>(files);
+        names.add(file);
+        return new SpringProperties(names, all, unread);
+    }
+
+    /** Whether {@code path} is under {@code prefix}, every segment matched with relaxed binding. */
+    public static boolean isUnder(List<String> path, List<String> prefix) {
+        return startsWith(path, prefix.toArray(String[]::new));
+    }
+
     /** The files read, in reading order, as named in evidence. */
     public List<String> files() {
         return files;

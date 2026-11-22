@@ -64,8 +64,13 @@ java -jar plimsoll-cli/target/plimsoll.jar analyze examples/checkout.yaml
 
 ```
 Usage: plimsoll analyze [-hV] [--fail-on=<severity>] [--format=<format>]
-                        [--max-amp=<n>] <spec-or-dir>
+                        [--max-amp=<n>] [--effective=<service>=<file>]...
+                        <spec-or-dir>
       <spec-or-dir>          YAML spec file, or a directory of service modules
+      --effective=<service>=<file>
+                             A dump of what a running service uses, here the
+                               JSON of its /actuator/configprops; repeatable,
+                               directories only.
       --fail-on=<severity>   Exit with 1 if a finding is at least this severe:
                                ERROR, WARN, INFO (default: ERROR).
       --format=<format>      Report format: TEXT, MARKDOWN, SARIF (default:
@@ -154,6 +159,17 @@ Without a hint, a service's deadline is `UNKNOWN` (it is never guessed from time
 
 After the findings, a collected report has a **Coverage** section: the files read per service, the layer kinds searched and found per edge, and the configuration that was *not* read (config server, profile documents, other config files, unresolved placeholders). A **Notes** section lists what collectors saw but could not turn into the model.
 
+### What actually runs
+
+The repository is not always what runs: a config server, environment variables or Helm values can change a retry count. Save the running service's `/actuator/configprops` and pass it with `--effective` ([ADR 0016](docs/adr/0016-effective-configuration-inputs.md)); Plimsoll makes no network call:
+
+```bash
+curl -s http://orders:8080/actuator/configprops > dumps/orders.json   # needs show-values=always, see below
+java -jar plimsoll.jar analyze . --effective orders=dumps/orders.json
+```
+
+Its Resilience4j, Spring Cloud Gateway, LoadBalancer and CircuitBreaker values replace the declared ones, with the dump's line, JSON pointer and the value's origin as evidence. Each value that departs from the declared graph is a **PLM-C2** warning, e.g. `orders→payments-service layer 1 (spring-cloud-gateway) totalAttempts: declared 2, runs 3`. Spring Boot masks configprops values unless `management.endpoint.configprops.show-values` is `always` (or `when-authorized` for an authorized caller); a masked value keeps its declared value and is noted. `spring.ai.*` values set at run time are compared too, but not modelled yet ([#19](https://github.com/hasanyelaldi/plimsoll/issues/19)).
+
 ## Example
 
 `plimsoll analyze examples/checkout.yaml` (exit code 1):
@@ -212,7 +228,7 @@ Runs on real projects, with a hand check of every finding: [spring-petclinic-mic
 | **PLM-A4** Backoff hygiene | Retries with zero backoff; retries without jitter. | `WARN`; `INFO` |
 | **PLM-A5** Layered retries | One edge retried by two or more layers (e.g. Resilience4j and Istio); one path with retries on two or more edges. | `WARN` |
 | **PLM-C1** Mechanism detected but not modelled | A retry, timeout or breaker mechanism no collector models yet, found by the patterns in [`kb/detectors/mechanisms.yaml`](kb/detectors/mechanisms.yaml). Only collected directories produce it. | `WARN` |
-| **PLM-C2** Declared configuration differs from what runs | A setting in a dump of the running environment differs from the one the repository declares ([ADR 0016](docs/adr/0016-effective-configuration-inputs.md)). The dump readers are in progress ([#25](https://github.com/hasanyelaldi/plimsoll/issues/25)). | `WARN` |
+| **PLM-C2** Declared configuration differs from what runs | A setting in a dump of the running environment differs from the one the repository declares ([ADR 0016](docs/adr/0016-effective-configuration-inputs.md)). Read from `/actuator/configprops` dumps given with `--effective`; Envoy route dumps follow ([#25](https://github.com/hasanyelaldi/plimsoll/issues/25)). | `WARN` |
 
 Findings are sorted by severity, then rule, then location. A finding that used an `UNKNOWN` value is computed with what is known, tagged `depends-on-unknown`, and names the unknown value; nothing is guessed.
 

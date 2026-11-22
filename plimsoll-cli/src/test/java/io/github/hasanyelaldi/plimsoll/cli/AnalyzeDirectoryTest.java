@@ -174,4 +174,29 @@ class AnalyzeDirectoryTest {
         assertThat(r.out()).isEmpty();
         assertThat(r.err()).startsWith("error: customers-service/edges-hint.yaml:2");
     }
+
+    @Test
+    void aDumpOfTheRunningServiceGivesDifferencesAsWarnings() throws IOException {
+        copy("projects/effective/orders", "app/orders");
+        copy("effective", "app/dumps");
+        Path app = dir.resolve("app");
+        Result r = run("analyze", app.toString(), "--effective",
+                "orders=" + app.resolve("dumps/orders-configprops.json"), "--fail-on", "WARN");
+        assertThat(r.exit()).isEqualTo(1);
+        assertThat(r.out()).contains("  WARN   PLM-C2   orders  orders→payments-service layer 1 (spring-cloud-gateway) "
+                + "totalAttempts: declared 2, runs 3\n");
+        assertThat(r.out()).contains("orders            dumps/orders-configprops.json, "
+                + "orders/src/main/resources/application.yml");
+    }
+
+    @Test
+    void effectiveNeedsServiceEqualsFileAndADirectory() {
+        assertThat(run("analyze", dir.toString(), "--effective", "orders").err())
+                .contains("--effective expects <service>=<file>, got orders");
+        assertThat(run("analyze", dir.toString(), "--effective", "a=x.json", "--effective", "a=y.json").exit())
+                .isEqualTo(2);
+        Result spec = run("analyze", Path.of("..", "examples", "checkout.yaml").toString(), "--effective", "a=x.json");
+        assertThat(spec.exit()).isEqualTo(2);
+        assertThat(spec.err()).contains("--effective needs a directory to collect, not a spec");
+    }
 }

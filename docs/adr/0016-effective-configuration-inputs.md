@@ -37,8 +37,11 @@ input (exit code 2). `--effective` needs a directory; a hand-written spec takes 
 `<dump>:<line> (<JSON pointer>)`, so that ADR 0013 places a SARIF result on the dump file. The rules then run on the
 effective graph.
 
-**Differences.** For each setting a collector reads, Plimsoll compares the declared value (with its source:
-`EXPLICIT` from the repository, `LIBRARY_DEFAULT` or `UNKNOWN` when not set) with the effective one. When they
+**Differences.** Plimsoll collects the directory twice, once as declared and once with the dumps applied, and
+compares the values the rules use on the edges from each dumped service: per layer its tries, timeouts, backoff,
+retry conditions and breaker, and edges that only one side has. Comparing the collected values rather than the
+property keys means that a default needs no knowledge of its own: a setting the repository leaves unset shows its
+declared value as `LIBRARY_DEFAULT` or `UNKNOWN`. A setting that no edge uses gives no difference. When values
 differ, a new rule reports it:
 
 - **PLM-C2 Declared configuration differs from what runs**: `WARN`, one finding per service and setting, location
@@ -50,6 +53,16 @@ A dump may also hold settings no collector reads, such as `spring.ai.*` before #
 compared the same way and reported by PLM-C2, but they do not enter the graph.
 
 **Coverage.** The Coverage section lists the dumps read per service.
+
+**configprops in practice** (#25, part 2, `ConfigPropsOracleTest` on Spring Boot 4.1). The dump has
+`contexts.<id>.beans.<bean>` with the bean's `prefix`, its bound `properties` (camelCase names, ISO-8601 durations,
+defaults included) and `inputs`, which give a value's `origin` when a property source set it. Spring Boot masks the
+values (`******`) unless `management.endpoint.configprops.show-values` is `always` (or `when-authorized`); a masked
+value is noted and keeps its declared value. A bound `Set` comes out in hash order, so the order of such a list can
+change from one dump to the next; the analysis of one dump file stays deterministic. Beans under `resilience4j`,
+`spring.cloud.gateway`, `spring.cloud.loadbalancer` and `spring.cloud.circuitbreaker` replace the declared
+properties under their prefix; `spring.ai.*` values with an origin are compared key by key. A dump with several
+contexts is read in the context named like the service.
 
 **MeshConfig, statically.** The Istio MeshConfig `defaultHttpRetryPolicy` is declared configuration, not a dump.
 When the `istio` ConfigMap, an `IstioOperator` or Helm `meshConfig` values are among the manifests, the Istio
