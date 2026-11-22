@@ -208,7 +208,7 @@ public final class IstioCollector {
                     throw new InvalidSpecException(at(http.get(i).line()) + ": http route must be a mapping");
                 }
                 String routeName = Optional.ofNullable(optionalText(route, "name")).orElse("http[" + i + "]");
-                routes.add(new Route(service(host), host, routeName, layer(route), at(route.line())));
+                routes.add(new Route(serviceOf(host), host, routeName, layer(route), at(route.line())));
             }
         }
     }
@@ -367,7 +367,7 @@ public final class IstioCollector {
             throw new InvalidSpecException(at(od.keyLine()) + ": 'outlierDetection' must be a mapping");
         }
         String absent = "not set in outlierDetection at " + at(od.keyLine());
-        outliers.add(new OutlierDetection(service(host), host, subset,
+        outliers.add(new OutlierDetection(serviceOf(host), host, subset,
                 outlierField(m, "consecutive5xxErrors", e -> integer(e, "consecutive5xxErrors"), Integer::valueOf, absent),
                 outlierField(m, "consecutiveGatewayErrors", e -> integer(e, "consecutiveGatewayErrors"),
                         Integer::valueOf, absent),
@@ -401,7 +401,8 @@ public final class IstioCollector {
         return written + "." + namespace + ".svc.cluster.local";
     }
 
-    private static String service(String host) {
+    /** The service a host names: the first label of a cluster-local host, else the host as written. */
+    public static String serviceOf(String host) {
         Matcher m = CLUSTER_HOST.matcher(host);
         return m.matches() ? m.group(1) : host;
     }

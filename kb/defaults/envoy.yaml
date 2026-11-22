@@ -1,0 +1,32 @@
+# Envoy route defaults, for route configurations read from a proxy's config_dump (ADR 0016, #25 part 3).
+# Checked against the RouteAction and RetryPolicy messages of the Envoy that Istio 1.31's proxy pins
+# (istio/proxy release-1.31, Envoy 8893f913). Retry conditions and what the sidecar answers once it gives up are the
+# istio entries (ADR 0014), which come from the same Envoy.
+- library: envoy
+  versions: "8893f913 (Istio 1.31 proxy)"
+  parameter: route.timeout
+  value: 15s                  # RouteAction.timeout: "If not specified, the default is 15s"; 0 disables it
+  unit: duration
+  source: https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/api/envoy/config/route/v3/route_components.proto
+  verified_by: source
+- library: envoy
+  versions: "8893f913 (Istio 1.31 proxy)"
+  parameter: retryPolicy.numRetries
+  value: 1                    # RetryPolicy.num_retries: "optional and defaults to 1"
+  unit: attempts-retries-only # totalAttempts = num_retries + 1
+  source: https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/api/envoy/config/route/v3/route_components.proto
+  verified_by: source
+- library: envoy
+  versions: "8893f913 (Istio 1.31 proxy)"
+  parameter: retryPolicy.perTryTimeout
+  value: route timeout        # "If left unspecified, Envoy will use the global route timeout for the request"
+  unit: duration
+  source: https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/api/envoy/config/route/v3/route_components.proto
+  verified_by: source
+- library: envoy
+  versions: "8893f913 (Istio 1.31 proxy)"
+  parameter: retryPolicy.retryBackOff.baseInterval
+  value: 25ms                 # "the default base interval is 25 milliseconds" (unless the runtime overrides it)
+  unit: duration-base
+  source: https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/api/envoy/config/route/v3/route_components.proto
+  verified_by: source

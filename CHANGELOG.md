@@ -37,6 +37,14 @@ the report format and the rules.
   side has) is a PLM-C2 finding; `spring.ai.*` values set at run time are compared key by key. Masked values (the
   Spring Boot default) are noted and keep their declared value. `ConfigPropsOracleTest` checks against Spring Boot
   4.1 with Actuator that the values read are the ones the libraries use. The Coverage section lists the dump.
+- Envoy route dumps (ADR 0016, #25): `--effective <service>=<file>` also reads a sidecar's Envoy `config_dump` (the
+  admin endpoint's JSON, whole or with `?resource=dynamic_route_configs`), and a service may have one dump of each
+  format. Each route to an outbound service becomes the `istio` layer of the edges from that service to it, with
+  Envoy's semantics: `num_retries` + 1 (default 1 retry), no `retry_policy` on the route or its virtual host is one
+  try, `timeout: 0s` is none and an absent one 15 s, `per_try_timeout` defaults to the route timeout and the
+  back-off to 25 ms (`kb/defaults/envoy.yaml`, from the Envoy that Istio 1.31's proxy pins), and
+  `retriable_status_codes` are conditions of their own (ADR 0014). The test fixture is Istio's own config_dump test
+  data, unchanged.
 - Resilience4j: `@CircuitBreaker` becomes the layer's breaker (ADR 0015, #22), with its settings from
   `resilience4j.circuitbreaker.instances` and `configs` and its position from the aspect orders (by default Retry
   wraps the breaker, so it counts each try). Defaults are in `kb/defaults/resilience4j-circuitbreaker.yaml`; how

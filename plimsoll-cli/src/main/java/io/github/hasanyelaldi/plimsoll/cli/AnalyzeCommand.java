@@ -59,9 +59,9 @@ final class AnalyzeCommand implements Callable<Integer> {
     Severity failOn;
 
     @Option(names = "--effective", paramLabel = "<service>=<file>",
-            description = "A dump of what a running service uses, here the JSON of its /actuator/configprops; "
-                    + "repeatable, directories only. Its values replace the declared ones; each difference is a "
-                    + "PLM-C2 finding (ADR 0016).")
+            description = "A dump of what a running service uses: the JSON of its /actuator/configprops, or its "
+                    + "sidecar's Envoy config_dump; repeatable, at most one of each per service, directories only. "
+                    + "Its values replace the declared ones; each difference is a PLM-C2 finding (ADR 0016).")
     List<String> effective = new ArrayList<>();
 
     @Option(names = "--format", paramLabel = "<format>", defaultValue = "TEXT",
@@ -74,17 +74,14 @@ final class AnalyzeCommand implements Callable<Integer> {
             spec.commandLine().getErr().println("error: --max-amp must be at least 1");
             return INVALID_INPUT;
         }
-        Map<String, Path> dumps = new TreeMap<>();
+        Map<String, List<Path>> dumps = new TreeMap<>();
         for (String e : effective) {
             int eq = e.indexOf('=');
             if (eq <= 0 || eq == e.length() - 1) {
                 spec.commandLine().getErr().println("error: --effective expects <service>=<file>, got " + e);
                 return INVALID_INPUT;
             }
-            if (dumps.put(e.substring(0, eq), Path.of(e.substring(eq + 1))) != null) {
-                spec.commandLine().getErr().println("error: --effective names " + e.substring(0, eq) + " twice");
-                return INVALID_INPUT;
-            }
+            dumps.computeIfAbsent(e.substring(0, eq), k -> new ArrayList<>()).add(Path.of(e.substring(eq + 1)));
         }
         if (!dumps.isEmpty() && !Files.isDirectory(input)) {
             spec.commandLine().getErr().println("error: --effective needs a directory to collect, not a spec");

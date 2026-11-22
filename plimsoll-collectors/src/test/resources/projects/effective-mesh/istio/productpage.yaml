@@ -1,0 +1,16 @@
+# The declared policy for productpage: one retry; the same conditions Istio's default had when the dump was taken.
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: productpage
+  namespace: default
+spec:
+  hosts:
+    - productpage
+  http:
+    - route:
+        - destination:
+            host: productpage
+      retries:
+        attempts: 1
+        retryOn: connect-failure,refused-stream,unavailable,cancelled,503

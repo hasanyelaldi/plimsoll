@@ -190,6 +190,19 @@ class AnalyzeDirectoryTest {
     }
 
     @Test
+    void aSidecarRouteDumpGivesTheRetriesThatRun() throws IOException {
+        copy("projects/effective-mesh", "app");
+        copy("effective/envoy", "app/dumps");
+        Path app = dir.resolve("app");
+        Result r = run("analyze", app.toString(), "--effective", "frontend=" + app.resolve("dumps/http_config.json"),
+                "--fail-on", "WARN");
+        assertThat(r.exit()).isEqualTo(1);
+        assertThat(r.out()).contains("  WARN   PLM-C2   frontend  frontend→productpage layer 2 (istio) "
+                + "totalAttempts: declared 2, runs 3\n");
+        assertThat(r.out()).contains("    frontend     dumps/http_config.json, frontend/src/main/resources/application.yml\n");
+    }
+
+    @Test
     void effectiveNeedsServiceEqualsFileAndADirectory() {
         assertThat(run("analyze", dir.toString(), "--effective", "orders").err())
                 .contains("--effective expects <service>=<file>, got orders");
