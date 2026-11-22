@@ -1,0 +1,13 @@
+# A gateway whose route to productpage runs through an Istio sidecar; the dump of that sidecar is
+# effective/envoy/http_config.json (#25, part 3).
+spring:
+  application:
+    name: frontend
+  cloud:
+    gateway:
+      server:
+        webflux:
+          routes:
+            - id: productpage
+              uri: lb://productpage
+              predicates: [ "Path=/productpage/**" ]

@@ -15,8 +15,8 @@ A running environment can show the effective values:
 
 - Spring Boot's `/actuator/configprops` lists the bound `@ConfigurationProperties` beans with their values, which
   includes Resilience4j, Spring Cloud Gateway, Spring Cloud LoadBalancer and Spring AI settings.
-- `istioctl proxy-config routes <pod> -o json` lists the Envoy route configuration a sidecar applies, with the retry
-  policy and timeouts of each route, mesh defaults included.
+- The Envoy admin `config_dump` of a sidecar lists the route configuration it applies, with the retry policy and
+  timeouts of each route, mesh defaults included.
 
 ## Decision drivers
 
@@ -30,8 +30,9 @@ A running environment can show the effective values:
 **Input.** `plimsoll analyze <dir> --effective <service>=<file>`, repeatable. The service is named explicitly,
 because neither dump says reliably which service it belongs to: configprops names the Spring application context,
 and a sidecar's route dump names the routes it calls out to, not its own service. The format is recognised from the
-content: a configprops document (`contexts.*.beans`), or an Envoy route configuration dump. Anything else is invalid
-input (exit code 2). `--effective` needs a directory; a hand-written spec takes none.
+content: a configprops document (`contexts.*.beans`), or an Envoy `config_dump` with route configurations. Anything
+else is invalid input (exit code 2), and so is a second dump of the same format for one service. `--effective` needs
+a directory; a hand-written spec takes none.
 
 **Values.** A setting read from a dump replaces the declared one in the graph. It is `EXPLICIT`, and its evidence is
 `<dump>:<line> (<JSON pointer>)`, so that ADR 0013 places a SARIF result on the dump file. The rules then run on the
@@ -64,6 +65,24 @@ change from one dump to the next; the analysis of one dump file stays determinis
 properties under their prefix; `spring.ai.*` values with an origin are compared key by key. A dump with several
 contexts is read in the context named like the service.
 
+**Envoy routes in practice** (#25, part 3). The input is the Envoy admin `config_dump`
+(`pilot-agent request GET config_dump` in the `istio-proxy` container, whole or with
+`?resource=dynamic_route_configs`), not `istioctl proxy-config routes -o json`: istioctl writes that output with Go's
+`encoding/json` from the generated structs, whose shape (oneof wrappers, durations as objects) is not a documented
+format, while the admin endpoint writes protobuf JSON. Field names are read in snake_case, as the admin endpoint
+writes them, or lowerCamelCase. Each route whose cluster is `outbound|<port>|<subset>|<host>` gives the sidecar's
+`istio` layer for that host's service; other clusters (passthrough, inbound) are noted and not read. On an edge from
+the dumped service the layer replaces the declared one, or is added when no manifest put the callee in the mesh;
+several routes to one callee keep the fields they agree on, as for manifests. Envoy semantics, from the
+`RouteAction` and `RetryPolicy` messages of the Envoy that Istio 1.31's proxy pins (`kb/defaults/envoy.yaml`):
+`num_retries` counts retries and defaults to 1; a route without a `retry_policy` (its own or its virtual host's)
+tries once; `timeout: 0s` disables the route timeout and an absent one is 15 s; an absent `per_try_timeout` is the
+route timeout; an absent back-off is 25 ms. Istio writes status codes from `retryOn` to `retriable_status_codes`
+(`pilot/pkg/networking/core/route/retry/retry.go`), so those codes are read back as conditions of their own and
+`retriable-status-codes` is left out; a route that a VirtualService and a dump describe alike then compares equal.
+The test fixture is Istio's own test data, `istioctl/pkg/describe/testdata/describe/http_config.json` at
+`56245da4` (Apache-2.0), unchanged: an ingress gateway's routes, whose shape is that of a sidecar's outbound routes.
+
 **MeshConfig, statically.** The Istio MeshConfig `defaultHttpRetryPolicy` is declared configuration, not a dump.
 When the `istio` ConfigMap, an `IstioOperator` or Helm `meshConfig` values are among the manifests, the Istio
 collector reads it as the mesh default (`attempts: 0` turns retries off) instead of assuming none. That gives no
@@ -85,6 +104,6 @@ PLM-C2 finding.
   detections. SARIF lists PLM-C2 among its rules (#25, part 1).
 - Collectors: a configprops reader (#25, part 2). Its fixture is produced by real Spring Boot Actuator in a test, not
   written by hand. It overlays the dump on the service's Spring properties.
-- Collectors: an Envoy route-dump reader for the sidecar's outbound routes (#25, part 3). It maps `retry_policy` and
-  timeouts through the Envoy semantics of ADR 0014.
+- Collectors: an Envoy `config_dump` reader for the sidecar's outbound routes (#25, part 3). It maps `retry_policy`
+  and timeouts through Envoy's defaults and the failure classes of ADR 0014.
 - Collectors: MeshConfig `defaultHttpRetryPolicy` from the manifests (#25, part 4).

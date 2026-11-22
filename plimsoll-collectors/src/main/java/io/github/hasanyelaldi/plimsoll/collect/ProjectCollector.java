@@ -7,14 +7,15 @@ import io.github.hasanyelaldi.plimsoll.collect.circuitbreaker.SpringCloudCircuit
 import io.github.hasanyelaldi.plimsoll.collect.circuitbreaker.WrappedCalls;
 import io.github.hasanyelaldi.plimsoll.collect.circuitbreaker.CustomizerScanner.Factory;
 import io.github.hasanyelaldi.plimsoll.collect.detect.Detector;
-import io.github.hasanyelaldi.plimsoll.collect.effective.ConfigPropsDump.Dump;
 import io.github.hasanyelaldi.plimsoll.collect.effective.EffectiveDiff;
 import io.github.hasanyelaldi.plimsoll.collect.effective.EffectiveDumps;
+import io.github.hasanyelaldi.plimsoll.collect.effective.EffectiveDumps.Effective;
 import io.github.hasanyelaldi.plimsoll.collect.gateway.GatewayCollector;
 import io.github.hasanyelaldi.plimsoll.collect.http.ClientCallScanner;
 import io.github.hasanyelaldi.plimsoll.collect.http.HttpClientCollector;
 import io.github.hasanyelaldi.plimsoll.collect.http.HttpClientCollector.EdgeKey;
 import io.github.hasanyelaldi.plimsoll.collect.istio.IstioCollector;
+import io.github.hasanyelaldi.plimsoll.collect.istio.IstioCollector.Route;
 import io.github.hasanyelaldi.plimsoll.collect.kb.DefaultsKb;
 import io.github.hasanyelaldi.plimsoll.collect.resilience4j.EdgesHint;
 import io.github.hasanyelaldi.plimsoll.collect.resilience4j.Resilience4jCollector;
@@ -128,28 +129,30 @@ public final class ProjectCollector {
      * ADR 0016: with dumps of running services, the graph is the one that runs, and {@link Result#differences()} lists
      * where it departs from the declared one.
      *
-     * @param effective a dump file per service ({@code --effective <service>=<file>})
+     * @param effective the dump files per service ({@code --effective <service>=<file>}), at most one of each format
      */
-    public static Result collect(Path dir, DefaultsKb kb, Detector detector, Map<String, Path> effective) {
+    public static Result collect(Path dir, DefaultsKb kb, Detector detector, Map<String, List<Path>> effective) {
         Run declared = run(dir, kb, detector, Map.of());
         if (effective.isEmpty()) {
             return declared.result();
         }
         Path root = dir.toAbsolutePath().normalize();
-        Map<String, Dump> dumps = new TreeMap<>();
-        effective.forEach((service, file) -> {
+        Map<String, Effective> dumps = new TreeMap<>();
+        effective.forEach((service, files) -> {
             if (!declared.props().containsKey(service)) {
-                throw new InvalidSpecException("--effective " + service + "=" + file + ": no service module named "
-                        + service + " (" + String.join(", ", declared.props().keySet()) + ")");
+                throw new InvalidSpecException("--effective " + service + "=" + files.get(0) + ": no service module "
+                        + "named " + service + " (" + String.join(", ", declared.props().keySet()) + ")");
             }
-            dumps.put(service, EffectiveDumps.read(root, service, file));
+            dumps.put(service, EffectiveDumps.read(root, service, files, kb));
         });
         Result running = run(dir, kb, detector, dumps).result();
         List<ConfigDifference> differences = new ArrayList<>();
         List<String> notes = new ArrayList<>(running.notes());
         dumps.forEach((service, dump) -> {
             differences.addAll(EffectiveDiff.between(declared.result().graph(), running.graph(), service));
-            differences.addAll(EffectiveDiff.compared(service, dump, declared.props().get(service)));
+            if (dump.configProps() != null) {
+                differences.addAll(EffectiveDiff.compared(service, dump.configProps(), declared.props().get(service)));
+            }
             dump.notes().forEach(n -> notes.add(service + ": " + n));
         });
         return new Result(running.graph(), notes.stream().sorted().distinct().toList(), running.detections(),
@@ -160,7 +163,7 @@ public final class ProjectCollector {
     private record Run(Result result, Map<String, SpringProperties> props) {}
 
     /** @param dumps per service, applied to its declared properties before anything is collected */
-    private static Run run(Path dir, DefaultsKb kb, Detector detector, Map<String, Dump> dumps) {
+    private static Run run(Path dir, DefaultsKb kb, Detector detector, Map<String, Effective> dumps) {
         Path root = dir.toAbsolutePath().normalize();
         if (!Files.isDirectory(root)) {
             throw new InvalidSpecException(dir + ": not a directory");
@@ -187,8 +190,9 @@ public final class ProjectCollector {
         Map<String, SpringProperties> declaredProps = new TreeMap<>();
         modules.replaceAll((name, m) -> {
             declaredProps.put(name, m.props());
-            Dump dump = dumps.get(name);
-            return dump == null ? m : new Module(m.root(), m.path(), m.name(), dump.applyTo(m.props()), m.hint());
+            Effective dump = dumps.get(name);
+            return dump == null || dump.configProps() == null ? m
+                    : new Module(m.root(), m.path(), m.name(), dump.configProps().applyTo(m.props()), m.hint());
         });
 
         Map<String, List<Mapping>> served = new TreeMap<>();
@@ -247,29 +251,35 @@ public final class ProjectCollector {
             found.http().notes().forEach(n -> notes.add(m.name() + ": " + n));
         }
 
-        IstioCollector.Result istio = null;
-        if (!manifests.isEmpty()) {
-            istio = IstioCollector.collect(root, manifests, kb);
+        IstioCollector.Result istio = manifests.isEmpty() ? null : IstioCollector.collect(root, manifests, kb);
+        if (istio != null) {
             notes.addAll(istio.notes());
         }
-        GraphAssembler.Result assembled =
-                GraphAssembler.assemble(edges, new HttpClientCollector.Result(httpLayers, List.of()), istio);
+        Map<String, List<Route>> runningRoutes = new TreeMap<>();
+        dumps.forEach((service, dump) -> {
+            if (dump.routes() != null) {
+                runningRoutes.put(service, dump.routes().routes());
+            }
+        });
+        GraphAssembler.Result assembled = GraphAssembler.assemble(edges,
+                new HttpClientCollector.Result(httpLayers, List.of()), istio, runningRoutes);
         notes.addAll(assembled.notes());
         ServiceAssembler.Result services = ServiceAssembler.assemble(assembled.edges(), hints, gateways);
         notes.addAll(services.notes());
 
         Coverage coverage = new Coverage("collected from " + modules.size() + " service module"
                 + (modules.size() == 1 ? "" : "s"),
-                sourcesRead(root, modules, services.graph()),
+                sourcesRead(root, modules, services.graph(), dumps),
                 manifests.stream().map(p -> relative(root, p)).toList(),
-                edgeSearches(assembled.edges(), searched, istio != null),
+                edgeSearches(assembled.edges(), searched, e -> istio != null || runningRoutes.containsKey(e.from())),
                 unread.stream().sorted(UnreadSource.ORDER).distinct().toList());
         return new Run(new Result(services.graph(), notes.stream().sorted().distinct().toList(),
                 detections.stream().sorted(Detection.ORDER).distinct().toList(), coverage), declaredProps);
     }
 
     /** Every service of the graph, with the files of its module that were read; none when it has no module. */
-    private static List<ServiceSources> sourcesRead(Path root, Map<String, Module> modules, ServiceGraph graph) {
+    private static List<ServiceSources> sourcesRead(Path root, Map<String, Module> modules, ServiceGraph graph,
+            Map<String, Effective> dumps) {
         TreeSet<String> names = new TreeSet<>(modules.keySet());
         names.addAll(graph.services().keySet());
         List<ServiceSources> out = new ArrayList<>();
@@ -288,18 +298,22 @@ public final class ProjectCollector {
                 }
                 read.addAll(m.props().files());
             }
+            if (dumps.containsKey(name)) {
+                read.addAll(dumps.get(name).files());
+            }
             out.add(new ServiceSources(name, read.stream().sorted().distinct().toList()));
         }
         return out;
     }
 
     /** @param searched per edge, in the order of {@code edges}, the layer kinds its collectors look for */
-    private static List<EdgeSearch> edgeSearches(List<Edge> edges, List<List<String>> searched, boolean mesh) {
+    private static List<EdgeSearch> edgeSearches(List<Edge> edges, List<List<String>> searched,
+            java.util.function.Predicate<Edge> mesh) {
         List<EdgeSearch> out = new ArrayList<>();
         for (int i = 0; i < edges.size(); i++) {
             Edge e = edges.get(i);
             List<String> kinds = new ArrayList<>(searched.get(i));
-            if (mesh) {
+            if (mesh.test(e)) {
                 kinds.add("istio");
             }
             out.add(new EdgeSearch(e.location(), e.operation(), kinds, e.layers().stream().map(Layer::kind).toList()));

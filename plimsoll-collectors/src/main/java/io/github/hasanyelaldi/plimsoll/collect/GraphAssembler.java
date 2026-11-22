@@ -33,6 +33,10 @@ import java.util.stream.Collectors;
  * <p>A host with several HTTP routes picks one per request by its match conditions, which an edge does not
  * describe. A field on which the routes agree is kept; a field on which they differ is UNKNOWN and names the
  * candidates. Nothing is picked for the caller.
+ *
+ * <p>ADR 0016: the routes read from a caller's sidecar dump are the ones that run for that caller. On an edge from
+ * it they replace the declared Istio layer, or add one when no manifest put the callee in the mesh. An edge to a
+ * callee the dump has no route for keeps its declared layers, with a note.
  */
 public final class GraphAssembler {
 
@@ -61,14 +65,22 @@ public final class GraphAssembler {
      * @param istio the Istio collector's output, or {@code null} when the graph has no mesh
      */
     public static Result assemble(List<Edge> edges, HttpClientCollector.Result http, IstioCollector.Result istio) {
+        return assemble(edges, http, istio, Map.of());
+    }
+
+    /**
+     * @param running per caller, the routes read from a dump of its sidecar (ADR 0016)
+     */
+    public static Result assemble(List<Edge> edges, HttpClientCollector.Result http, IstioCollector.Result istio,
+            Map<String, List<Route>> running) {
         if (http != null) {
             edges = edges.stream().map(e -> http.layerFor(e).map(l -> withLayer(e, l)).orElse(e)).toList();
         }
-        if (istio == null) {
+        if (istio == null && running.isEmpty()) {
             return new Result(edges, List.of());
         }
         Map<String, List<Route>> routesByCallee = new LinkedHashMap<>();
-        for (Route r : istio.routes()) {
+        for (Route r : istio == null ? List.<Route>of() : istio.routes()) {
             routesByCallee.computeIfAbsent(r.to(), k -> new ArrayList<>()).add(r);
         }
         Map<String, Layer> layerByCallee = new TreeMap<>();
@@ -77,7 +89,25 @@ public final class GraphAssembler {
         List<Edge> out = new ArrayList<>();
         Set<String> meshDefault = new TreeSet<>();
         Set<String> called = new TreeSet<>();
+        Set<String> calledFromDump = new TreeSet<>();
+        Set<String> runningNotes = new TreeSet<>();
         for (Edge e : edges) {
+            List<Route> dumped = running.getOrDefault(e.from(), List.of()).stream()
+                    .filter(r -> r.to().equals(e.to())).toList();
+            if (!dumped.isEmpty()) {
+                calledFromDump.add(e.from() + "→" + e.to());
+                called.add(e.to());
+                out.add(withLayer(e, merged(e.to(), dumped)));
+                continue;
+            }
+            if (running.containsKey(e.from())) {
+                runningNotes.add(e.from() + ": the dump of its sidecar has no route to " + e.to() + "; "
+                        + (istio == null ? "no Istio layer is added" : "the declared Istio layer is kept"));
+            }
+            if (istio == null) {
+                out.add(e);
+                continue;
+            }
             Layer istioLayer = layerByCallee.get(e.to());
             if (istioLayer == null) {
                 istioLayer = istio.meshDefault();
@@ -96,6 +126,14 @@ public final class GraphAssembler {
                 notes.add(to + ": HTTP routes at " + routes.stream().map(Route::evidence).collect(Collectors.joining(", "))
                         + " are not applied; no collected edge calls " + to);
             }
+        });
+        notes.addAll(runningNotes);
+        new TreeMap<>(running).forEach((from, routes) -> {
+            Map<String, List<String>> unused = new TreeMap<>();
+            routes.stream().filter(r -> !calledFromDump.contains(from + "→" + r.to()))
+                    .forEach(r -> unused.computeIfAbsent(r.to(), k -> new ArrayList<>()).add(r.evidence()));
+            unused.forEach((to, at) -> notes.add(from + ": routes to " + to + " in the dump of its sidecar ("
+                    + String.join(", ", at) + ") are not applied; no collected edge from " + from + " calls " + to));
         });
         return new Result(out, notes);
     }

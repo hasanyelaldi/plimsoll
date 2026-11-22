@@ -347,7 +347,7 @@ class ProjectCollectorTest {
                 .value()).isEqualTo(2);
 
         ProjectCollector.Result r = ProjectCollector.collect(dir, DefaultsKb.classpath(), Detector.classpath(),
-                Map.of("orders", dir.resolve("dumps/orders-configprops.json")));
+                Map.of("orders", java.util.List.of(dir.resolve("dumps/orders-configprops.json"))));
         Edge payments = edge(r, "payments-service", "/api/payments/**");
         assertThat(payments.layers().get(0).retry().totalAttempts().value()).isEqualTo(3);
         assertThat(r.differences()).singleElement().satisfies(d -> {
@@ -370,11 +370,74 @@ class ProjectCollectorTest {
         copy("projects/effective/orders", "orders");
         copy("effective", "dumps");
         assertThatThrownBy(() -> ProjectCollector.collect(dir, DefaultsKb.classpath(), Detector.classpath(),
-                Map.of("billing", dir.resolve("dumps/orders-configprops.json"))))
+                Map.of("billing", java.util.List.of(dir.resolve("dumps/orders-configprops.json")))))
                 .isInstanceOf(InvalidSpecException.class).hasMessageContaining("no service module named billing");
         write("dumps/health.json", "{ \"status\": \"UP\" }");
         assertThatThrownBy(() -> ProjectCollector.collect(dir, DefaultsKb.classpath(), Detector.classpath(),
-                Map.of("orders", dir.resolve("dumps/health.json"))))
+                Map.of("orders", java.util.List.of(dir.resolve("dumps/health.json")))))
                 .isInstanceOf(InvalidSpecException.class).hasMessageContaining("not a dump Plimsoll reads");
+    }
+
+    @Test
+    void aSidecarRouteDumpReplacesTheDeclaredIstioLayerOfTheEdgesFromItsService() throws IOException {
+        copy("projects/effective-mesh", "app");
+        copy("effective/envoy", "dumps");
+        Map<String, java.util.List<Path>> effective =
+                Map.of("frontend", java.util.List.of(dir.resolve("dumps/http_config.json")));
+        ProjectCollector.Result declared = ProjectCollector.collect(dir);
+        Layer before = edge(declared, "productpage", "/productpage/**").layers().getLast();
+        assertThat(before.kind()).isEqualTo("istio");
+        assertThat(before.retry().totalAttempts().value()).isEqualTo(2);
+
+        ProjectCollector.Result r = ProjectCollector.collect(dir, DefaultsKb.classpath(), Detector.classpath(), effective);
+        Layer running = edge(r, "productpage", "/productpage/**").layers().getLast();
+        assertThat(running.retry().totalAttempts().value()).isEqualTo(3);
+        assertThat(running.retry().totalAttempts().evidence()).startsWith("dumps/http_config.json:28 (/configs/0/");
+        // the same conditions, timeouts and back-off, written once as a VirtualService and once as Envoy config
+        assertThat(r.differences()).singleElement().satisfies(d -> {
+            assertThat(d.setting()).isEqualTo("frontend→productpage layer 2 (istio) totalAttempts");
+            assertThat(d.declared()).isEqualTo("2");
+            assertThat(d.declaredEvidence()).startsWith("app/istio/productpage.yaml:15 (attempts 1 + 1)");
+            assertThat(d.effective()).isEqualTo("3");
+        });
+        assertThat(r.coverage().services()).filteredOn(s -> s.service().equals("frontend")).singleElement()
+                .satisfies(s -> assertThat(s.read()).contains("dumps/http_config.json"));
+        assertThat(r.notes()).noneMatch(n -> n.contains("are not applied"));
+    }
+
+    @Test
+    void aRouteDumpWithoutManifestsPutsTheServiceInTheMesh() throws IOException {
+        copy("projects/effective-mesh/frontend", "frontend");
+        copy("effective/envoy", "dumps");
+        ProjectCollector.Result r = ProjectCollector.collect(dir, DefaultsKb.classpath(), Detector.classpath(),
+                Map.of("frontend", java.util.List.of(dir.resolve("dumps/http_config.json"))));
+        assertThat(edge(r, "productpage", "/productpage/**").layers().getLast().kind()).isEqualTo("istio");
+        assertThat(r.differences()).singleElement().satisfies(d -> {
+            assertThat(d.setting()).isEqualTo("frontend→productpage layers");
+            assertThat(d.declared()).doesNotContain("istio");
+            assertThat(d.effective()).endsWith("istio");
+        });
+        assertThat(r.coverage().edges()).filteredOn(e -> e.edge().equals("frontend→productpage")).singleElement()
+                .satisfies(e -> assertThat(e.searched()).contains("istio"));
+    }
+
+    @Test
+    void aServiceTakesOneDumpOfEachFormat() throws IOException {
+        copy("projects/effective/orders", "orders");
+        copy("effective", "dumps");
+        ProjectCollector.Result both = ProjectCollector.collect(dir, DefaultsKb.classpath(), Detector.classpath(),
+                Map.of("orders", java.util.List.of(dir.resolve("dumps/orders-configprops.json"),
+                        dir.resolve("dumps/envoy/http_config.json"))));
+        assertThat(both.differences()).extracting(d -> d.setting()).containsExactly(
+                "orders→payments-service layer 1 (spring-cloud-gateway) totalAttempts");
+        assertThat(both.notes()).contains("orders: the dump of its sidecar has no route to payments-service; "
+                + "no Istio layer is added");
+        assertThat(both.notes()).anyMatch(n -> n.startsWith("orders: routes to productpage in the dump of its sidecar ("
+                + "dumps/envoy/http_config.json:18 "));
+        assertThatThrownBy(() -> ProjectCollector.collect(dir, DefaultsKb.classpath(), Detector.classpath(),
+                Map.of("orders", java.util.List.of(dir.resolve("dumps/envoy/http_config.json"),
+                        dir.resolve("dumps/envoy/http_config.json")))))
+                .isInstanceOf(InvalidSpecException.class).hasMessage("--effective orders: two Envoy config_dump dumps, "
+                        + "dumps/envoy/http_config.json and dumps/envoy/http_config.json; give one per service");
     }
 }
