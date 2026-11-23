@@ -335,6 +335,27 @@ class ProjectCollectorTest {
                         + "(svc/src/main/resources/application.yml:1)");
     }
 
+    /** ADR 0016, #25 part 4: an istio ConfigMap alone puts the graph in the mesh, with its retry policy. */
+    @Test
+    void theMeshConfigsDefaultRetryPolicyAppliesToCalleesWithoutAVirtualService() throws IOException {
+        copy("projects/effective-mesh/frontend", "frontend");
+        write("deploy/istio-configmap.yaml", """
+                apiVersion: v1
+                kind: ConfigMap
+                metadata: { name: istio, namespace: istio-system }
+                data:
+                  mesh: |
+                    defaultHttpRetryPolicy:
+                      attempts: 0
+                """);
+        ProjectCollector.Result r = ProjectCollector.collect(dir);
+        Layer istio = innermost(edge(r, "productpage", "/productpage/**"));
+        assertThat(istio.kind()).isEqualTo("istio");
+        assertThat(istio.retry().totalAttempts().value()).isEqualTo(1);
+        assertThat(istio.retry().totalAttempts().evidence()).startsWith("deploy/istio-configmap.yaml:7 (attempts 0 + 1)");
+        assertThat(r.coverage().manifests()).containsExactly("deploy/istio-configmap.yaml");
+    }
+
     // ---- effective configuration (ADR 0016, #25) --------------------------
 
     @Test

@@ -88,6 +88,19 @@ When the `istio` ConfigMap, an `IstioOperator` or Helm `meshConfig` values are a
 collector reads it as the mesh default (`attempts: 0` turns retries off) instead of assuming none. That gives no
 PLM-C2 finding.
 
+**MeshConfig in practice** (#25, part 4, from `route.go` and `retry.go` of Istio 1.31 at `56245da4`). Istio uses the
+policy for an HTTP route without `retries` and for the default route of a host without a VirtualService; a route
+with its own `retries` keeps them. The policy goes through the same conversion as a VirtualService's `retries`, so
+its absent fields take Istio's defaults (`retryOn`, a per-try timeout equal to the route timeout, 25 ms back-off).
+In that conversion a `retries` block without `attempts` has 0, as proto3 reads an absent number, and 0 turns retries
+off: such a block is one try (`kb/defaults/istio.yaml` `retries.attemptsUnset`), where the collector used to leave it
+`UNKNOWN`. The policy is read from the `istio` ConfigMap or `istio-<revision>` (the MeshConfig text in `data.mesh`;
+with a literal block, its lines are mapped to the file's), an `IstioOperator`'s `spec.meshConfig` and Helm values
+with a top-level `meshConfig`. A file that mentions `install.istio.io/` or `defaultHttpRetryPolicy` is an Istio
+manifest too, so such a file alone puts the graph in the mesh. Several definitions that say the same are one; when
+they differ (revisions, a values file next to a ConfigMap), which one a sidecar gets depends on its revision, so the
+policy is `UNKNOWN`, with a note. Per-workload proxy configuration is not read.
+
 ## Considered alternatives
 
 - **Use the dump only to report differences, keep the declared graph.** The rules would then judge configuration
@@ -106,4 +119,5 @@ PLM-C2 finding.
   written by hand. It overlays the dump on the service's Spring properties.
 - Collectors: an Envoy `config_dump` reader for the sidecar's outbound routes (#25, part 3). It maps `retry_policy`
   and timeouts through Envoy's defaults and the failure classes of ADR 0014.
-- Collectors: MeshConfig `defaultHttpRetryPolicy` from the manifests (#25, part 4).
+- Collectors: MeshConfig `defaultHttpRetryPolicy` from the manifests (#25, part 4), and a `retries` block without
+  `attempts` is one try.

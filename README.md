@@ -133,7 +133,7 @@ Plimsoll finds the service modules and Istio manifests under the directory and c
 | Resilience4j (`application.yml`, `@Retry`, `@TimeLimiter`) | retry and timeout layers on edges named in `edges-hint.yaml` |
 | Spring Cloud Gateway | routes to `lb://` services become edges, with their `Retry` filters, response timeouts and `CircuitBreaker` filters (settings and TimeLimiter from Spring Cloud CircuitBreaker `Customizer` beans and Resilience4j properties) |
 | HTTP clients | WebClient / RestClient / RestTemplate requests to a known service through a `@LoadBalanced` client become edges; Spring Cloud LoadBalancer retries become a layer; a reactive Spring Cloud CircuitBreaker `run` around the request adds a breaker layer with its TimeLimiter |
-| Istio `VirtualService`, `DestinationRule` | retry and timeout layers, including Istio's implicit default retry policy |
+| Istio `VirtualService`, `DestinationRule`, MeshConfig (`istio` ConfigMap, `IstioOperator`, Helm `meshConfig`) | retry and timeout layers, including Istio's implicit default retry policy or the mesh's `defaultHttpRetryPolicy` |
 
 Several repositories are analysed by checking them out side by side under one directory and analysing that directory.
 
@@ -273,7 +273,7 @@ v0.1 gives an upper bound from static configuration. Before acting on a report, 
 - **Fanout is unknown without a hint.** In a collected graph A1 counts an edge without `fanout` as 1 and reports "at least ×n".
 - **Not every request becomes an edge.** Only requests through a `@LoadBalanced` client to a known service are edges; plain clients, `DiscoveryClient` lookups and hosts built by helper methods ([#55](https://github.com/hasanyelaldi/plimsoll/issues/55)) are listed as notes. Requests made at startup are counted as per-request edges ([#54](https://github.com/hasanyelaldi/plimsoll/issues/54)).
 - **Blocking LoadBalancer retries** (RestTemplate, RestClient) have `UNKNOWN` attempts: there is no oracle test for that path yet.
-- **Istio:** the mesh-wide `defaultHttpRetryPolicy` in MeshConfig is not read; when several HTTP routes of a host disagree, the differing fields are `UNKNOWN`; services are matched on the first label of the host; every callee is assumed to be in the mesh once Istio manifests are present. Ambient mode and Gateway API are not supported ([#27](https://github.com/hasanyelaldi/plimsoll/issues/27)).
+- **Istio:** the MeshConfig `defaultHttpRetryPolicy` is read from manifests only (per-workload proxy configuration and `--set` flags are not; a dump with `--effective` shows what runs); when several HTTP routes of a host disagree, the differing fields are `UNKNOWN`; services are matched on the first label of the host; every callee is assumed to be in the mesh once Istio manifests are present. Ambient mode and Gateway API are not supported ([#27](https://github.com/hasanyelaldi/plimsoll/issues/27)).
 - **Configuration not read:** config server, profile-specific documents, other config files and unresolved placeholders. The Coverage section lists each one it skipped.
 - **Large graphs:** A5 enumerates simple paths, which grows exponentially on wide graphs.
 

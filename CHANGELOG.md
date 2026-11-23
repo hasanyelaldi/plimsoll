@@ -29,6 +29,12 @@ the report format and the rules.
 
 ### Collectors
 
+- Istio MeshConfig (ADR 0016, #25): the `defaultHttpRetryPolicy` of the `istio` ConfigMap (or `istio-<revision>`),
+  an `IstioOperator` or Helm `meshConfig` values replaces Istio's default policy for routes without `retries` and
+  hosts without a VirtualService, as `route.go` of Istio 1.31 does. Such a file alone puts the graph in the mesh.
+  Definitions that differ leave the mesh policy `UNKNOWN`, with a note.
+- Istio: a `retries` block without `attempts` is now one try (proto3 reads it as 0, which turns retries off in
+  `retry.go`), not `UNKNOWN`. Testbed reports are unchanged.
 - `/actuator/configprops` dumps (ADR 0016, #25): `plimsoll analyze <dir> --effective <service>=<file>` reads the
   JSON of a running service's configprops endpoint. Its Resilience4j, Spring Cloud Gateway, LoadBalancer and
   CircuitBreaker beans replace the declared properties under their prefixes, so the graph is the one that runs;
