@@ -162,11 +162,14 @@ class IstioCollectorTest {
     }
 
     @Test
-    void retriesWithoutAttemptsAreUnknownAndGoDurationsParse() {
+    void retriesWithoutAttemptsAreOffAndGoDurationsParse() {
         Route r = route("ledger", "http[0]");
         RetryPolicy p = r.layer().retry();
-        assertThat(p.totalAttempts().source()).isEqualTo(Source.UNKNOWN);
-        assertThat(p.totalAttempts().evidence()).contains("has no attempts");
+        // proto3 reads the absent attempts as 0, and retry.go turns 0 into no retry policy
+        assertThat(p.totalAttempts().value()).isEqualTo(1);
+        assertThat(p.totalAttempts().source()).isEqualTo(Source.LIBRARY_DEFAULT);
+        assertThat(p.totalAttempts().evidence()).startsWith("retries at " + MORE + ":10 has no attempts; ")
+                .contains("retry/retry.go").endsWith("(attempts 0 + 1)");
         assertThat(p.perTryTimeout()).isEqualTo(Val.explicit(Duration.ofSeconds(90), MORE + ":11"));
     }
 
@@ -289,5 +292,122 @@ class IstioCollectorTest {
         assertThat(IstioCollector.parseDuration("250ms", "t")).isEqualTo(Duration.ofMillis(250));
         assertThatThrownBy(() -> IstioCollector.parseDuration("10", "t")).isInstanceOf(InvalidSpecException.class);
         assertThatThrownBy(() -> IstioCollector.parseDuration("s", "t")).isInstanceOf(InvalidSpecException.class);
+    }
+
+    // ---- MeshConfig defaultHttpRetryPolicy (ADR 0016, #25 part 4) ------------
+
+    private static final String VS_WITHOUT_RETRIES = """
+            apiVersion: networking.istio.io/v1
+            kind: VirtualService
+            metadata: { name: orders, namespace: shop }
+            spec:
+              hosts: [ orders ]
+              http:
+                - name: plain
+                  route: [ { destination: { host: orders } } ]
+                - name: own
+                  retries: { attempts: 4 }
+                  route: [ { destination: { host: orders } } ]
+            """;
+
+    @Test
+    void theIstioConfigMapsPolicyReplacesIstiosDefaultWhereARouteHasNoRetries(@TempDir Path dir) throws IOException {
+        Files.writeString(dir.resolve("vs.yaml"), VS_WITHOUT_RETRIES);
+        Files.writeString(dir.resolve("mesh.yaml"), """
+                apiVersion: v1
+                kind: ConfigMap
+                metadata:
+                  name: istio
+                  namespace: istio-system
+                data:
+                  mesh: |-
+                    accessLogFile: /dev/stdout
+                    defaultHttpRetryPolicy:
+                      attempts: 1
+                      perTryTimeout: 2s
+                      retryOn: gateway-error
+                """);
+        Result r = IstioCollector.collect(dir);
+        Layer plain = r.routes().stream().filter(x -> x.route().equals("plain")).findFirst().orElseThrow().layer();
+        assertThat(plain.retry().totalAttempts().value()).isEqualTo(2);
+        assertThat(plain.retry().totalAttempts().source()).isEqualTo(Source.EXPLICIT);
+        // a literal block: line n of data.mesh is line 7 + n of the file
+        assertThat(plain.retry().totalAttempts().evidence()).isEqualTo("mesh.yaml:10 (attempts 1 + 1); MeshConfig "
+                + "defaultHttpRetryPolicy, applied because no retries at vs.yaml:7");
+        assertThat(plain.retry().perTryTimeout()).isEqualTo(Val.explicit(Duration.ofSeconds(2), "mesh.yaml:11"));
+        assertThat(plain.retry().retryOn()).isEqualTo(Val.explicit(Set.of("gateway-error"), "mesh.yaml:12"));
+        // a route with its own retries is not touched, a host without a VirtualService gets the mesh policy
+        Layer own = r.routes().stream().filter(x -> x.route().equals("own")).findFirst().orElseThrow().layer();
+        assertThat(own.retry().totalAttempts().value()).isEqualTo(5);
+        assertThat(r.meshDefault().retry().totalAttempts().value()).isEqualTo(2);
+        assertThat(r.meshDefault().retry().totalAttempts().evidence()).endsWith("applied because no VirtualService for "
+                + "the host");
+    }
+
+    @Test
+    void anIstioOperatorOrHelmValuesDeclareItTooAndAttemptsZeroTurnsRetriesOff(@TempDir Path dir) throws IOException {
+        Files.writeString(dir.resolve("operator.yaml"), """
+                apiVersion: install.istio.io/v1alpha1
+                kind: IstioOperator
+                metadata: { name: control-plane }
+                spec:
+                  meshConfig:
+                    defaultHttpRetryPolicy:
+                      attempts: 0
+                """);
+        Result r = IstioCollector.collect(dir);
+        assertThat(r.meshDefault().retry().totalAttempts().value()).isEqualTo(1);
+        assertThat(r.meshDefault().retry().totalAttempts().evidence()).startsWith("operator.yaml:7 (attempts 0 + 1)");
+
+        Files.delete(dir.resolve("operator.yaml"));
+        Files.writeString(dir.resolve("values.yaml"), """
+                meshConfig:
+                  defaultHttpRetryPolicy:
+                    attempts: 3
+                """);
+        assertThat(IstioCollector.collect(dir).meshDefault().retry().totalAttempts())
+                .satisfies(v -> {
+                    assertThat(v.value()).isEqualTo(4);
+                    assertThat(v.evidence()).startsWith("values.yaml:3 (attempts 3 + 1)");
+                });
+    }
+
+    @Test
+    void definitionsThatDifferLeaveTheMeshPolicyUnknownAndOthersAreIgnored(@TempDir Path dir) throws IOException {
+        Files.writeString(dir.resolve("vs.yaml"), VS_WITHOUT_RETRIES);
+        Files.writeString(dir.resolve("mesh.yaml"), """
+                apiVersion: v1
+                kind: ConfigMap
+                metadata: { name: istio-canary }
+                data:
+                  mesh: "defaultHttpRetryPolicy: { attempts: 3 }"
+                ---
+                apiVersion: v1
+                kind: ConfigMap
+                metadata: { name: istio-stable }
+                data:
+                  mesh: "defaultHttpRetryPolicy: { attempts: 1 }"
+                ---
+                apiVersion: v1
+                kind: ConfigMap
+                metadata: { name: istio-sidecar-injector }
+                data:
+                  config: "defaultHttpRetryPolicy: { attempts: 9 }"
+                """);
+        Result r = IstioCollector.collect(dir);
+        Layer plain = r.routes().stream().filter(x -> x.route().equals("plain")).findFirst().orElseThrow().layer();
+        assertThat(plain.retry().totalAttempts().source()).isEqualTo(Source.UNKNOWN);
+        assertThat(plain.retry().totalAttempts().evidence()).isEqualTo("no retries at vs.yaml:7; "
+                + "defaultHttpRetryPolicy at mesh.yaml:5 (data.mesh line 1) and ConfigMap istio-stable at "
+                + "mesh.yaml:11 (data.mesh line 1) differ");
+        assertThat(r.notes()).contains("mesh.yaml:5 (data.mesh line 1): defaultHttpRetryPolicy differs from the one "
+                + "at mesh.yaml:11 (data.mesh line 1); which one a sidecar gets depends on its revision, so the mesh "
+                + "policy is UNKNOWN");
+    }
+
+    @Test
+    void withoutAMeshPolicyIstiosDefaultStays() {
+        assertThat(result.meshDefault().retry().totalAttempts().value()).isEqualTo(3);
+        assertThat(result.meshDefault().retry().totalAttempts().source()).isEqualTo(Source.LIBRARY_DEFAULT);
     }
 }

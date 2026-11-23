@@ -65,8 +65,9 @@ import java.util.TreeSet;
  *       for load-balanced HTTP requests to the other services ({@link HttpClientCollector#discover}); the hint wins
  *       for the methods it names.
  *   <li>An <b>Istio manifest</b> is a {@code .yaml} / {@code .yml} file outside the modules' {@code src} directories
- *       that mentions {@code networking.istio.io/}. Other YAML (Helm templates, Compose files) is not parsed. Without
- *       such a file the graph has no mesh.
+ *       that mentions {@code networking.istio.io/}, {@code install.istio.io/} (an IstioOperator) or
+ *       {@code defaultHttpRetryPolicy} (an {@code istio} ConfigMap or Helm values with a MeshConfig, ADR 0016). Other
+ *       YAML (Helm templates, Compose files) is not parsed. Without such a file the graph has no mesh.
  * </ul>
  *
  * <p>Every module is also searched for mechanisms no collector models ({@link Detector}); they become PLM-C1. Its
@@ -83,7 +84,8 @@ public final class ProjectCollector {
 
     public static final String EDGES_HINT = "edges-hint.yaml";
     private static final Set<String> SKIPPED = Set.of("target", "build", "node_modules");
-    private static final String ISTIO_API = "networking.istio.io/";
+    private static final List<String> ISTIO_MARKERS =
+            List.of("networking.istio.io/", "install.istio.io/", "defaultHttpRetryPolicy");
     private static final List<String> BUILD_FILES = List.of("pom.xml", "build.gradle", "build.gradle.kts");
     private static final Comparator<EdgeSearch> EDGE_ORDER = Comparator.comparing(EdgeSearch::edge)
             .thenComparing(EdgeSearch::operation, Comparator.nullsFirst(Comparator.naturalOrder()));
@@ -381,7 +383,7 @@ public final class ProjectCollector {
                 public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
                     String name = file.getFileName().toString();
                     if (attrs.isRegularFile() && name.matches(".*\\.ya?ml") && !name.equals(EDGES_HINT)
-                            && Files.readString(file, StandardCharsets.UTF_8).contains(ISTIO_API)) {
+                            && ISTIO_MARKERS.stream().anyMatch(Files.readString(file, StandardCharsets.UTF_8)::contains)) {
                         manifests.add(file);
                     }
                     return FileVisitResult.CONTINUE;

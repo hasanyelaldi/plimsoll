@@ -31,6 +31,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.function.Function;
+import java.util.function.IntFunction;
 import java.util.function.Supplier;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -42,8 +43,14 @@ import java.util.stream.Stream;
  *
  * <p>A VirtualService applies to every caller of its host inside the mesh, so a route is keyed by the callee only;
  * {@link io.github.hasanyelaldi.plimsoll.collect.GraphAssembler} merges it onto edges. {@code attempts} counts
- * retries only and becomes {@code attempts + 1}. Absent fields take Istio's default only through a verified knowledge-base entry, else they are UNKNOWN. The
- * defaults assume no MeshConfig {@code defaultHttpRetryPolicy} override, which manifests do not show.
+ * retries only and becomes {@code attempts + 1}; a {@code retries} block without {@code attempts} has 0, which turns
+ * retries off. Absent fields take Istio's default only through a verified knowledge-base entry, else they are UNKNOWN.
+ *
+ * <p>ADR 0016: the MeshConfig {@code defaultHttpRetryPolicy} replaces Istio's default policy for a route without
+ * {@code retries} and for a host without a VirtualService ({@code route.go}, {@code retry.go} of Istio 1.31). It is
+ * read from the {@code istio} ConfigMap ({@code istio-<revision>} too; its {@code data.mesh} text), an
+ * {@code IstioOperator}'s {@code spec.meshConfig} and Helm values with a top-level {@code meshConfig}. Several
+ * definitions that differ leave the mesh policy UNKNOWN, with a note.
  *
  * <p>Envoy's retry back-off is fully jittered exponential, which no fixed multiplier describes: {@code multiplier}
  * and {@code maxBackoff} stay UNKNOWN. Outlier detection is reported but not modelled by the analysis yet.
@@ -94,7 +101,29 @@ public final class IstioCollector {
     private final List<OutlierDetection> outliers = new ArrayList<>();
     private final List<String> notes = new ArrayList<>();
     private final Map<String, String> virtualServiceByHost = new HashMap<>();
-    private String file;
+    private IntFunction<String> where;
+    /** The MeshConfig {@code defaultHttpRetryPolicy}, or null when none is declared. */
+    private MeshPolicy mesh;
+
+    /**
+     * A declared {@code defaultHttpRetryPolicy}.
+     *
+     * @param where    {@code file:line} of a line of the document it was read from
+     * @param entry    the {@code defaultHttpRetryPolicy} key
+     * @param policy   its value, or null when several definitions disagree
+     * @param unknown  why it is UNKNOWN, when several definitions disagree
+     */
+    private record MeshPolicy(IntFunction<String> where, Entry entry, MapNode policy, String canonical, String unknown) {
+        String at() {
+            return where.apply(entry.keyLine());
+        }
+    }
+
+    private record Document(String file, String text, Node node) {
+        IntFunction<String> where() {
+            return line -> file + ":" + line;
+        }
+    }
 
     private IstioCollector(DefaultsKb kb) {
         this.kb = kb;
@@ -117,19 +146,30 @@ public final class IstioCollector {
     public static Result collect(Path base, List<Path> files, DefaultsKb kb) {
         IstioCollector c = new IstioCollector(kb);
         base = base.toAbsolutePath();
+        List<Document> docs = new ArrayList<>();
         for (Path p : files) {
-            c.file = base.relativize(p.toAbsolutePath()).toString().replace('\\', '/');
+            String file = base.relativize(p.toAbsolutePath()).toString().replace('\\', '/');
             String text;
             try {
                 text = Files.readString(p, StandardCharsets.UTF_8);
             } catch (IOException e) {
-                throw new InvalidSpecException(c.file + ": cannot read: " + e.getMessage(), e);
+                throw new InvalidSpecException(file + ": cannot read: " + e.getMessage(), e);
             }
-            for (Node doc : YamlTree.parseAll(text, c.file)) {
-                c.document(doc);
+            for (Node doc : YamlTree.parseAll(text, file)) {
+                docs.add(new Document(file, text, doc));
             }
         }
-        Layer meshDefault = c.layer(c.routeTimeout("no VirtualService for the host"), null, null,
+        // the mesh policy first: it applies to routes of every VirtualService, whichever file it is in
+        for (Document d : docs) {
+            c.where = d.where();
+            c.meshConfig(d);
+        }
+        for (Document d : docs) {
+            c.where = d.where();
+            c.document(d.node());
+        }
+        c.where = line -> "(mesh default)";
+        Layer meshDefault = c.meshLayer(c.routeTimeout("no VirtualService for the host"),
                 "no VirtualService for the host");
         return new Result(c.routes, c.outliers, meshDefault, c.notes);
     }
@@ -229,7 +269,7 @@ public final class IstioCollector {
 
         Entry retriesEntry = route.entries().get("retries");
         if (retriesEntry == null) {
-            return layer(routeTimeout, null, null, "no retries at " + at(route.line()));
+            return meshLayer(routeTimeout, "no retries at " + at(route.line()));
         }
         if (!(retriesEntry.value() instanceof MapNode retries)) {
             throw new InvalidSpecException(at(retriesEntry.keyLine()) + ": 'retries' must be a mapping");
@@ -244,8 +284,8 @@ public final class IstioCollector {
         if (retries == null) {
             totalAttempts = plusOne(kb.defaultOr(KB, "retries.attempts", Integer::valueOf, absent));
         } else if (attempts == null) {
-            totalAttempts = Val.unknown("retries at " + at(retriesEntry.keyLine())
-                    + " has no attempts; the Istio reference does not define this case");
+            totalAttempts = plusOne(kb.defaultOr(KB, "retries.attemptsUnset", Integer::valueOf,
+                    "retries at " + at(retriesEntry.keyLine()) + " has no attempts"));
         } else {
             int n = integer(attempts, "attempts");
             totalAttempts = Val.explicit(n + 1, at(attempts.keyLine()) + " (attempts " + n + " + 1)");
@@ -316,6 +356,126 @@ public final class IstioCollector {
         Set<String> out = new TreeSet<>();
         Arrays.stream(text.split(",")).map(String::strip).filter(s -> !s.isEmpty()).forEach(out::add);
         return Set.copyOf(out);
+    }
+
+    // ---- MeshConfig ------------------------------------------------------
+
+    private static final Pattern MESH_BLOCK = Pattern.compile("\\s*mesh:\\s*\\|[-+]?\\s*(#.*)?");
+
+    /** A {@code defaultHttpRetryPolicy} in an {@code istio} ConfigMap, an IstioOperator or Helm values. */
+    private void meshConfig(Document d) {
+        if (!(d.node() instanceof MapNode m)) {
+            return;
+        }
+        String apiVersion = optionalScalar(m, "apiVersion");
+        String kind = optionalScalar(m, "kind");
+        if ("ConfigMap".equals(kind) && "v1".equals(apiVersion)) {
+            MapNode metadata = map(m, "metadata");
+            String name = metadata == null ? null : optionalScalar(metadata, "name");
+            MapNode data = map(m, "data");
+            Entry mesh = data == null ? null : data.entries().get("mesh");
+            if (name == null || !(name.equals("istio") || name.startsWith("istio-")) || mesh == null
+                    || !(mesh.value() instanceof Scalar text)) {
+                return;
+            }
+            // data.mesh is MeshConfig YAML inside a string; with a literal block its line n is the key's line + n
+            String[] lines = d.text().split("\\R", -1);
+            boolean literal = mesh.keyLine() <= lines.length && MESH_BLOCK.matcher(lines[mesh.keyLine() - 1]).matches();
+            String file = d.file();
+            int keyLine = mesh.keyLine();
+            IntFunction<String> inner = literal ? n -> file + ":" + (keyLine + n)
+                    : n -> file + ":" + keyLine + " (data.mesh line " + n + ")";
+            Node meshConfig = YamlTree.parse(text.text(), file + " data.mesh");
+            if (meshConfig instanceof MapNode mc) {
+                meshPolicy(inner, mc, "ConfigMap " + name);
+            }
+        } else if ("IstioOperator".equals(kind) && apiVersion != null && apiVersion.startsWith("install.istio.io/")) {
+            MapNode spec = map(m, "spec");
+            MapNode meshConfig = spec == null ? null : map(spec, "meshConfig");
+            if (meshConfig != null) {
+                meshPolicy(d.where(), meshConfig, "IstioOperator " + metadataName(m));
+            }
+        } else if (apiVersion == null && kind == null && map(m, "meshConfig") instanceof MapNode meshConfig) {
+            meshPolicy(d.where(), meshConfig, "Helm values");
+        }
+    }
+
+    private void meshPolicy(IntFunction<String> at, MapNode meshConfig, String source) {
+        Entry e = meshConfig.entries().get("defaultHttpRetryPolicy");
+        if (e == null) {
+            return;
+        }
+        if (!(e.value() instanceof MapNode policy)) {
+            throw new InvalidSpecException(at.apply(e.keyLine()) + ": 'defaultHttpRetryPolicy' must be a mapping");
+        }
+        MeshPolicy found = new MeshPolicy(at, e, policy, canonical(policy), null);
+        if (mesh == null) {
+            mesh = found;
+            return;
+        }
+        if (mesh.unknown() == null && mesh.canonical().equals(found.canonical())) {
+            return;
+        }
+        String reason = (mesh.unknown() == null ? "defaultHttpRetryPolicy at " + mesh.at() : mesh.unknown())
+                + " and " + source + " at " + found.at() + " differ";
+        if (mesh.unknown() == null) {
+            notes.add(mesh.at() + ": defaultHttpRetryPolicy differs from the one at " + found.at()
+                    + "; which one a sidecar gets depends on its revision, so the mesh policy is UNKNOWN");
+        } else {
+            notes.add(found.at() + ": another defaultHttpRetryPolicy; the mesh policy stays UNKNOWN");
+        }
+        mesh = new MeshPolicy(mesh.where(), mesh.entry(), null, mesh.canonical(), reason);
+    }
+
+    /** Keys sorted, scalars as text: two policies that say the same compare equal. */
+    private static String canonical(Node n) {
+        return switch (n) {
+            case MapNode m -> new java.util.TreeMap<>(m.entries()).entrySet().stream()
+                    .map(e -> e.getKey() + "=" + canonical(e.getValue().value()))
+                    .collect(java.util.stream.Collectors.joining(",", "{", "}"));
+            case ListNode l -> l.items().stream().map(IstioCollector::canonical)
+                    .collect(java.util.stream.Collectors.joining(",", "[", "]"));
+            case Scalar sc -> sc.text();
+        };
+    }
+
+    /**
+     * The policy of a route without {@code retries}, or of a host without a VirtualService: the mesh's
+     * {@code defaultHttpRetryPolicy} when one is declared, else Istio's default.
+     */
+    private Layer meshLayer(Val<Duration> routeTimeout, String absent) {
+        if (mesh == null) {
+            return layer(routeTimeout, null, null, absent);
+        }
+        if (mesh.policy() == null) {
+            String why = absent + "; " + mesh.unknown();
+            RetryPolicy retry = new RetryPolicy(Val.unknown(why), Val.unknown(why), Val.unknown(why),
+                    Val.unknown("Envoy back-off is fully jittered exponential; no fixed multiplier"),
+                    Val.unknown("Envoy back-off is fully jittered exponential; no fixed cap on the minimum wait"),
+                    kb.defaultOr(KB, "retries.jitter", Boolean::valueOf, "Istio has no jitter setting"),
+                    Val.unknown(why));
+            return new Layer("istio", retry, routeTimeout, new RetryConditions(retried(retry.retryOn()),
+                    kb.givesUpAs(KB)));
+        }
+        IntFunction<String> own = where;
+        where = mesh.where();
+        Layer l;
+        try {
+            l = layer(routeTimeout, mesh.entry(), mesh.policy(), "not set in defaultHttpRetryPolicy at " + mesh.at());
+        } finally {
+            where = own;
+        }
+        Val<Integer> t = l.retry().totalAttempts();
+        Val<Integer> tagged = new Val<>(t.value(), t.source(), t.evidence() + "; MeshConfig defaultHttpRetryPolicy, "
+                + "applied because " + absent);
+        RetryPolicy r = l.retry();
+        return new Layer(l.kind(), new RetryPolicy(tagged, r.perTryTimeout(), r.initialBackoff(), r.multiplier(),
+                r.maxBackoff(), r.jitter(), r.retryOn()), l.overallTimeout(), l.conditions());
+    }
+
+    private String optionalScalar(MapNode m, String key) {
+        Entry e = m.entries().get(key);
+        return e != null && e.value() instanceof Scalar s && s.token() != JsonToken.VALUE_NULL ? s.text() : null;
     }
 
     // ---- DestinationRule -------------------------------------------------
@@ -421,7 +581,7 @@ public final class IstioCollector {
     // ---- typed accessors -------------------------------------------------
 
     private String at(int line) {
-        return file + ":" + line;
+        return where.apply(line);
     }
 
     private MapNode map(MapNode m, String key) {

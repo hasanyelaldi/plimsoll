@@ -220,3 +220,14 @@
   unit: failure-classes      # onPerTryTimeoutCommon: timeout_response_code_, 504 by default (router.h)
   source: https://github.com/envoyproxy/envoy/blob/8893f913fc5b911f7c40a394186fe815a0bd7b85/source/common/router/router.cc
   verified_by: source
+
+# A retries block without attempts: proto3 reads the absent int32 as 0, and ConvertPolicy turns a policy with
+# attempts <= 0 into no retry policy at all. The same function converts the MeshConfig defaultHttpRetryPolicy, which
+# route.go applies to a route without retries (ADR 0016).
+- library: istio
+  versions: "1.31"
+  parameter: retries.attemptsUnset
+  value: 0                    # "if in.Attempts <= 0 { // Configuration is explicitly disabling the retry policy."
+  unit: attempts-retries-only
+  source: https://github.com/istio/istio/blob/56245da4ce832744b2062aab045e39a5c033000b/pilot/pkg/networking/core/route/retry/retry.go
+  verified_by: source
