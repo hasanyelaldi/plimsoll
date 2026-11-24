@@ -1,6 +1,8 @@
 package io.github.hasanyelaldi.plimsoll.collect;
 
 import io.github.hasanyelaldi.plimsoll.collect.http.HttpClientCollector;
+import io.github.hasanyelaldi.plimsoll.collect.istio.DataPlane;
+import io.github.hasanyelaldi.plimsoll.collect.istio.DataPlane.Mode;
 import io.github.hasanyelaldi.plimsoll.collect.istio.IstioCollector;
 import io.github.hasanyelaldi.plimsoll.collect.istio.IstioCollector.Route;
 import io.github.hasanyelaldi.plimsoll.model.Durations;
@@ -37,6 +39,10 @@ import java.util.stream.Collectors;
  * <p>ADR 0016: the routes read from a caller's sidecar dump are the ones that run for that caller. On an edge from
  * it they replace the declared Istio layer, or add one when no manifest put the callee in the mesh. An edge to a
  * callee the dump has no route for keeps its declared layers, with a note.
+ *
+ * <p>ADR 0017: with data plane labels read, an edge gets no Istio layer when its caller has neither a sidecar nor
+ * ambient mode, or is in ambient mode while its callee has no waypoint. A caller whose mode is not known keeps the
+ * layer, with a note.
  */
 public final class GraphAssembler {
 
@@ -73,6 +79,12 @@ public final class GraphAssembler {
      */
     public static Result assemble(List<Edge> edges, HttpClientCollector.Result http, IstioCollector.Result istio,
             Map<String, List<Route>> running) {
+        return assemble(edges, http, istio, running, null);
+    }
+
+    /** @param dataPlane the data plane mode of each service (ADR 0017), or {@code null} when no labels were read */
+    public static Result assemble(List<Edge> edges, HttpClientCollector.Result http, IstioCollector.Result istio,
+            Map<String, List<Route>> running, DataPlane.Result dataPlane) {
         if (http != null) {
             edges = edges.stream().map(e -> http.layerFor(e).map(l -> withLayer(e, l)).orElse(e)).toList();
         }
@@ -91,6 +103,8 @@ public final class GraphAssembler {
         Set<String> called = new TreeSet<>();
         Set<String> calledFromDump = new TreeSet<>();
         Set<String> runningNotes = new TreeSet<>();
+        Set<String> dataPlaneNotes = new TreeSet<>();
+        Set<String> bypassed = new TreeSet<>();
         for (Edge e : edges) {
             List<Route> dumped = running.getOrDefault(e.from(), List.of()).stream()
                     .filter(r -> r.to().equals(e.to())).toList();
@@ -105,6 +119,11 @@ public final class GraphAssembler {
                         + (istio == null ? "no Istio layer is added" : "the declared Istio layer is kept"));
             }
             if (istio == null) {
+                out.add(e);
+                continue;
+            }
+            if (dataPlane != null && !proxied(e, dataPlane, layerByCallee.containsKey(e.to()), dataPlaneNotes)) {
+                bypassed.add(e.to());
                 out.add(e);
                 continue;
             }
@@ -124,10 +143,13 @@ public final class GraphAssembler {
         new TreeMap<>(routesByCallee).forEach((to, routes) -> {
             if (!called.contains(to)) {
                 notes.add(to + ": HTTP routes at " + routes.stream().map(Route::evidence).collect(Collectors.joining(", "))
-                        + " are not applied; no collected edge calls " + to);
+                        + " are not applied; " + (bypassed.contains(to)
+                                ? "no collected call to " + to + " passes a proxy that applies them"
+                                : "no collected edge calls " + to));
             }
         });
         notes.addAll(runningNotes);
+        notes.addAll(dataPlaneNotes);
         new TreeMap<>(running).forEach((from, routes) -> {
             Map<String, List<String>> unused = new TreeMap<>();
             routes.stream().filter(r -> !calledFromDump.contains(from + "→" + r.to()))
@@ -136,6 +158,54 @@ public final class GraphAssembler {
                     + String.join(", ", at) + ") are not applied; no collected edge from " + from + " calls " + to));
         });
         return new Result(out, notes);
+    }
+
+    /**
+     * ADR 0017: whether a proxy that applies HTTP policy sits on {@code e}. Adds a note for an edge without one and
+     * for a decision taken on an unknown mode.
+     */
+    private static boolean proxied(Edge e, DataPlane.Result dataPlane, boolean routed, Set<String> notes) {
+        Val<Mode> mode = dataPlane.mode(e.from());
+        Val<Boolean> waypoint = dataPlane.waypoint(e.to());
+        String edge = e.from() + "→" + e.to();
+        if (!mode.isKnown()) {
+            notes.add(e.from() + ": data plane mode not known (" + mode.evidence() + "); assumed to have a sidecar, "
+                    + "so the Istio layer applies to its calls");
+            return true;
+        }
+        switch (mode.value()) {
+            case SIDECAR -> {
+                if (Boolean.TRUE.equals(waypoint.value())) {
+                    notes.add(edge + ": " + e.to() + " has a waypoint (" + waypoint.evidence() + ") and " + e.from()
+                            + " a sidecar; one Istio layer is kept, whether both proxies retry is not modelled");
+                }
+                return true;
+            }
+            case AMBIENT -> {
+                if (!waypoint.isKnown()) {
+                    notes.add(edge + ": " + e.from() + " is in ambient mode (" + mode.evidence() + ") and whether "
+                            + e.to() + " has a waypoint is not known (" + waypoint.evidence()
+                            + "); the Istio layer is kept");
+                    return true;
+                }
+                if (waypoint.value()) {
+                    if (routed) {
+                        notes.add(edge + ": the VirtualService of " + e.to() + " applies through its waypoint ("
+                                + waypoint.evidence() + "), which Istio supports as Alpha");
+                    }
+                    return true;
+                }
+                notes.add(edge + ": no Istio layer; " + e.from() + " is in ambient mode (" + mode.evidence() + ") and "
+                        + e.to() + " has no waypoint (" + waypoint.evidence() + "), so only ztunnel (L4) is on the "
+                        + "path");
+                return false;
+            }
+            default -> {
+                notes.add(edge + ": no Istio layer; " + e.from() + " has no sidecar and is not in ambient mode ("
+                        + mode.evidence() + ")");
+                return false;
+            }
+        }
     }
 
     /** {@code e} with {@code inner} as its new innermost layer. */

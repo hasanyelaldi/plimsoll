@@ -356,6 +356,89 @@ class ProjectCollectorTest {
         assertThat(r.coverage().manifests()).containsExactly("deploy/istio-configmap.yaml");
     }
 
+    // ---- data plane mode (ADR 0017, #27) ----------------------------------
+
+    private void frontendIn(String namespaceLabels, String serviceLabels) throws IOException {
+        copy("projects/effective-mesh/frontend", "frontend");
+        write("k8s/shop.yaml", """
+                apiVersion: v1
+                kind: Namespace
+                metadata:
+                  name: shop
+                  labels: { %s }
+                ---
+                apiVersion: apps/v1
+                kind: Deployment
+                metadata: { name: frontend, namespace: shop }
+                spec:
+                  template:
+                    metadata: { labels: { app: frontend } }
+                ---
+                apiVersion: v1
+                kind: Service
+                metadata:
+                  name: productpage
+                  namespace: shop
+                  labels: { %s }
+                """.formatted(namespaceLabels, serviceLabels));
+    }
+
+    @Test
+    void anAmbientCallerToACalleeWithoutAWaypointHasNoIstioLayer() throws IOException {
+        frontendIn("istio.io/dataplane-mode: ambient", "app: productpage");
+        ProjectCollector.Result r = ProjectCollector.collect(dir);
+        Edge e = edge(r, "productpage", "/productpage/**");
+        assertThat(e.layers()).extracting(Layer::kind).doesNotContain("istio");
+        assertThat(r.notes()).contains("frontend→productpage: no Istio layer; frontend is in ambient mode "
+                + "(k8s/shop.yaml:5 istio.io/dataplane-mode (ambient)) and productpage has no waypoint (no "
+                + "istio.io/use-waypoint label on Service productpage (k8s/shop.yaml) or namespace shop "
+                + "(k8s/shop.yaml); istio 1.32 (docs) default (verified by doc), "
+                + "https://istio.io/latest/docs/ambient/usage/waypoint/), so only ztunnel (L4) is on the path");
+        assertThat(r.coverage().manifests()).containsExactly("k8s/shop.yaml");
+        assertThat(r.coverage().edges()).filteredOn(s -> s.edge().startsWith("frontend→productpage"))
+                .singleElement().satisfies(s -> assertThat(s.searched()).contains("istio"));
+    }
+
+    @Test
+    void anAmbientCallerToACalleeWithAWaypointGetsTheMeshDefault() throws IOException {
+        frontendIn("istio.io/dataplane-mode: ambient", "istio.io/use-waypoint: waypoint");
+        ProjectCollector.Result r = ProjectCollector.collect(dir);
+        Layer istio = innermost(edge(r, "productpage", "/productpage/**"));
+        assertThat(istio.kind()).isEqualTo("istio");
+        assertThat(istio.retry().totalAttempts().value()).isEqualTo(3);
+    }
+
+    @Test
+    void aCallerWithoutASidecarHasNoIstioLayerAndOneWithASidecarKeepsIt() throws IOException {
+        // the Service's label is the only data plane label: without any, nothing is read (ADR 0017)
+        frontendIn("team: shop", "istio.io/use-waypoint: none");
+        ProjectCollector.Result none = ProjectCollector.collect(dir);
+        assertThat(edge(none, "productpage", "/productpage/**").layers()).extracting(Layer::kind)
+                .doesNotContain("istio");
+        assertThat(none.notes()).anyMatch(n -> n.startsWith("frontend→productpage: no Istio layer; frontend has no "
+                + "sidecar and is not in ambient mode (no injection label on k8s/shop.yaml frontend or namespace "
+                + "shop (k8s/shop.yaml); "));
+
+        frontendIn("istio-injection: enabled", "app: productpage");
+        ProjectCollector.Result sidecar = ProjectCollector.collect(dir);
+        assertThat(innermost(edge(sidecar, "productpage", "/productpage/**")).kind()).isEqualTo("istio");
+        assertThat(sidecar.notes()).noneMatch(n -> n.startsWith("frontend→productpage"));
+    }
+
+    @Test
+    void aCallerOfUnknownModeKeepsTheIstioLayerWithANote() throws IOException {
+        copy("projects/effective-mesh/frontend", "frontend");
+        write("k8s/namespace.yaml", """
+                apiVersion: v1
+                kind: Namespace
+                metadata: { name: shop, labels: { istio-injection: enabled } }
+                """);
+        ProjectCollector.Result r = ProjectCollector.collect(dir);
+        assertThat(innermost(edge(r, "productpage", "/productpage/**")).kind()).isEqualTo("istio");
+        assertThat(r.notes()).contains("frontend: data plane mode not known (no workload manifest for frontend); "
+                + "assumed to have a sidecar, so the Istio layer applies to its calls");
+    }
+
     // ---- effective configuration (ADR 0016, #25) --------------------------
 
     @Test

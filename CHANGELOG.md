@@ -29,6 +29,12 @@ the report format and the rules.
 
 ### Collectors
 
+- Istio data plane mode (ADR 0017, #27): with Istio data plane labels in the Kubernetes manifests
+  (`istio-injection`, `istio.io/rev`, `sidecar.istio.io/inject`, `istio.io/dataplane-mode`, `istio.io/use-waypoint`),
+  each service's mode is read from its namespace and workload. An edge gets no Istio layer when its caller has
+  neither a sidecar nor ambient mode, or is in ambient mode and its callee has no waypoint (ztunnel applies no HTTP
+  policy); a note names the labels. A caller of unknown mode keeps the layer, with a note. Without any such label
+  nothing changes.
 - Istio MeshConfig (ADR 0016, #25): the `defaultHttpRetryPolicy` of the `istio` ConfigMap (or `istio-<revision>`),
   an `IstioOperator` or Helm `meshConfig` values replaces Istio's default policy for routes without `retries` and
   hosts without a VirtualService, as `route.go` of Istio 1.31 does. Such a file alone puts the graph in the mesh.

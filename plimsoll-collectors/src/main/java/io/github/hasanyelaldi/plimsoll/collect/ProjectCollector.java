@@ -14,6 +14,7 @@ import io.github.hasanyelaldi.plimsoll.collect.gateway.GatewayCollector;
 import io.github.hasanyelaldi.plimsoll.collect.http.ClientCallScanner;
 import io.github.hasanyelaldi.plimsoll.collect.http.HttpClientCollector;
 import io.github.hasanyelaldi.plimsoll.collect.http.HttpClientCollector.EdgeKey;
+import io.github.hasanyelaldi.plimsoll.collect.istio.DataPlane;
 import io.github.hasanyelaldi.plimsoll.collect.istio.IstioCollector;
 import io.github.hasanyelaldi.plimsoll.collect.istio.IstioCollector.Route;
 import io.github.hasanyelaldi.plimsoll.collect.kb.DefaultsKb;
@@ -49,6 +50,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.stream.Collectors;
 
 /**
  * Collects the service graph of a directory: finds its service modules and Istio manifests, runs every collector
@@ -67,7 +69,11 @@ import java.util.TreeSet;
  *   <li>An <b>Istio manifest</b> is a {@code .yaml} / {@code .yml} file outside the modules' {@code src} directories
  *       that mentions {@code networking.istio.io/}, {@code install.istio.io/} (an IstioOperator) or
  *       {@code defaultHttpRetryPolicy} (an {@code istio} ConfigMap or Helm values with a MeshConfig, ADR 0016). Other
- *       YAML (Helm templates, Compose files) is not parsed. Without such a file the graph has no mesh.
+ *       YAML (Helm templates, Compose files) is not parsed for Istio policy. Without such a file the graph has no
+ *       mesh, unless a Kubernetes manifest has data plane labels.
+ *   <li>When a Kubernetes manifest (a YAML file with {@code apiVersion:} and {@code kind:}) has Istio data plane
+ *       labels ({@link DataPlane#MARKERS}), every Kubernetes manifest is read for namespaces, workloads and
+ *       Services, and the data plane mode decides which edges get an Istio layer (ADR 0017).
  * </ul>
  *
  * <p>Every module is also searched for mechanisms no collector models ({@link Detector}); they become PLM-C1. Its
@@ -172,7 +178,8 @@ public final class ProjectCollector {
         }
         List<Path> moduleRoots = new ArrayList<>();
         List<Path> manifests = new ArrayList<>();
-        walk(root, moduleRoots, manifests);
+        List<Path> kubernetes = new ArrayList<>();
+        boolean labelled = walk(root, moduleRoots, manifests, kubernetes);
         if (moduleRoots.isEmpty()) {
             throw new InvalidSpecException(dir + ": no service module found (a directory with " + EDGES_HINT
                     + ", src/main/java or src/main/resources/application.yml)");
@@ -253,9 +260,20 @@ public final class ProjectCollector {
             found.http().notes().forEach(n -> notes.add(m.name() + ": " + n));
         }
 
-        IstioCollector.Result istio = manifests.isEmpty() ? null : IstioCollector.collect(root, manifests, kb);
+        IstioCollector.Result istio = manifests.isEmpty() && !labelled ? null
+                : IstioCollector.collect(root, manifests, kb);
         if (istio != null) {
             notes.addAll(istio.notes());
+        }
+        DataPlane.Result dataPlane = null;
+        if (labelled) {
+            Set<String> names = new TreeSet<>(modules.keySet());
+            edges.forEach(e -> {
+                names.add(e.from());
+                names.add(e.to());
+            });
+            dataPlane = DataPlane.collect(root, kubernetes, names, kb);
+            notes.addAll(dataPlane.notes());
         }
         Map<String, List<Route>> runningRoutes = new TreeMap<>();
         dumps.forEach((service, dump) -> {
@@ -264,7 +282,7 @@ public final class ProjectCollector {
             }
         });
         GraphAssembler.Result assembled = GraphAssembler.assemble(edges,
-                new HttpClientCollector.Result(httpLayers, List.of()), istio, runningRoutes);
+                new HttpClientCollector.Result(httpLayers, List.of()), istio, runningRoutes, dataPlane);
         notes.addAll(assembled.notes());
         ServiceAssembler.Result services = ServiceAssembler.assemble(assembled.edges(), hints, gateways);
         notes.addAll(services.notes());
@@ -272,7 +290,7 @@ public final class ProjectCollector {
         Coverage coverage = new Coverage("collected from " + modules.size() + " service module"
                 + (modules.size() == 1 ? "" : "s"),
                 sourcesRead(root, modules, services.graph(), dumps),
-                manifests.stream().map(p -> relative(root, p)).toList(),
+                manifestsRead(root, manifests, dataPlane),
                 edgeSearches(assembled.edges(), searched, e -> istio != null || runningRoutes.containsKey(e.from())),
                 unread.stream().sorted(UnreadSource.ORDER).distinct().toList());
         return new Run(new Result(services.graph(), notes.stream().sorted().distinct().toList(),
@@ -361,7 +379,22 @@ public final class ProjectCollector {
                         .anyMatch(f -> Files.isRegularFile(resources.resolve(f)));
     }
 
-    private static void walk(Path root, List<Path> modules, List<Path> manifests) {
+    /** The Istio manifests, then the other manifests data plane labels were read from, sorted together. */
+    private static List<String> manifestsRead(Path root, List<Path> manifests, DataPlane.Result dataPlane) {
+        TreeSet<String> out = manifests.stream().map(p -> relative(root, p))
+                .collect(Collectors.toCollection(TreeSet::new));
+        if (dataPlane != null) {
+            out.addAll(dataPlane.files());
+        }
+        return List.copyOf(out);
+    }
+
+    /**
+     * @param kubernetes collects every YAML file outside {@code src} that looks like a Kubernetes manifest
+     * @return whether one of them has Istio data plane labels (ADR 0017)
+     */
+    private static boolean walk(Path root, List<Path> modules, List<Path> manifests, List<Path> kubernetes) {
+        boolean[] labelled = {false};
         try {
             Files.walkFileTree(root, new SimpleFileVisitor<>() {
                 @Override
@@ -382,9 +415,15 @@ public final class ProjectCollector {
                 @Override
                 public FileVisitResult visitFile(Path file, BasicFileAttributes attrs) throws IOException {
                     String name = file.getFileName().toString();
-                    if (attrs.isRegularFile() && name.matches(".*\\.ya?ml") && !name.equals(EDGES_HINT)
-                            && ISTIO_MARKERS.stream().anyMatch(Files.readString(file, StandardCharsets.UTF_8)::contains)) {
-                        manifests.add(file);
+                    if (attrs.isRegularFile() && name.matches(".*\\.ya?ml") && !name.equals(EDGES_HINT)) {
+                        String text = Files.readString(file, StandardCharsets.UTF_8);
+                        if (ISTIO_MARKERS.stream().anyMatch(text::contains)) {
+                            manifests.add(file);
+                        }
+                        if (text.contains("apiVersion:") && text.contains("kind:")) {
+                            kubernetes.add(file);
+                            labelled[0] |= DataPlane.MARKERS.stream().anyMatch(text::contains);
+                        }
                     }
                     return FileVisitResult.CONTINUE;
                 }
@@ -394,5 +433,7 @@ public final class ProjectCollector {
         }
         modules.sort(null);
         manifests.sort(null);
+        kubernetes.sort(null);
+        return labelled[0];
     }
 }
