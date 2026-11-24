@@ -231,3 +231,28 @@
   unit: attempts-retries-only
   source: https://github.com/istio/istio/blob/56245da4ce832744b2062aab045e39a5c033000b/pilot/pkg/networking/core/route/retry/retry.go
   verified_by: source
+
+# Data plane mode (ADR 0017, #27): which edges an Istio layer applies to.
+- library: istio
+  versions: "1.32 (docs)"
+  parameter: injection.default
+  value: "false"
+  unit: boolean              # no istio-injection, istio.io/rev or sidecar.istio.io/inject label: the pod gets no sidecar (unless enableNamespacesByDefault)
+  source: https://istio.io/latest/docs/setup/additional-setup/sidecar-injection/
+  verified_by: doc
+
+- library: istio
+  versions: "1.32 (docs)"
+  parameter: waypoint.default
+  value: "false"
+  unit: boolean              # no istio.io/use-waypoint label on the Service or namespace: traffic to it uses no waypoint
+  source: https://istio.io/latest/docs/ambient/usage/waypoint/
+  verified_by: doc
+
+- library: istio
+  versions: "1.32 (docs)"
+  parameter: ambient.default
+  value: "false"
+  unit: boolean              # no istio.io/dataplane-mode=ambient label on the namespace or pod: not in ambient mode
+  source: https://istio.io/latest/docs/ambient/usage/add-workloads/
+  verified_by: doc
