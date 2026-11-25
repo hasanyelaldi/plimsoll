@@ -25,10 +25,12 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.function.Function;
 import java.util.function.IntFunction;
@@ -38,8 +40,8 @@ import java.util.regex.Pattern;
 import java.util.stream.Stream;
 
 /**
- * Collects Istio traffic policy from Kubernetes manifests: VirtualService HTTP routes as {@code istio} layers and
- * DestinationRule outlier detection.
+ * Collects Istio traffic policy from Kubernetes manifests: VirtualService HTTP routes and mesh HTTPRoutes (Gateway
+ * API) as {@code istio} layers and DestinationRule outlier detection.
  *
  * <p>A VirtualService applies to every caller of its host inside the mesh, so a route is keyed by the callee only;
  * {@link io.github.hasanyelaldi.plimsoll.collect.GraphAssembler} merges it onto edges. {@code attempts} counts
@@ -52,6 +54,10 @@ import java.util.stream.Stream;
  * {@code IstioOperator}'s {@code spec.meshConfig} and Helm values with a top-level {@code meshConfig}. Several
  * definitions that differ leave the mesh policy UNKNOWN, with a note.
  *
+ * <p>ADR 0018: an HTTPRoute whose parent is a Service is read as Istio converts it ({@code conversion.go} of Istio
+ * 1.31). Its {@code retry.attempts} counts retries only too; a {@code retry} block without it is UNKNOWN, because the
+ * default depends on the installed Gateway API version.
+ *
  * <p>Envoy's retry back-off is fully jittered exponential, which no fixed multiplier describes: {@code multiplier}
  * and {@code maxBackoff} stay UNKNOWN. Outlier detection is reported but not modelled by the analysis yet.
  */
@@ -59,20 +65,30 @@ public final class IstioCollector {
 
     private static final String KB = "istio";
     private static final String API_GROUP = "networking.istio.io/";
+    private static final String GATEWAY_API_GROUP = "gateway.networking.k8s.io/";
     private static final Pattern GO_DURATION = Pattern.compile("(\\d+(?:\\.\\d+)?)(ns|us|µs|ms|s|m|h)");
     /** {@code name}, {@code name.namespace}, {@code name.namespace.svc}, {@code name.namespace.svc.cluster.local} */
     private static final Pattern CLUSTER_HOST =
             Pattern.compile("([a-z0-9]([-a-z0-9]*[a-z0-9])?)(\\.[a-z0-9-]+(\\.svc(\\.cluster\\.local)?)?)?");
 
     /**
-     * One HTTP route of a VirtualService for one host.
+     * One HTTP route of a VirtualService, or one rule of an HTTPRoute, for one host.
      *
      * @param to       the callee service: the first label of a cluster-local host, else the host as written
      * @param host     the host as resolved by Istio: a short name is qualified with the rule's namespace
      * @param route    the route's {@code name}, else {@code http[i]}
      * @param evidence {@code file:line} of the route
+     * @param kind     the resource that declares it
      */
-    public record Route(String to, String host, String route, Layer layer, String evidence) {}
+    public record Route(String to, String host, String route, Layer layer, String evidence, Kind kind) {
+
+        public Route(String to, String host, String route, Layer layer, String evidence) {
+            this(to, host, route, layer, evidence, Kind.VIRTUAL_SERVICE);
+        }
+    }
+
+    /** {@code NONE}: no resource; the mesh default as a candidate next to consumer HTTPRoutes (ADR 0018). */
+    public enum Kind { VIRTUAL_SERVICE, HTTP_ROUTE, NONE }
 
     /**
      * DestinationRule outlier detection for one host, at the top level ({@code subset} null) or for one subset.
@@ -101,6 +117,10 @@ public final class IstioCollector {
     private final List<OutlierDetection> outliers = new ArrayList<>();
     private final List<String> notes = new ArrayList<>();
     private final Map<String, String> virtualServiceByHost = new HashMap<>();
+    /** Hosts with an HTTPRoute, and where the first one is. */
+    private final Map<String, String> httpRouteByHost = new TreeMap<>();
+    /** Hosts whose HTTPRoutes are all in another namespace than the service. */
+    private final Set<String> consumerOnly = new TreeSet<>();
     private IntFunction<String> where;
     /** The MeshConfig {@code defaultHttpRetryPolicy}, or null when none is declared. */
     private MeshPolicy mesh;
@@ -144,6 +164,11 @@ public final class IstioCollector {
      * @param files manifest files, read in this order
      */
     public static Result collect(Path base, List<Path> files, DefaultsKb kb) {
+        return collect(base, files, Set.of(), kb);
+    }
+
+    /** @param lenient those of {@code files} that are noted, not rejected, when they are not valid YAML */
+    public static Result collect(Path base, List<Path> files, Set<Path> lenient, DefaultsKb kb) {
         IstioCollector c = new IstioCollector(kb);
         base = base.toAbsolutePath();
         List<Document> docs = new ArrayList<>();
@@ -155,8 +180,15 @@ public final class IstioCollector {
             } catch (IOException e) {
                 throw new InvalidSpecException(file + ": cannot read: " + e.getMessage(), e);
             }
-            for (Node doc : YamlTree.parseAll(text, file)) {
-                docs.add(new Document(file, text, doc));
+            try {
+                for (Node doc : YamlTree.parseAll(text, file)) {
+                    docs.add(new Document(file, text, doc));
+                }
+            } catch (InvalidSpecException e) {
+                if (!lenient.contains(p)) {
+                    throw e;
+                }
+                c.notes.add(e.getMessage() + "; its HTTPRoutes are not read");
             }
         }
         // the mesh policy first: it applies to routes of every VirtualService, whichever file it is in
@@ -171,6 +203,7 @@ public final class IstioCollector {
         c.where = line -> "(mesh default)";
         Layer meshDefault = c.meshLayer(c.routeTimeout("no VirtualService for the host"),
                 "no VirtualService for the host");
+        c.routePrecedence(meshDefault);
         return new Result(c.routes, c.outliers, meshDefault, c.notes);
     }
 
@@ -195,7 +228,18 @@ public final class IstioCollector {
         }
         String apiVersion = optionalText(m, "apiVersion");
         String kind = optionalText(m, "kind");
-        if (apiVersion == null || !apiVersion.startsWith(API_GROUP) || kind == null) {
+        if (apiVersion == null || kind == null) {
+            return;
+        }
+        if (apiVersion.startsWith(GATEWAY_API_GROUP)) {
+            switch (kind) {
+                case "HTTPRoute" -> httpRoute(m);
+                case "GRPCRoute" -> grpcRoute(m);
+                default -> { }
+            }
+            return;
+        }
+        if (!apiVersion.startsWith(API_GROUP)) {
             return;
         }
         switch (kind) {
@@ -358,6 +402,209 @@ public final class IstioCollector {
         return Set.copyOf(out);
     }
 
+    // ---- HTTPRoute (ADR 0018) --------------------------------------------
+
+    private record ServiceParent(String host, boolean consumer, int line) {}
+
+    private void httpRoute(MapNode r) {
+        String name = metadataName(r);
+        MapNode spec = map(r, "spec");
+        if (spec == null) {
+            return;
+        }
+        List<Node> rules = items(spec, "rules");
+        for (ServiceParent parent : serviceParents(spec, name, namespace(r))) {
+            List<Route> own = new ArrayList<>();
+            for (int i = 0; i < rules.size(); i++) {
+                if (!(rules.get(i) instanceof MapNode rule)) {
+                    throw new InvalidSpecException(at(rules.get(i).line()) + ": HTTPRoute rule must be a mapping");
+                }
+                if (!forwards(rule)) {
+                    note(at(rule.line()) + ": HTTPRoute " + name + " rules[" + i
+                            + "] has no backend with a weight, so it calls no service; not read");
+                    continue;
+                }
+                String ruleName = Optional.ofNullable(optionalText(rule, "name")).orElse("rules[" + i + "]");
+                own.add(new Route(serviceOf(parent.host()), parent.host(), name + " " + ruleName,
+                        httpRouteLayer(rule), at(rule.line()), Kind.HTTP_ROUTE));
+            }
+            if (own.isEmpty()) {
+                continue;
+            }
+            if (own.size() > 1) {
+                notes.add(at(parent.line()) + ": host " + parent.host() + " has " + own.size()
+                        + " rules in HTTPRoute " + name + "; the most specific match applies");
+            }
+            routes.addAll(own);
+            boolean first = httpRouteByHost.putIfAbsent(parent.host(), own.get(0).evidence()) == null;
+            if (!parent.consumer()) {
+                consumerOnly.remove(parent.host());
+            } else {
+                notes.add(at(parent.line()) + ": HTTPRoute " + name + " is not in the namespace of " + parent.host()
+                        + " (a consumer route); which callers it applies to is not modelled");
+                if (first) {
+                    consumerOnly.add(parent.host());
+                }
+            }
+        }
+    }
+
+    /** The Services an HTTPRoute is attached to, each host once; other parents are noted. */
+    private List<ServiceParent> serviceParents(MapNode spec, String name, String namespace) {
+        Map<String, ServiceParent> out = new LinkedHashMap<>();
+        Integer gatewayLine = null;
+        for (Node n : items(spec, "parentRefs")) {
+            if (!(n instanceof MapNode ref)) {
+                throw new InvalidSpecException(at(n.line()) + ": parentRef must be a mapping");
+            }
+            String kind = Optional.ofNullable(optionalText(ref, "kind")).orElse("Gateway");
+            String group = Optional.ofNullable(optionalText(ref, "group")).orElse("gateway.networking.k8s.io");
+            if (!kind.equals("Service") || !(group.isEmpty() || group.equals("core"))) {
+                if (kind.equals("Gateway")) {
+                    gatewayLine = gatewayLine == null ? n.line() : gatewayLine;
+                } else {
+                    notes.add(at(n.line()) + ": HTTPRoute " + name + " parent " + kind + " is not read");
+                }
+                continue;
+            }
+            String service = optionalText(ref, "name");
+            if (service == null) {
+                throw new InvalidSpecException(at(n.line()) + ": parentRef has no name");
+            }
+            String parentNamespace = optionalText(ref, "namespace");
+            boolean consumer = parentNamespace != null && !parentNamespace.equals(namespace);
+            String host = qualify(service, parentNamespace == null ? namespace : parentNamespace, n.line());
+            if (ref.entries().containsKey("port")) {
+                notes.add(at(n.line()) + ": HTTPRoute " + name + " is attached to one port of " + host
+                        + "; edges have no port, so it is read for every call");
+            }
+            out.putIfAbsent(host, new ServiceParent(host, consumer, n.line()));
+        }
+        if (gatewayLine != null && out.isEmpty()) {
+            notes.add(at(gatewayLine) + ": HTTPRoute " + name + " binds gateways only, not the mesh; skipped");
+        }
+        return List.copyOf(out.values());
+    }
+
+    private void grpcRoute(MapNode r) {
+        MapNode spec = map(r, "spec");
+        if (spec != null && items(spec, "parentRefs").stream().anyMatch(n -> n instanceof MapNode ref
+                && "Service".equals(optionalText(ref, "kind")))) {
+            notes.add(at(r.line()) + ": GRPCRoute " + metadataName(r) + " is not read");
+        }
+    }
+
+    /** Istio answers 500 (or redirects) without calling a backend when the weights of a rule add up to 0. */
+    private boolean forwards(MapNode rule) {
+        for (Node n : items(rule, "backendRefs")) {
+            Entry weight = n instanceof MapNode ref ? ref.entries().get("weight") : null;
+            if (weight == null || integer(weight, "weight") > 0) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** {@code convertHTTPRoute} of Istio 1.31, then {@code ConvertPolicy} and {@code setTimeout}. */
+    private Layer httpRouteLayer(MapNode rule) {
+        MapNode timeouts = map(rule, "timeouts");
+        Val<Duration> request = timeout(timeouts, "request");
+        Val<Duration> backendRequest = timeout(timeouts, "backendRequest");
+        Val<Duration> routeTimeout = request != null ? request
+                : routeTimeout("no request timeout at " + at(rule.line()));
+        Entry retryEntry = rule.entries().get("retry");
+        MapNode retry = map(rule, "retry");
+        if (retry == null) {
+            // without retry, Istio makes backendRequest the route timeout, in place of request
+            return meshLayer(isSet(backendRequest) ? backendRequest : routeTimeout,
+                    "no retry at " + at(rule.line()));
+        }
+        String at = at(retryEntry.keyLine());
+        String absent = "not set in retry at " + at;
+        Entry attempts = retry.entries().get("attempts");
+        Val<Integer> totalAttempts;
+        if (attempts == null) {
+            totalAttempts = Val.unknown("retry at " + at + " has no attempts; its default depends on the installed "
+                    + "Gateway API version: " + attemptsDefault("httpRoute.retry.attemptsCrdDefault") + ", "
+                    + attemptsDefault("httpRoute.retry.attemptsUnset"));
+        } else {
+            int n = integer(attempts, "attempts");
+            totalAttempts = Val.explicit(n + 1, at(attempts.keyLine()) + " (attempts " + n + " + 1)");
+        }
+        boolean off = Integer.valueOf(1).equals(totalAttempts.value());
+        if (off && isSet(backendRequest)) {
+            note(backendRequest.evidence() + ": backendRequest is not applied; Istio makes it the per-try timeout of "
+                    + "a retry policy, and retry.attempts 0 removes that policy");
+        }
+        Val<Duration> perTry = !off && isSet(backendRequest) ? backendRequest
+                : perTryTimeout(null, absent, routeTimeout);
+        RetryPolicy policy = new RetryPolicy(totalAttempts, perTry,
+                field(retry, "backoff", this::duration,
+                        () -> kb.defaultOr(KB, "retries.backoff", t -> parseDuration(t, "kb"), absent)),
+                Val.unknown("Envoy back-off is fully jittered exponential; no fixed multiplier"),
+                Val.unknown("Envoy back-off is fully jittered exponential; no fixed cap on the minimum wait"),
+                kb.defaultOr(KB, "retries.jitter", Boolean::valueOf, "Istio has no jitter setting"),
+                retryOn(retry, at));
+        return new Layer("istio", policy, routeTimeout,
+                new RetryConditions(retried(policy.retryOn()), kb.givesUpAs(KB)));
+    }
+
+    private String attemptsDefault(String parameter) {
+        return kb.lookup(KB, parameter).map(e -> e.value() + " (" + e.evidence() + ")")
+                .orElse("UNKNOWN (no verified entry for " + parameter + ")");
+    }
+
+    /** The connection conditions Istio always adds, and the listed status codes. */
+    private Val<Set<String>> retryOn(MapNode retry, String at) {
+        Val<Set<String>> base = kb.defaultOr(KB, "httpRoute.retry.retryOn", IstioCollector::conditions,
+                "retry at " + at);
+        Entry codes = retry.entries().get("codes");
+        if (codes == null || !base.isKnown() || items(retry, "codes").isEmpty()) {
+            return base;
+        }
+        Set<String> all = new TreeSet<>(base.value());
+        items(retry, "codes").forEach(n -> all.add(text(n, "codes")));
+        return Val.explicit(Set.copyOf(all), at(codes.keyLine()) + "; " + base.evidence());
+    }
+
+    /** Null when absent; a zero duration disables the timeout ({@link Durations#UNLIMITED}). */
+    private Val<Duration> timeout(MapNode timeouts, String key) {
+        Entry e = timeouts == null ? null : timeouts.entries().get(key);
+        if (e == null) {
+            return null;
+        }
+        Duration d = duration(e);
+        return Val.explicit(d.isZero() ? Durations.UNLIMITED : d, at(e.keyLine()));
+    }
+
+    /** Istio ignores a {@code backendRequest} of zero. */
+    private static boolean isSet(Val<Duration> timeout) {
+        return timeout != null && !timeout.value().equals(Durations.UNLIMITED);
+    }
+
+    /** Adds a note once: the rules of an HTTPRoute are read per parent. */
+    private void note(String text) {
+        if (!notes.contains(text)) {
+            notes.add(text);
+        }
+    }
+
+    /**
+     * Which of several resources for one host a proxy uses. A host with consumer routes only gets the mesh default as
+     * another candidate: callers the routes do not apply to have it.
+     */
+    private void routePrecedence(Layer meshDefault) {
+        httpRouteByHost.forEach((host, at) -> {
+            String vs = virtualServiceByHost.get(host);
+            if (vs != null) {
+                notes.add(at + ": host " + host + " has this HTTPRoute and a VirtualService at " + vs
+                        + "; which one a proxy uses is not modelled");
+            } else if (consumerOnly.contains(host)) {
+                routes.add(new Route(serviceOf(host), host, "no route", meshDefault, "(mesh default)", Kind.NONE));
+            }
+        });
+    }
+
     // ---- MeshConfig ------------------------------------------------------
 
     private static final Pattern MESH_BLOCK = Pattern.compile("\\s*mesh:\\s*\\|[-+]?\\s*(#.*)?");
@@ -430,7 +677,7 @@ public final class IstioCollector {
     /** Keys sorted, scalars as text: two policies that say the same compare equal. */
     private static String canonical(Node n) {
         return switch (n) {
-            case MapNode m -> new java.util.TreeMap<>(m.entries()).entrySet().stream()
+            case MapNode m -> new TreeMap<>(m.entries()).entrySet().stream()
                     .map(e -> e.getKey() + "=" + canonical(e.getValue().value()))
                     .collect(java.util.stream.Collectors.joining(",", "{", "}"));
             case ListNode l -> l.items().stream().map(IstioCollector::canonical)

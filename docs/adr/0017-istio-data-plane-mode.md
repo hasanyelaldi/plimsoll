@@ -77,4 +77,4 @@ a note says so.
 - Not read: the injector's `enableNamespacesByDefault` and custom `namespaceSelector`s, `--set` values, labels set
   in the cluster only. A note names the case where the namespace manifest gives no label, since a cluster label
   or manual injection would change the answer.
-- HTTPRoute (the supported route resource for waypoints) is #27 part 2.
+- HTTPRoute (the supported route resource for waypoints) is ADR 0018.

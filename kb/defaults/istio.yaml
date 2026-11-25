@@ -256,3 +256,28 @@
   unit: boolean              # no istio.io/dataplane-mode=ambient label on the namespace or pod: not in ambient mode
   source: https://istio.io/latest/docs/ambient/usage/add-workloads/
   verified_by: doc
+
+# HTTPRoute (Gateway API) as Istio converts it (ADR 0018, #27).
+- library: istio
+  versions: "1.31, Gateway API CRDs up to 1.6"
+  parameter: httpRoute.retry.attemptsUnset
+  value: 2                    # int32(ptr.OrDefault(r.Retry.Attempts, 2))
+  unit: attempts-retries-only
+  source: https://github.com/istio/istio/blob/56245da4ce832744b2062aab045e39a5c033000b/pilot/pkg/config/kube/gateway/conversion.go
+  verified_by: source
+
+- library: istio
+  versions: "Gateway API CRDs 1.7.0"
+  parameter: httpRoute.retry.attemptsCrdDefault
+  value: 1                    # the CRD default: the API server fills it in before Istio reads the route
+  unit: attempts-retries-only
+  source: https://github.com/kubernetes-sigs/gateway-api/blob/v1.7.0/config/crd/standard/gateway.networking.k8s.io_httproutes.yaml
+  verified_by: source
+
+- library: istio
+  versions: "1.31"
+  parameter: httpRoute.retry.retryOn
+  value: connect-failure,refused-stream,unavailable,cancelled # retry.codes are added to these
+  unit: conditions
+  source: https://github.com/istio/istio/blob/56245da4ce832744b2062aab045e39a5c033000b/pilot/pkg/config/kube/gateway/conversion.go
+  verified_by: source

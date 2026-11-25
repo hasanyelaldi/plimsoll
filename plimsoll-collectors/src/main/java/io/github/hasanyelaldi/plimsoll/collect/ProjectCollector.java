@@ -16,6 +16,7 @@ import io.github.hasanyelaldi.plimsoll.collect.http.HttpClientCollector;
 import io.github.hasanyelaldi.plimsoll.collect.http.HttpClientCollector.EdgeKey;
 import io.github.hasanyelaldi.plimsoll.collect.istio.DataPlane;
 import io.github.hasanyelaldi.plimsoll.collect.istio.IstioCollector;
+import io.github.hasanyelaldi.plimsoll.collect.istio.IstioCollector.Kind;
 import io.github.hasanyelaldi.plimsoll.collect.istio.IstioCollector.Route;
 import io.github.hasanyelaldi.plimsoll.collect.kb.DefaultsKb;
 import io.github.hasanyelaldi.plimsoll.collect.resilience4j.EdgesHint;
@@ -50,7 +51,9 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
  * Collects the service graph of a directory: finds its service modules and Istio manifests, runs every collector
@@ -71,6 +74,8 @@ import java.util.stream.Collectors;
  *       {@code defaultHttpRetryPolicy} (an {@code istio} ConfigMap or Helm values with a MeshConfig, ADR 0016). Other
  *       YAML (Helm templates, Compose files) is not parsed for Istio policy. Without such a file the graph has no
  *       mesh, unless a Kubernetes manifest has data plane labels.
+ *   <li>A file with a Gateway API {@code HTTPRoute} is read when the directory has an Istio manifest or data plane
+ *       labels (ADR 0018). Otherwise its mesh routes are noted: other meshes implement HTTPRoute too.
  *   <li>When a Kubernetes manifest (a YAML file with {@code apiVersion:} and {@code kind:}) has Istio data plane
  *       labels ({@link DataPlane#MARKERS}), every Kubernetes manifest is read for namespaces, workloads and
  *       Services, and the data plane mode decides which edges get an Istio layer (ADR 0017).
@@ -92,6 +97,7 @@ public final class ProjectCollector {
     private static final Set<String> SKIPPED = Set.of("target", "build", "node_modules");
     private static final List<String> ISTIO_MARKERS =
             List.of("networking.istio.io/", "install.istio.io/", "defaultHttpRetryPolicy");
+    private static final Pattern HTTP_ROUTE = Pattern.compile("kind:\\s*[\"']?(HTTPRoute|GRPCRoute)");
     private static final List<String> BUILD_FILES = List.of("pom.xml", "build.gradle", "build.gradle.kts");
     private static final Comparator<EdgeSearch> EDGE_ORDER = Comparator.comparing(EdgeSearch::edge)
             .thenComparing(EdgeSearch::operation, Comparator.nullsFirst(Comparator.naturalOrder()));
@@ -179,7 +185,8 @@ public final class ProjectCollector {
         List<Path> moduleRoots = new ArrayList<>();
         List<Path> manifests = new ArrayList<>();
         List<Path> kubernetes = new ArrayList<>();
-        boolean labelled = walk(root, moduleRoots, manifests, kubernetes);
+        List<Path> httpRoutes = new ArrayList<>();
+        boolean labelled = walk(root, moduleRoots, manifests, kubernetes, httpRoutes);
         if (moduleRoots.isEmpty()) {
             throw new InvalidSpecException(dir + ": no service module found (a directory with " + EDGES_HINT
                     + ", src/main/java or src/main/resources/application.yml)");
@@ -260,11 +267,19 @@ public final class ProjectCollector {
             found.http().notes().forEach(n -> notes.add(m.name() + ": " + n));
         }
 
-        IstioCollector.Result istio = manifests.isEmpty() && !labelled ? null
-                : IstioCollector.collect(root, manifests, kb);
-        if (istio != null) {
+        IstioCollector.Result istio = null;
+        if (!manifests.isEmpty() || labelled) {
+            manifests = Stream.concat(manifests.stream(), httpRoutes.stream()).sorted().toList();
+            istio = IstioCollector.collect(root, manifests, Set.copyOf(httpRoutes), kb);
             notes.addAll(istio.notes());
+        } else {
+            // other meshes implement HTTPRoute too (ADR 0018)
+            IstioCollector.collect(root, httpRoutes, Set.copyOf(httpRoutes), kb).routes().stream()
+                    .filter(r -> r.kind() == Kind.HTTP_ROUTE)
+                    .forEach(r -> notes.add(r.evidence() + ": HTTPRoute for " + r.to() + " is not applied; no Istio "
+                            + "manifest or data plane label says that Istio implements it"));
         }
+        boolean mesh = istio != null;
         DataPlane.Result dataPlane = null;
         if (labelled) {
             Set<String> names = new TreeSet<>(modules.keySet());
@@ -291,7 +306,7 @@ public final class ProjectCollector {
                 + (modules.size() == 1 ? "" : "s"),
                 sourcesRead(root, modules, services.graph(), dumps),
                 manifestsRead(root, manifests, dataPlane),
-                edgeSearches(assembled.edges(), searched, e -> istio != null || runningRoutes.containsKey(e.from())),
+                edgeSearches(assembled.edges(), searched, e -> mesh || runningRoutes.containsKey(e.from())),
                 unread.stream().sorted(UnreadSource.ORDER).distinct().toList());
         return new Run(new Result(services.graph(), notes.stream().sorted().distinct().toList(),
                 detections.stream().sorted(Detection.ORDER).distinct().toList(), coverage), declaredProps);
@@ -391,9 +406,11 @@ public final class ProjectCollector {
 
     /**
      * @param kubernetes collects every YAML file outside {@code src} that looks like a Kubernetes manifest
+     * @param httpRoutes collects the YAML files with a Gateway API route that are no Istio manifests
      * @return whether one of them has Istio data plane labels (ADR 0017)
      */
-    private static boolean walk(Path root, List<Path> modules, List<Path> manifests, List<Path> kubernetes) {
+    private static boolean walk(Path root, List<Path> modules, List<Path> manifests, List<Path> kubernetes,
+            List<Path> httpRoutes) {
         boolean[] labelled = {false};
         try {
             Files.walkFileTree(root, new SimpleFileVisitor<>() {
@@ -419,6 +436,8 @@ public final class ProjectCollector {
                         String text = Files.readString(file, StandardCharsets.UTF_8);
                         if (ISTIO_MARKERS.stream().anyMatch(text::contains)) {
                             manifests.add(file);
+                        } else if (HTTP_ROUTE.matcher(text).find() && text.contains("gateway.networking.k8s.io/")) {
+                            httpRoutes.add(file);
                         }
                         if (text.contains("apiVersion:") && text.contains("kind:")) {
                             kubernetes.add(file);
@@ -434,6 +453,7 @@ public final class ProjectCollector {
         modules.sort(null);
         manifests.sort(null);
         kubernetes.sort(null);
+        httpRoutes.sort(null);
         return labelled[0];
     }
 }
