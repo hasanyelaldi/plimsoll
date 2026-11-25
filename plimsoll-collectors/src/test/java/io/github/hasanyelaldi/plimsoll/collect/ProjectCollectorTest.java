@@ -439,6 +439,45 @@ class ProjectCollectorTest {
                 + "assumed to have a sidecar, so the Istio layer applies to its calls");
     }
 
+    // ---- HTTPRoute (ADR 0018, #27) ----------------------------------------
+
+    private void productpageRoute() throws IOException {
+        write("k8s/route.yaml", """
+                apiVersion: gateway.networking.k8s.io/v1
+                kind: HTTPRoute
+                metadata: { name: productpage, namespace: shop }
+                spec:
+                  parentRefs: [ { group: "", kind: Service, name: productpage } ]
+                  rules:
+                  - backendRefs: [ { name: productpage, port: 80 } ]
+                    retry: { attempts: 4 }
+                """);
+    }
+
+    @Test
+    void anHttpRouteAppliesThroughAWaypointWithoutTheAlphaNote() throws IOException {
+        frontendIn("istio.io/dataplane-mode: ambient", "istio.io/use-waypoint: waypoint");
+        productpageRoute();
+        write("chart/route.yaml", "apiVersion: gateway.networking.k8s.io/v1\nkind: HTTPRoute\nspec: {{ .Values.x }\n  - [\n");
+        ProjectCollector.Result r = ProjectCollector.collect(dir);
+        assertThat(innermost(edge(r, "productpage", "/productpage/**")).retry().totalAttempts().value()).isEqualTo(5);
+        assertThat(r.notes()).noneMatch(n -> n.contains("Alpha"));
+        assertThat(r.notes()).anyMatch(n -> n.startsWith("chart/route.yaml")
+                && n.endsWith("; its HTTPRoutes are not read"));
+        assertThat(r.coverage().manifests()).contains("k8s/route.yaml");
+    }
+
+    @Test
+    void anHttpRouteAloneDoesNotPutTheGraphInAnIstioMesh() throws IOException {
+        copy("projects/effective-mesh/frontend", "frontend");
+        productpageRoute();
+        ProjectCollector.Result r = ProjectCollector.collect(dir);
+        assertThat(edge(r, "productpage", "/productpage/**").layers()).extracting(Layer::kind).doesNotContain("istio");
+        assertThat(r.notes()).contains("k8s/route.yaml:7: HTTPRoute for productpage is not applied; no Istio manifest "
+                + "or data plane label says that Istio implements it");
+        assertThat(r.coverage().manifests()).isEmpty();
+    }
+
     // ---- effective configuration (ADR 0016, #25) --------------------------
 
     @Test

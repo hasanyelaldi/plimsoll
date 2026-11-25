@@ -134,6 +134,7 @@ Plimsoll finds the service modules and Istio manifests under the directory and c
 | Spring Cloud Gateway | routes to `lb://` services become edges, with their `Retry` filters, response timeouts and `CircuitBreaker` filters (settings and TimeLimiter from Spring Cloud CircuitBreaker `Customizer` beans and Resilience4j properties) |
 | HTTP clients | WebClient / RestClient / RestTemplate requests to a known service through a `@LoadBalanced` client become edges; Spring Cloud LoadBalancer retries become a layer; a reactive Spring Cloud CircuitBreaker `run` around the request adds a breaker layer with its TimeLimiter |
 | Istio `VirtualService`, `DestinationRule`, MeshConfig (`istio` ConfigMap, `IstioOperator`, Helm `meshConfig`) | retry and timeout layers, including Istio's implicit default retry policy or the mesh's `defaultHttpRetryPolicy` |
+| Gateway API `HTTPRoute` with a Service parent | the same layer, as Istio converts it ([ADR 0018](docs/adr/0018-mesh-httproutes.md)) |
 | Kubernetes `Namespace`, workload and `Service` labels (`istio-injection`, `sidecar.istio.io/inject`, `istio.io/dataplane-mode`, `istio.io/use-waypoint`) | which edges pass a proxy that applies the Istio layer: sidecar, ambient with a waypoint, or none ([ADR 0017](docs/adr/0017-istio-data-plane-mode.md)) |
 
 Several repositories are analysed by checking them out side by side under one directory and analysing that directory.
@@ -245,6 +246,7 @@ Libraries count differently. Plimsoll normalizes every layer to `totalAttempts`,
 | --- | --- | --- |
 | Resilience4j Retry | `maxAttempts` (includes the first call) | `maxAttempts` |
 | Istio VirtualService | `retries.attempts` (retries only) | `attempts + 1` |
+| Gateway API HTTPRoute, through Istio | `retry.attempts` (retries only; absent is `UNKNOWN`) | `attempts + 1` |
 | Spring Cloud Gateway `Retry` filter | `retries` (retries only) | `retries + 1` |
 | Spring Cloud LoadBalancer | `max-retries-on-same-service-instance`, `max-retries-on-next-service-instance` | `(same + 1) × (next + 1)` |
 | `generic` layer | `totalAttempts` | as written |
@@ -274,7 +276,7 @@ v0.1 gives an upper bound from static configuration. Before acting on a report, 
 - **Fanout is unknown without a hint.** In a collected graph A1 counts an edge without `fanout` as 1 and reports "at least ×n".
 - **Not every request becomes an edge.** Only requests through a `@LoadBalanced` client to a known service are edges; plain clients, `DiscoveryClient` lookups and hosts built by helper methods ([#55](https://github.com/hasanyelaldi/plimsoll/issues/55)) are listed as notes. Requests made at startup are counted as per-request edges ([#54](https://github.com/hasanyelaldi/plimsoll/issues/54)).
 - **Blocking LoadBalancer retries** (RestTemplate, RestClient) have `UNKNOWN` attempts: there is no oracle test for that path yet.
-- **Istio:** the MeshConfig `defaultHttpRetryPolicy` is read from manifests only (per-workload proxy configuration and `--set` flags are not; a dump with `--effective` shows what runs); when several HTTP routes of a host disagree, the differing fields are `UNKNOWN`; services are matched on the first label of the host; without data plane labels in the manifests every caller is assumed to have a sidecar; the injector's `enableNamespacesByDefault` and labels set only in the cluster are not read. Gateway API `HTTPRoute` is not read yet ([#27](https://github.com/hasanyelaldi/plimsoll/issues/27)).
+- **Istio:** the MeshConfig `defaultHttpRetryPolicy` is read from manifests only (per-workload proxy configuration and `--set` flags are not; a dump with `--effective` shows what runs); when several HTTP routes of a host disagree, the differing fields are `UNKNOWN`; services are matched on the first label of the host; without data plane labels in the manifests every caller is assumed to have a sidecar; the injector's `enableNamespacesByDefault` and labels set only in the cluster are not read. A Gateway API `HTTPRoute` is read as Istio converts it, only for Service parents and only when Istio manifests or data plane labels are there; consumer routes, `GRPCRoute`, ports and the installed Gateway API version are not modelled.
 - **Configuration not read:** config server, profile-specific documents, other config files and unresolved placeholders. The Coverage section lists each one it skipped.
 - **Large graphs:** A5 enumerates simple paths, which grows exponentially on wide graphs.
 

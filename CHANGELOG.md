@@ -29,6 +29,11 @@ the report format and the rules.
 
 ### Collectors
 
+- Gateway API `HTTPRoute` (ADR 0018, #27): a route whose parent is a Service becomes an Istio layer, converted as
+  Istio 1.31 does: `retry.attempts` n is n + 1 tries, `retry.codes` add to the connection failures, no `retry` is the
+  mesh default, `timeouts.request` / `backendRequest` are the route and per-try timeouts. A `retry` without
+  `attempts` is `UNKNOWN`: its default depends on the installed Gateway API version. Read only when Istio manifests
+  or data plane labels are there; otherwise a note.
 - Istio data plane mode (ADR 0017, #27): with Istio data plane labels in the Kubernetes manifests
   (`istio-injection`, `istio.io/rev`, `sidecar.istio.io/inject`, `istio.io/dataplane-mode`, `istio.io/use-waypoint`),
   each service's mode is read from its namespace and workload. An edge gets no Istio layer when its caller has

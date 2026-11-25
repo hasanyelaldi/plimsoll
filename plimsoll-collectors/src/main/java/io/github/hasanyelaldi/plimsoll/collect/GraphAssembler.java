@@ -4,6 +4,7 @@ import io.github.hasanyelaldi.plimsoll.collect.http.HttpClientCollector;
 import io.github.hasanyelaldi.plimsoll.collect.istio.DataPlane;
 import io.github.hasanyelaldi.plimsoll.collect.istio.DataPlane.Mode;
 import io.github.hasanyelaldi.plimsoll.collect.istio.IstioCollector;
+import io.github.hasanyelaldi.plimsoll.collect.istio.IstioCollector.Kind;
 import io.github.hasanyelaldi.plimsoll.collect.istio.IstioCollector.Route;
 import io.github.hasanyelaldi.plimsoll.model.Durations;
 import io.github.hasanyelaldi.plimsoll.model.Edge;
@@ -122,7 +123,9 @@ public final class GraphAssembler {
                 out.add(e);
                 continue;
             }
-            if (dataPlane != null && !proxied(e, dataPlane, layerByCallee.containsKey(e.to()), dataPlaneNotes)) {
+            if (dataPlane != null && !proxied(e, dataPlane,
+                    routesByCallee.getOrDefault(e.to(), List.of()).stream().anyMatch(r -> r.kind() == Kind.VIRTUAL_SERVICE),
+                    dataPlaneNotes)) {
                 bypassed.add(e.to());
                 out.add(e);
                 continue;
@@ -164,7 +167,7 @@ public final class GraphAssembler {
      * ADR 0017: whether a proxy that applies HTTP policy sits on {@code e}. Adds a note for an edge without one and
      * for a decision taken on an unknown mode.
      */
-    private static boolean proxied(Edge e, DataPlane.Result dataPlane, boolean routed, Set<String> notes) {
+    private static boolean proxied(Edge e, DataPlane.Result dataPlane, boolean virtualService, Set<String> notes) {
         Val<Mode> mode = dataPlane.mode(e.from());
         Val<Boolean> waypoint = dataPlane.waypoint(e.to());
         String edge = e.from() + "→" + e.to();
@@ -189,7 +192,7 @@ public final class GraphAssembler {
                     return true;
                 }
                 if (waypoint.value()) {
-                    if (routed) {
+                    if (virtualService) {
                         notes.add(edge + ": the VirtualService of " + e.to() + " applies through its waypoint ("
                                 + waypoint.evidence() + "), which Istio supports as Alpha");
                     }
@@ -246,7 +249,8 @@ public final class GraphAssembler {
                     + (v.isKnown() ? show(v.value()) : "UNKNOWN"));
         }
         return Val.unknown(to + " has " + routes.size() + " HTTP routes with different " + name + " ("
-                + String.join(", ", candidates) + "); which one applies depends on the request match");
+                + String.join(", ", candidates) + "); which one applies depends on the "
+                + (routes.stream().anyMatch(r -> r.kind() == Kind.NONE) ? "caller" : "request match"));
     }
 
     private static String show(Object value) {
