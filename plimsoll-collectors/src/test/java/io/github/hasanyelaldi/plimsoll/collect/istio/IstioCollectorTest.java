@@ -162,7 +162,7 @@ class IstioCollectorTest {
     }
 
     @Test
-    void retriesWithoutAttemptsAreOffAndGoDurationsParse() {
+    void retriesWithoutAttemptsAreOffAndDropThePerTryTimeout() {
         Route r = route("ledger", "http[0]");
         RetryPolicy p = r.layer().retry();
         // proto3 reads the absent attempts as 0, and retry.go turns 0 into no retry policy
@@ -170,7 +170,25 @@ class IstioCollectorTest {
         assertThat(p.totalAttempts().source()).isEqualTo(Source.LIBRARY_DEFAULT);
         assertThat(p.totalAttempts().evidence()).startsWith("retries at " + MORE + ":10 has no attempts; ")
                 .contains("retry/retry.go").endsWith("(attempts 0 + 1)");
-        assertThat(p.perTryTimeout()).isEqualTo(Val.explicit(Duration.ofSeconds(90), MORE + ":11"));
+        // #105: no retry policy, so no per-try timeout; the route has no timeout either
+        assertThat(p.perTryTimeout().value()).isEqualTo(Durations.UNLIMITED);
+        assertThat(result.notes()).anySatisfy(n -> assertThat(n).startsWith(MORE + ":11: perTryTimeout is not applied"));
+    }
+
+    @Test
+    void aPerTryTimeoutThatIsNotAppliedMustStillParse(@TempDir Path dir) throws IOException {
+        Files.writeString(dir.resolve("vs.yaml"), """
+                apiVersion: networking.istio.io/v1
+                kind: VirtualService
+                metadata: { name: orders }
+                spec:
+                  hosts: [ orders ]
+                  http:
+                    - retries: { attempts: 0, perTryTimeout: soon }
+                      route: [ { destination: { host: orders } } ]
+                """);
+        assertThatThrownBy(() -> IstioCollector.collect(dir)).isInstanceOf(InvalidSpecException.class)
+                .hasMessageContaining("vs.yaml:7");
     }
 
     @Test
@@ -403,6 +421,53 @@ class IstioCollectorTest {
         assertThat(r.notes()).contains("mesh.yaml:5 (data.mesh line 1): defaultHttpRetryPolicy differs from the one "
                 + "at mesh.yaml:11 (data.mesh line 1); which one a sidecar gets depends on its revision, so the mesh "
                 + "policy is UNKNOWN");
+    }
+
+    /** #105: Istio 1.31 retry.go removes the retry policy, and its per-try timeout, when attempts is 0 or unset. */
+    @Test
+    void oneTryDropsThePerTryTimeoutAndNotesIt(@TempDir Path dir) throws IOException {
+        Files.writeString(dir.resolve("vs.yaml"), """
+                apiVersion: networking.istio.io/v1
+                kind: VirtualService
+                metadata: { name: orders, namespace: shop }
+                spec:
+                  hosts: [ orders ]
+                  http:
+                    - name: zero
+                      timeout: 2s
+                      retries: { attempts: 0, perTryTimeout: 300ms }
+                      route: [ { destination: { host: orders } } ]
+                    - name: unset
+                      retries:
+                        perTryTimeout: 400ms
+                      route: [ { destination: { host: orders } } ]
+                    - name: kept
+                      retries: { attempts: 1, perTryTimeout: 500ms }
+                      route: [ { destination: { host: orders } } ]
+                """);
+        Result r = IstioCollector.collect(dir);
+        RetryPolicy zero = r.routes().stream().filter(x -> x.route().equals("zero")).findFirst().orElseThrow()
+                .layer().retry();
+        assertThat(zero.totalAttempts().value()).isEqualTo(1);
+        assertThat(zero.perTryTimeout().value()).isEqualTo(Duration.ofSeconds(2));
+        assertThat(zero.perTryTimeout().source()).isEqualTo(Source.LIBRARY_DEFAULT);
+        assertThat(zero.perTryTimeout().evidence()).startsWith("the route timeout (vs.yaml:8); perTryTimeout: no "
+                + "retry policy with one try (vs.yaml:9 (attempts 0 + 1)); ");
+
+        RetryPolicy unset = r.routes().stream().filter(x -> x.route().equals("unset")).findFirst().orElseThrow()
+                .layer().retry();
+        assertThat(unset.totalAttempts().value()).isEqualTo(1);
+        assertThat(unset.perTryTimeout().value()).isEqualTo(Durations.UNLIMITED);
+
+        RetryPolicy kept = r.routes().stream().filter(x -> x.route().equals("kept")).findFirst().orElseThrow()
+                .layer().retry();
+        assertThat(kept.perTryTimeout()).isEqualTo(Val.explicit(Duration.ofMillis(500), "vs.yaml:16"));
+
+        assertThat(r.notes()).contains(
+                "vs.yaml:9: perTryTimeout is not applied; Istio drops the retry policy, and its per-try timeout, "
+                        + "when it makes one try (vs.yaml:9 (attempts 0 + 1))");
+        assertThat(r.notes()).anySatisfy(n -> assertThat(n).startsWith("vs.yaml:13: perTryTimeout is not applied; "));
+        assertThat(r.notes()).noneSatisfy(n -> assertThat(n).startsWith("vs.yaml:16"));
     }
 
     @Test

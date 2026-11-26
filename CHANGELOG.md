@@ -46,6 +46,9 @@ the report format and the rules.
   Definitions that differ leave the mesh policy `UNKNOWN`, with a note.
 - Istio: a `retries` block without `attempts` is now one try (proto3 reads it as 0, which turns retries off in
   `retry.go`), not `UNKNOWN`. Testbed reports are unchanged.
+- Istio (#105): with one try (`attempts: 0` or no `attempts`), a VirtualService route's or the mesh policy's
+  `perTryTimeout` is no longer used, since `retry.go` drops the retry policy and its per-try timeout; the route
+  timeout bounds the try, and a note names the `perTryTimeout` that is not applied.
 - `/actuator/configprops` dumps (ADR 0016, #25): `plimsoll analyze <dir> --effective <service>=<file>` reads the
   JSON of a running service's configprops endpoint. Its Resilience4j, Spring Cloud Gateway, LoadBalancer and
   CircuitBreaker beans replace the declared properties under their prefixes, so the graph is the one that runs;

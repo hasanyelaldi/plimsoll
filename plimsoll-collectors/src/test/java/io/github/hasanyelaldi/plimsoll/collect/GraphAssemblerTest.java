@@ -154,7 +154,7 @@ class GraphAssemblerTest {
                   http:
                     - name: refunds
                       match: [ { uri: { prefix: /refunds } } ]
-                      retries: { attempts: 0, perTryTimeout: 1s, retryOn: "5xx,reset" }
+                      retries: { attempts: 1, perTryTimeout: 1s, retryOn: "5xx,reset" }
                     - name: rest
                       retries: { attempts: 2, perTryTimeout: 1s, retryOn: "reset,5xx" }
                 """);
@@ -163,7 +163,7 @@ class GraphAssemblerTest {
         RetryPolicy p = layer.retry();
 
         assertThat(p.totalAttempts()).isEqualTo(Val.unknown("b has 2 HTTP routes with different totalAttempts "
-                + "(refunds at vs.yaml:7: 1, rest at vs.yaml:10: 3); which one applies depends on the request match"));
+                + "(refunds at vs.yaml:7: 2, rest at vs.yaml:10: 3); which one applies depends on the request match"));
         assertThat(p.perTryTimeout()).isEqualTo(Val.explicit(Duration.ofSeconds(1),
                 "vs.yaml:9; same in all 2 HTTP routes of b"));
         assertThat(p.retryOn().value()).containsExactlyInAnyOrder("5xx", "reset");
