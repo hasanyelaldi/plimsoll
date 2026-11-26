@@ -334,10 +334,19 @@ public final class IstioCollector {
             int n = integer(attempts, "attempts");
             totalAttempts = Val.explicit(n + 1, at(attempts.keyLine()) + " (attempts " + n + " + 1)");
         }
+        // Istio 1.31 retry.go: attempts 0 removes the retry policy, its per-try timeout with it (#105)
+        boolean off = retries != null && Integer.valueOf(1).equals(totalAttempts.value());
+        Entry perTryEntry = retries == null ? null : retries.entries().get("perTryTimeout");
+        if (off && perTryEntry != null) {
+            duration(perTryEntry); // still invalid input when it does not parse
+            note(at(perTryEntry.keyLine()) + ": perTryTimeout is not applied; Istio drops the retry policy, and its "
+                    + "per-try timeout, when it makes one try (" + totalAttempts.evidence() + ")");
+        }
 
         RetryPolicy retry = new RetryPolicy(
                 totalAttempts,
-                perTryTimeout(retries, absent, routeTimeout),
+                off ? perTryTimeout(null, "no retry policy with one try (" + totalAttempts.evidence() + ")",
+                        routeTimeout) : perTryTimeout(retries, absent, routeTimeout),
                 field(retries, "backoff", this::duration,
                         () -> kb.defaultOr(KB, "retries.backoff", t -> parseDuration(t, "kb"), absent)),
                 Val.unknown("Envoy back-off is fully jittered exponential; no fixed multiplier"),
