@@ -36,6 +36,9 @@ final class AbandonedWorkRule {
     }
 
     private static void evaluateEdge(Edge edge, String where, Service callee, List<Finding> out) {
+        if (callee.external() && !callee.deadline().isKnown()) {
+            return; // ADR 0019: an external callee's own timeout is not knowable from the system's configuration
+        }
         List<UsedValue> values = new ArrayList<>();
         values.add(UsedValue.of(callee.name() + " deadline", callee.deadline(), Durations::format));
 

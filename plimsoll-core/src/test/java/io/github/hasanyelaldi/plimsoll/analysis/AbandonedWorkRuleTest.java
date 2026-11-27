@@ -91,4 +91,15 @@ class AbandonedWorkRuleTest {
             assertThat(x.detail()).isEqualTo("layer 1 (resilience4j): callee deadline 2 s > per-try 1 s");
         });
     }
+
+    /** ADR 0019: an external callee's timeout is not known, so it gives no finding unless the spec gives one. */
+    @Test
+    void anExternalCalleeWithoutADeadlineGivesNoFinding() {
+        String layers = "layers: [ { kind: generic, totalAttempts: 3, perTryTimeout: 1s } ]";
+        assertThat(findings(analyze("services: { a: { entry: true }, llm: { external: true } }\n"
+                + "edges:\n  - { from: a, to: llm, " + layers + " }\n"), "PLM-A2b")).isEmpty();
+        assertThat(findings(analyze("services: { a: { entry: true }, llm: { external: true, deadline: 5s } }\n"
+                + "edges:\n  - { from: a, to: llm, " + layers + " }\n"), "PLM-A2b"))
+                .singleElement().satisfies(f -> assertThat(f.detail()).isEqualTo("callee deadline 5 s > per-try 1 s"));
+    }
 }

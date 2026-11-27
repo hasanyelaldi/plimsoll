@@ -341,6 +341,10 @@ final class AmplificationRule {
             detail.append(')');
         }
         detail.append(", limit ").append(options.maxAmplification());
+        Service service = graph.services().get(v);
+        if (service != null && service.external()) {
+            detail.append("; external callee");
+        }
         for (String alternatives : alternatives(v, run, edges)) {
             detail.append("; ").append(alternatives);
         }

@@ -100,6 +100,9 @@ the report format and the rules.
   any other name is invalid input (#24).
 - A layer may have a `circuitBreaker` (name, position relative to the layer's retry, failure rate threshold,
   sliding window, minimum calls, wait in the open state); an absent field is `UNKNOWN` (ADR 0015, #22).
+- A service may say `external: true` (ADR 0019, #19): a callee outside the system, never an entry, with no outgoing
+  edges. PLM-A1 counts it against the same limit and says `external callee`; PLM-A2b gives no finding for one
+  without a `deadline`.
 
 ### CLI and report
 
