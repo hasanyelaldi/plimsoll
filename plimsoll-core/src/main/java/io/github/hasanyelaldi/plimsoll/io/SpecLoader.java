@@ -46,7 +46,7 @@ import java.util.stream.Collectors;
 public final class SpecLoader {
 
     private static final Set<String> TOP_KEYS = Set.of("services", "edges");
-    private static final Set<String> SERVICE_KEYS = Set.of("entry", "deadline");
+    private static final Set<String> SERVICE_KEYS = Set.of("entry", "deadline", "external");
     private static final Set<String> EDGE_KEYS = Set.of("from", "to", "operation", "idempotent", "fanout", "layers",
             "choice");
     private static final Set<String> LAYER_KEYS = Set.of(
@@ -105,6 +105,10 @@ public final class SpecLoader {
                         throw error(m.line(), "edge " + edge.location() + " refers to unknown service '" + end + "'");
                     }
                 }
+                if (services.get(edge.from()).external()) {
+                    throw error(m.line(), "edge " + edge.location() + " starts at external service '" + edge.from()
+                            + "', which has no outgoing edges (ADR 0019)");
+                }
                 edges.add(edge);
             }
         }
@@ -114,7 +118,12 @@ public final class SpecLoader {
     private Service service(String name, MapNode m) {
         checkKeys(m, SERVICE_KEYS, "service " + name);
         boolean entry = m.entries().containsKey("entry") && bool(m.entries().get("entry"), "entry");
-        return new Service(name, duration(m, "deadline"), entry);
+        Entry ext = m.entries().get("external");
+        boolean external = ext != null && bool(ext, "external");
+        if (external && entry) {
+            throw error(ext.keyLine(), "service " + name + " is external and cannot be an entry (ADR 0019)");
+        }
+        return new Service(name, duration(m, "deadline"), entry, external);
     }
 
     private Edge edge(MapNode m) {

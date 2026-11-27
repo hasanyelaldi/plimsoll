@@ -206,4 +206,22 @@ class SpecLoaderTest {
                 .isInstanceOf(InvalidSpecException.class)
                 .hasMessageContaining(messagePart);
     }
+
+    /** ADR 0019. */
+    @Test
+    void aServiceMayBeExternalButNeitherAnEntryNorACaller() {
+        var g = SpecLoader.parse("""
+                services: { a: { entry: true }, llm: { external: true } }
+                edges: [ { from: a, to: llm } ]
+                """, "t.yaml");
+        assertThat(g.services().get("llm").external()).isTrue();
+        assertThat(g.services().get("llm").deadline().isKnown()).isFalse();
+        assertThat(g.services().get("a").external()).isFalse();
+        assertInvalid("services: { a: { entry: true, external: true } }\n", "t.yaml:1: service a is external and "
+                + "cannot be an entry (ADR 0019)");
+        assertInvalid("""
+                services: { a: { entry: true }, llm: { external: true } }
+                edges: [ { from: llm, to: a } ]
+                """, "edge llm→a starts at external service 'llm', which has no outgoing edges (ADR 0019)");
+    }
 }

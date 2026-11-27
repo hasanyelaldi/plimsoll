@@ -397,4 +397,21 @@ class AmplificationRuleTest {
         assertThat(f.severity()).isEqualTo(Severity.ERROR);
         assertThat(f.detail()).isEqualTo("×11, limit 10; by failure class at b: ×1 for every class");
     }
+
+    /** ADR 0019: an external callee counts against the same limit, and the detail says it is external. */
+    @Test
+    void anExternalCalleeIsCountedAgainstTheLimit() {
+        AnalysisResult r = analyze("""
+                services: { gw: { entry: true }, ai: {}, llm: { external: true } }
+                edges:
+                  - { from: gw, to: ai, layers: [ { kind: generic, totalAttempts: 2 } ] }
+                  - { from: ai, to: llm, layers: [ { kind: generic, totalAttempts: 11 } ] }
+                """);
+        assertThat(load(r, "llm")).isEqualTo(BigInteger.valueOf(22));
+        assertThat(findings(r, "PLM-A1")).filteredOn(f -> f.location().equals("llm")).singleElement()
+                .satisfies(f -> {
+                    assertThat(f.severity()).isEqualTo(Severity.ERROR);
+                    assertThat(f.detail()).isEqualTo("×22 (ai ×2), limit 10; external callee");
+                });
+    }
 }

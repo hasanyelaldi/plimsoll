@@ -49,7 +49,7 @@ plimsoll-collectors/  read real config into the model: Spring Boot properties, R
 plimsoll-cli/     picocli entry point: `plimsoll analyze <spec-or-dir>` (a directory is collected; a Coverage section lists the files read per service, the layer kinds searched and found per edge, and the configuration it did not read (config imports and config server, profile documents and activations, other config files, placeholders under collected prefixes) under Sources not read; then collector notes sorted in a Notes section; several repositories are analysed by checking them out side by side under one directory, ADR 0010)
 examples/         hand-written specs; checkout.yaml is the canonical demo and acceptance test
 findings/         runs on real testbeds (pinned commit, generated report, hand check, gaps); petclinic.md for #9, trainticket.md for #28
-docs/adr/         decisions in MADR format (0001–0018 below)
+docs/adr/         decisions in MADR format (0001–0019 below)
 kb/defaults/      library defaults knowledge base, one YAML file per library
 kb/detectors/     patterns of mechanisms no collector models (PLM-C1); `Detector` in `…collect.detect`
 ```
@@ -75,7 +75,7 @@ record RetryConditions(Val<Set<FailureClass>> retried,                      // U
                        Val<Map<FailureClass, Set<FailureClass>>> givesUpAs) {}  // absent key = passed on as is
 record Edge(String from, String to, String operation, Val<Boolean> idempotent,
             Val<Integer> fanout, List<Layer> layers, Val<String> choice) {}    // layers: outermost first; choice: null or the routing decision it is an alternative of (ADR 0012)
-record Service(String name, Val<Duration> deadline, boolean entry) {}
+record Service(String name, Val<Duration> deadline, boolean entry, boolean external) {}  // external: outside the system, never an entry, no outgoing edges (ADR 0019)
 record ServiceGraph(Map<String, Service> services, List<Edge> edges) {}
 ```
 
@@ -112,7 +112,7 @@ Exit codes: `0` no finding at or above `--fail-on` (default `ERROR`), `1` otherw
 
 ## Spec format and acceptance test
 
-Durations are strings (`300ms`, `1s`); `perTryTimeout` and `overallTimeout` also take `unlimited` for a timeout that does not exist (ADR 0011). In a hand-written spec an absent `multiplier` means fixed backoff (1.0) and an absent `fanout` means 1; any other absent field is `UNKNOWN`. An edge may say `choice: <name>`: edges from one service with the same choice are alternatives (ADR 0012). A layer's `retryOn` lists failure classes (ADR 0014); absent means every class. A layer may have a `circuitBreaker` (ADR 0015); the report lists it, no rule reads it.
+Durations are strings (`300ms`, `1s`); `perTryTimeout` and `overallTimeout` also take `unlimited` for a timeout that does not exist (ADR 0011). In a hand-written spec an absent `multiplier` means fixed backoff (1.0) and an absent `fanout` means 1; any other absent field is `UNKNOWN`. An edge may say `choice: <name>`: edges from one service with the same choice are alternatives (ADR 0012). A layer's `retryOn` lists failure classes (ADR 0014); absent means every class. A layer may have a `circuitBreaker` (ADR 0015); the report lists it, no rule reads it. A service may say `external: true` (ADR 0019): A1 counts it against the same limit, A2b skips it unless it has a deadline.
 
 In a collected graph (ADR 0009): `deadline` comes only from `deadline:` in the service's own `edges-hint.yaml`, never from its callers' or its own outbound timeouts, else `UNKNOWN`; a Spring Cloud Gateway with routes is an entry unless its hint says `entry: false`; `fanout` comes from the hint method entry, else `UNKNOWN` (A1 counts it as 1 and tags `depends-on-unknown`), and a gateway route has fanout 1.
 
@@ -204,6 +204,7 @@ Seed entries, all `verified_by: none` until checked against primary sources:
 - 0016 Effective configuration inputs: dumps from a running environment (`--effective <service>=<file>`, no network) replace declared values in the graph (`EXPLICIT`, `<dump>:<line> (<JSON pointer>)`); each difference is PLM-C2 `WARN`; MeshConfig `defaultHttpRetryPolicy` is read statically from manifests.
 - 0017 Istio data plane mode: namespace, workload and Service labels give each caller's mode (sidecar, ambient, none, `UNKNOWN`) and each callee's waypoint; no Istio layer for a caller without a proxy or an ambient caller to a callee without a waypoint; unknown keeps the layer with a note; no labels anywhere changes nothing.
 - 0018 Mesh HTTPRoutes (Service parents) are read as Istio converts them, only when Istio manifests or data plane labels are there; `retry` without `attempts` is `UNKNOWN` (its default depends on the Gateway API CRDs); a VirtualService or a mesh default next to them is a candidate under the several-routes rule.
+- 0019 External callees (`Service.external`, spec `external: true`): outside the system, never an entry, no outgoing edges, deadline `UNKNOWN` unless a spec gives one; A1 counts them against the same limit (detail `external callee`), A2b gives no finding for one without a deadline.
 
 ## Related work (cite it, do not duplicate it)
 

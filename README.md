@@ -118,6 +118,7 @@ edges:
 - Layers are listed outermost first.
 - A layer may have a `circuitBreaker` with `name`, `position` (`wraps-all-tries`: outside the layer's retry; `each-try`: inside it), `failureRateThreshold` (percent), `slidingWindowType` (`count-based` or `time-based`), `slidingWindowSize`, `minimumNumberOfCalls` and `waitDurationInOpenState` ([ADR 0015](docs/adr/0015-circuit-breakers-in-the-model.md)). The report lists breakers after the findings; no rule uses them yet.
 - An absent `multiplier` means fixed backoff, an absent `fanout` means 1; any other absent field is `UNKNOWN`.
+- A service may say `external: true` for a callee outside the system, such as an LLM provider ([ADR 0019](docs/adr/0019-external-callees.md)). It cannot be an entry or call anything; A1 counts it against the same limit, and A2b skips it unless it has a `deadline`.
 - `choice: <name>` marks edges from one service that are alternatives (only one is taken per request, [ADR 0012](docs/adr/0012-alternative-edges-in-amplification.md)).
 
 ### A directory of services
