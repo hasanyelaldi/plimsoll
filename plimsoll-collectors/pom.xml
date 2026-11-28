@@ -98,6 +98,17 @@
           <artifactId>spring-cloud-starter-gateway-server-webflux</artifactId>
           <scope>test</scope>
         </dependency>
+        <!-- Spring AI retry oracle (#19): the RetryTemplate and ResponseErrorHandler Spring AI configures -->
+        <dependency>
+          <groupId>org.springframework.ai</groupId>
+          <artifactId>spring-ai-retry</artifactId>
+          <scope>test</scope>
+        </dependency>
+        <dependency>
+          <groupId>org.springframework.ai</groupId>
+          <artifactId>spring-ai-autoconfigure-retry</artifactId>
+          <scope>test</scope>
+        </dependency>
         <!-- configprops oracle (#25): a real /actuator/configprops dump -->
         <dependency>
           <groupId>org.springframework.boot</groupId>

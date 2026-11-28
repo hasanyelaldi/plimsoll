@@ -38,7 +38,8 @@ import java.util.stream.Collectors;
 /**
  * Loads the hand-written YAML spec. Attempt counts are normalized here, at the boundary:
  * Resilience4j {@code maxAttempts} and generic {@code totalAttempts} already include the first call,
- * Istio {@code attempts} counts retries only and becomes {@code attempts + 1}.
+ * Istio {@code attempts} counts retries only and becomes {@code attempts + 1}, and so does Spring AI
+ * {@code maxAttempts} (#19: Spring AI passes it to {@code maxRetries}).
  *
  * <p>An absent {@code multiplier} means fixed backoff (1.0) and an absent {@code fanout} means one call;
  * any other absent field is UNKNOWN. A layer may have a {@code circuitBreaker} (ADR 0015).
@@ -58,6 +59,7 @@ public final class SpecLoader {
             "resilience4j", "maxAttempts",
             "istio", "attempts",
             "http-client", "totalAttempts",
+            "spring-ai", "maxAttempts",
             "generic", "totalAttempts");
 
     private final String file;
@@ -153,7 +155,7 @@ public final class SpecLoader {
         String attemptsKey = ATTEMPTS_KEY.get(kind);
         if (attemptsKey == null) {
             throw error(m.entries().get("kind").keyLine(), "unknown layer kind '" + kind
-                    + "' (expected resilience4j, istio, http-client or generic)");
+                    + "' (expected resilience4j, istio, http-client, spring-ai or generic)");
         }
         for (String other : Set.of("maxAttempts", "attempts", "totalAttempts")) {
             if (!other.equals(attemptsKey) && m.entries().containsKey(other)) {
@@ -166,9 +168,9 @@ public final class SpecLoader {
         Entry attempts = m.entries().get(attemptsKey);
         if (attempts == null) {
             total = Val.unknown(absent(attemptsKey, m));
-        } else if (kind.equals("istio")) {
+        } else if (kind.equals("istio") || kind.equals("spring-ai")) {
             int retries = integer(attempts, attemptsKey, 0);
-            total = Val.explicit(retries + 1, at(attempts.keyLine()) + " (attempts " + retries + " + 1)");
+            total = Val.explicit(retries + 1, at(attempts.keyLine()) + " (" + attemptsKey + " " + retries + " + 1)");
         } else {
             total = Val.explicit(integer(attempts, attemptsKey, 1), at(attempts.keyLine()) + " (" + attemptsKey + ")");
         }

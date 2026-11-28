@@ -46,6 +46,12 @@ the report format and the rules.
   Definitions that differ leave the mesh policy `UNKNOWN`, with a note.
 - Istio: a `retries` block without `attempts` is now one try (proto3 reads it as 0, which turns retries off in
   `retry.go`), not `UNKNOWN`. Testbed reports are unchanged.
+- Spring AI (#19, ADR 0019): a service with the OpenAI model starter in its `pom.xml`, at a version whose chat model
+  retries with Spring AI's `RetryTemplate` (2.0.0-M1 to M4), gets an edge to the external service `openai` with a
+  `spring-ai` layer from `spring.ai.retry.*`: `max-attempts` counts retries only (default 10, so 11 tries), backoff
+  2 s × 5 up to 3 min without jitter, retried on `ResourceAccessException` and 5xx (plus `on-http-codes`, 4xx with
+  `on-client-errors`, minus `exclude-on-http-codes`). Its PLM-C1 detection goes. Other starters and later versions
+  (OpenAI Java SDK, #108) are notes. On petclinic, openai is at least ×22 (PLM-A1 `ERROR`).
 - Istio (#105): with one try (`attempts: 0` or no `attempts`), a VirtualService route's or the mesh policy's
   `perTryTimeout` is no longer used, since `retry.go` drops the retry policy and its per-try timeout; the route
   timeout bounds the try, and a note names the `perTryTimeout` that is not applied.
@@ -100,6 +106,7 @@ the report format and the rules.
   any other name is invalid input (#24).
 - A layer may have a `circuitBreaker` (name, position relative to the layer's retry, failure rate threshold,
   sliding window, minimum calls, wait in the open state); an absent field is `UNKNOWN` (ADR 0015, #22).
+- A layer may be `kind: spring-ai`, whose `maxAttempts` counts retries only, as Spring AI's does (#19).
 - A service may say `external: true` (ADR 0019, #19): a callee outside the system, never an entry, with no outgoing
   edges. PLM-A1 counts it against the same limit and says `external callee`; PLM-A2b gives no finding for one
   without a `deadline`.

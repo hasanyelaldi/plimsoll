@@ -583,4 +583,38 @@ class ProjectCollectorTest {
                 .isInstanceOf(InvalidSpecException.class).hasMessage("--effective orders: two Envoy config_dump dumps, "
                         + "dumps/envoy/http_config.json and dumps/envoy/http_config.json; give one per service");
     }
+
+    /** #19, ADR 0019: the OpenAI starter gives an edge to the external openai, with no Istio layer even in a mesh. */
+    @Test
+    void aSpringAiStarterGivesAnEdgeToAnExternalProviderAndItsDetectionGoes() throws IOException {
+        petclinic();
+        copy("projects/petclinic-genai-service", "genai-service");
+        write("genai-service/pom.xml", """
+                <project>
+                  <properties><spring-ai.version>2.0.0-M1</spring-ai.version></properties>
+                  <dependencies>
+                    <dependency>
+                      <groupId>org.springframework.ai</groupId>
+                      <artifactId>spring-ai-starter-model-openai</artifactId>
+                      <version>${spring-ai.version}</version>
+                    </dependency>
+                  </dependencies>
+                </project>
+                """);
+        ProjectCollector.Result r = ProjectCollector.collect(dir);
+        Edge e = edge(r, "openai", "POST /v1/chat/completions");
+        assertThat(e.from()).isEqualTo("genai-service");
+        assertThat(e.layers()).extracting(Layer::kind).containsExactly("spring-ai");
+        assertThat(e.layers().get(0).retry().totalAttempts().value()).isEqualTo(11);
+        assertThat(r.graph().services().get("openai").external()).isTrue();
+        assertThat(r.graph().services().get("openai").entry()).isFalse();
+        assertThat(r.detections()).noneSatisfy(d -> assertThat(d.mechanism()).isEqualTo("Spring AI retry"));
+        assertThat(r.notes()).contains("edges to external callees (openai) get no Istio layer: the Istio manifests "
+                + "describe the services of the mesh (ADR 0019)");
+        assertThat(r.coverage().edges()).filteredOn(s -> s.edge().equals("genai-service→openai")).singleElement()
+                .satisfies(s -> {
+                    assertThat(s.searched()).containsExactly("spring-ai");
+                    assertThat(s.found()).containsExactly("spring-ai");
+                });
+    }
 }

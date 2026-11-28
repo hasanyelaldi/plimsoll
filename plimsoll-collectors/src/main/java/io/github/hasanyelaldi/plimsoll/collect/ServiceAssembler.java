@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
 
@@ -49,6 +50,12 @@ public final class ServiceAssembler {
      * @param gateways the Spring Cloud Gateway collector's outputs
      */
     public static Result assemble(List<Edge> edges, List<EdgesHint> hints, List<GatewayCollector.Result> gateways) {
+        return assemble(edges, hints, gateways, Set.of());
+    }
+
+    /** @param external services outside the system (ADR 0019): never an entry, deadline UNKNOWN */
+    public static Result assemble(List<Edge> edges, List<EdgesHint> hints, List<GatewayCollector.Result> gateways,
+            Set<String> external) {
         Map<String, EdgesHint> hintByService = new TreeMap<>();
         for (EdgesHint h : hints) {
             if (hintByService.putIfAbsent(h.service(), h) != null) {
@@ -70,6 +77,11 @@ public final class ServiceAssembler {
         Map<String, Service> services = new LinkedHashMap<>();
         List<String> notes = new ArrayList<>();
         for (String name : names) {
+            if (external.contains(name)) {
+                services.put(name, new Service(name, Val.unknown(name + " is outside the system (ADR 0019)"), false,
+                        true));
+                continue;
+            }
             EdgesHint hint = hintByService.get(name);
             GatewayCollector.Result gateway = gatewayByService.get(name);
             boolean entry = entry(name, hint, gateway, notes);
