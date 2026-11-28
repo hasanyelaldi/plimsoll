@@ -224,4 +224,15 @@ class SpecLoaderTest {
                 edges: [ { from: llm, to: a } ]
                 """, "edge llm→a starts at external service 'llm', which has no outgoing edges (ADR 0019)");
     }
+
+    /** #19: Spring AI passes max-attempts to maxRetries, so it counts retries only. */
+    @Test
+    void springAiMaxAttemptsCountRetriesOnly() {
+        var g = SpecLoader.parse("""
+                services: { a: { entry: true }, llm: { external: true } }
+                edges: [ { from: a, to: llm, layers: [ { kind: spring-ai, maxAttempts: 10 } ] } ]
+                """, "t.yaml");
+        assertThat(g.edges().get(0).layers().get(0).retry().totalAttempts())
+                .isEqualTo(io.github.hasanyelaldi.plimsoll.model.Val.explicit(11, "t.yaml:2 (maxAttempts 10 + 1)"));
+    }
 }

@@ -25,6 +25,7 @@ import io.github.hasanyelaldi.plimsoll.collect.spring.RequestMappingScanner;
 import io.github.hasanyelaldi.plimsoll.collect.spring.RequestMappingScanner.Mapping;
 import io.github.hasanyelaldi.plimsoll.collect.spring.SpringProperties;
 import io.github.hasanyelaldi.plimsoll.collect.spring.SpringProperties.Property;
+import io.github.hasanyelaldi.plimsoll.collect.springai.SpringAiCollector;
 import io.github.hasanyelaldi.plimsoll.io.InvalidSpecException;
 import io.github.hasanyelaldi.plimsoll.model.ConfigDifference;
 import io.github.hasanyelaldi.plimsoll.model.Detection;
@@ -98,6 +99,8 @@ public final class ProjectCollector {
     private static final List<String> ISTIO_MARKERS =
             List.of("networking.istio.io/", "install.istio.io/", "defaultHttpRetryPolicy");
     private static final Pattern HTTP_ROUTE = Pattern.compile("kind:\\s*[\"']?(HTTPRoute|GRPCRoute)");
+    /** The PLM-C1 mechanism of kb/detectors/mechanisms.yaml the Spring AI collector models. */
+    private static final String SPRING_AI_MECHANISM = "Spring AI retry";
     private static final List<String> BUILD_FILES = List.of("pom.xml", "build.gradle", "build.gradle.kts");
     private static final Comparator<EdgeSearch> EDGE_ORDER = Comparator.comparing(EdgeSearch::edge)
             .thenComparing(EdgeSearch::operation, Comparator.nullsFirst(Comparator.naturalOrder()));
@@ -226,6 +229,19 @@ public final class ProjectCollector {
                     u.evidence())));
         }
 
+        // Spring AI (#19, ADR 0019): edges to external providers, outside the HTTP client and Istio layers
+        List<Edge> externalEdges = new ArrayList<>();
+        Set<String> external = new TreeSet<>();
+        for (Module m : sortedByPath(modules)) {
+            SpringAiCollector.Result ai = SpringAiCollector.collect(root, m.root(), m.name(), m.props(), m.hint(), kb);
+            externalEdges.addAll(ai.edges());
+            external.addAll(ai.external());
+            ai.notes().forEach(n -> notes.add(m.name() + ": " + n));
+            if (ai.modelled()) {
+                detections.removeIf(d -> d.service().equals(m.name()) && d.mechanism().equals(SPRING_AI_MECHANISM));
+            }
+        }
+
         List<Edge> edges = new ArrayList<>();
         List<List<String>> searched = new ArrayList<>();
         Map<EdgeKey, Layer> httpLayers = new LinkedHashMap<>();
@@ -299,14 +315,22 @@ public final class ProjectCollector {
         GraphAssembler.Result assembled = GraphAssembler.assemble(edges,
                 new HttpClientCollector.Result(httpLayers, List.of()), istio, runningRoutes, dataPlane);
         notes.addAll(assembled.notes());
-        ServiceAssembler.Result services = ServiceAssembler.assemble(assembled.edges(), hints, gateways);
+        List<Edge> allEdges = new ArrayList<>(assembled.edges());
+        allEdges.addAll(externalEdges);
+        externalEdges.forEach(e -> searched.add(List.of(SpringAiCollector.KIND)));
+        if (mesh && !externalEdges.isEmpty()) {
+            notes.add("edges to external callees (" + String.join(", ", external) + ") get no Istio layer: the "
+                    + "Istio manifests describe the services of the mesh (ADR 0019)");
+        }
+        ServiceAssembler.Result services = ServiceAssembler.assemble(allEdges, hints, gateways, external);
         notes.addAll(services.notes());
 
         Coverage coverage = new Coverage("collected from " + modules.size() + " service module"
                 + (modules.size() == 1 ? "" : "s"),
                 sourcesRead(root, modules, services.graph(), dumps),
                 manifestsRead(root, manifests, dataPlane),
-                edgeSearches(assembled.edges(), searched, e -> mesh || runningRoutes.containsKey(e.from())),
+                edgeSearches(allEdges, searched, e -> !external.contains(e.to())
+                        && (mesh || runningRoutes.containsKey(e.from()))),
                 unread.stream().sorted(UnreadSource.ORDER).distinct().toList());
         return new Run(new Result(services.graph(), notes.stream().sorted().distinct().toList(),
                 detections.stream().sorted(Detection.ORDER).distinct().toList(), coverage), declaredProps);

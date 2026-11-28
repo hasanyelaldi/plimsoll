@@ -61,7 +61,10 @@ class ConfigPropsOracleTest {
                 .contextFactory(ApplicationContextFactory.ofContextClass(
                         AnnotationConfigReactiveWebApplicationContext.class))
                 .properties("spring.main.banner-mode=off", "spring.config.location=classpath:oracle/configprops-app.yml",
-                        "spring.cloud.compatibility-verifier.enabled=false")
+                        "spring.cloud.compatibility-verifier.enabled=false",
+                        // on the test classpath for SpringAiRetryOracleTest (#19); the fixture dump predates it
+                        "spring.autoconfigure.exclude="
+                                + "org.springframework.ai.retry.autoconfigure.SpringAiRetryAutoConfiguration")
                 .run(args);
     }
 

@@ -14,7 +14,8 @@
 #
 # Mechanisms Plimsoll collects (Resilience4j annotations and properties, Spring Cloud Gateway Retry, Spring Cloud
 # LoadBalancer retry, the reactive Spring Cloud CircuitBreaker factories (#18), Istio) are not listed here; the
-# blocking CircuitBreaker factories are, as their create(...) calls are not modelled.
+# blocking CircuitBreaker factories are, as their create(...) calls are not modelled. Spring AI retry stays listed:
+# the Spring AI collector (#19) models the OpenAI starter at some versions and then drops that service's detection.
 
 - mechanism: Spring Retry
   effect: retry

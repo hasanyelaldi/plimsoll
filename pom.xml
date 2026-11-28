@@ -65,6 +65,7 @@
     <spring-framework.version>7.0.9</spring-framework.version>
     <spring-cloud.version>2025.1.3</spring-cloud.version>
     <reactor-bom.version>2025.0.7</reactor-bom.version>
+    <spring-ai.version>2.0.3</spring-ai.version>
 
     <!-- plugins -->
     <maven-compiler-plugin.version>3.16.0</maven-compiler-plugin.version>
@@ -158,6 +159,18 @@
         <version>${spring-cloud.version}</version>
         <type>pom</type>
         <scope>import</scope>
+      </dependency>
+      <!-- Spring AI retry oracle (#19), test scope. 2.0.x is built on Spring Boot 4.1 (2.1.x needs 4.2);
+           its retry code is the same from 2.0.0-M1 (the petclinic version) to 2.1.0 -->
+      <dependency>
+        <groupId>org.springframework.ai</groupId>
+        <artifactId>spring-ai-retry</artifactId>
+        <version>${spring-ai.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.springframework.ai</groupId>
+        <artifactId>spring-ai-autoconfigure-retry</artifactId>
+        <version>${spring-ai.version}</version>
       </dependency>
       <dependency>
         <groupId>io.projectreactor</groupId>

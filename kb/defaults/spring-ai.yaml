@@ -1,0 +1,126 @@
+# Spring AI retry (#19): the RetryTemplate and ResponseErrorHandler beans of SpringAiRetryAutoConfiguration, bound
+# from spring.ai.retry.*. The retry code is the same from 2.0.0-M1 to 2.1.0 (only logging changed); it runs on the
+# Spring Framework 7 core retry (org.springframework.core.retry), not on spring-retry as in 1.x.
+# verified_by: oracle -> plimsoll-collectors/src/test/java/io/github/hasanyelaldi/plimsoll/collect/oracle/SpringAiRetryOracleTest.java
+#   run against spring-ai-retry 2.0.3 (the default spring-ai.version) and 2.0.0-M1 (spring-petclinic-microservices)
+#
+# Which model calls go through that template depends on the model and the version: the openai.* entries say where
+# it is known. A chat model retries the HTTP call to the provider only; tool calls run after the response.
+
+- library: spring-ai
+  versions: "2.0.0-M1, 2.0.3"
+  parameter: retry.max-attempts
+  value: 10                   # passed to RetryPolicy.builder().maxRetries(...): 10 retries, 11 tries
+  unit: attempts-retries-only
+  source: https://github.com/spring-projects/spring-ai/blob/v2.0.0-M1/auto-configurations/common/spring-ai-autoconfigure-retry/src/main/java/org/springframework/ai/retry/autoconfigure/SpringAiRetryAutoConfiguration.java
+  verified_by: oracle
+
+- library: spring-ai
+  versions: "2.0.0-M1, 2.0.3"
+  parameter: retry.backoff.initial-interval
+  value: 2s
+  unit: duration
+  source: https://github.com/spring-projects/spring-ai/blob/v2.0.0-M1/auto-configurations/common/spring-ai-autoconfigure-retry/src/main/java/org/springframework/ai/retry/autoconfigure/SpringAiRetryProperties.java
+  verified_by: oracle
+
+- library: spring-ai
+  versions: "2.0.0-M1, 2.0.3"
+  parameter: retry.backoff.multiplier
+  value: 5
+  unit: multiplier
+  source: https://github.com/spring-projects/spring-ai/blob/v2.0.0-M1/auto-configurations/common/spring-ai-autoconfigure-retry/src/main/java/org/springframework/ai/retry/autoconfigure/SpringAiRetryProperties.java
+  verified_by: oracle
+
+- library: spring-ai
+  versions: "2.0.0-M1, 2.0.3"
+  parameter: retry.backoff.max-interval
+  value: 3m
+  unit: duration
+  source: https://github.com/spring-projects/spring-ai/blob/v2.0.0-M1/auto-configurations/common/spring-ai-autoconfigure-retry/src/main/java/org/springframework/ai/retry/autoconfigure/SpringAiRetryProperties.java
+  verified_by: oracle
+
+- library: spring-ai
+  versions: "2.0.0-M1, 2.0.3"
+  parameter: retry.jitter
+  value: false                # the policy sets no jitter: the waits are the same on every run
+  unit: boolean
+  source: https://github.com/spring-projects/spring-ai/blob/v2.0.0-M1/auto-configurations/common/spring-ai-autoconfigure-retry/src/main/java/org/springframework/ai/retry/autoconfigure/SpringAiRetryAutoConfiguration.java
+  verified_by: oracle
+
+- library: spring-ai
+  versions: "2.0.0-M1, 2.0.3"
+  parameter: retry.timeout
+  value: unlimited            # RetryPolicy timeout is zero: no limit on the time over all tries
+  unit: duration
+  source: https://github.com/spring-projects/spring-ai/blob/v2.0.0-M1/auto-configurations/common/spring-ai-autoconfigure-retry/src/main/java/org/springframework/ai/retry/autoconfigure/SpringAiRetryAutoConfiguration.java
+  verified_by: oracle
+
+# Retry conditions (ADR 0014). The template retries TransientAiException and ResourceAccessException. The handler
+# throws TransientAiException for a status in on-http-codes, NonTransientAiException for a 4xx (unless
+# on-client-errors) or a status in exclude-on-http-codes, and TransientAiException for any other error status.
+- library: spring-ai
+  versions: "2.0.0-M1, 2.0.3"
+  parameter: retryOn.TransientAiException
+  value: status-500,status-502,status-503,status-504,status-5xx-other
+  unit: failure-classes       # with the default handler settings; on-client-errors adds the 4xx classes
+  source: https://github.com/spring-projects/spring-ai/blob/v2.0.0-M1/auto-configurations/common/spring-ai-autoconfigure-retry/src/main/java/org/springframework/ai/retry/autoconfigure/SpringAiRetryAutoConfiguration.java
+  verified_by: oracle
+
+- library: spring-ai
+  versions: "2.0.0-M1, 2.0.3"
+  parameter: retryOn.on-client-errors
+  value: status-409,status-429,status-4xx-other
+  unit: failure-classes
+  source: https://github.com/spring-projects/spring-ai/blob/v2.0.0-M1/auto-configurations/common/spring-ai-autoconfigure-retry/src/main/java/org/springframework/ai/retry/autoconfigure/SpringAiRetryAutoConfiguration.java
+  verified_by: oracle
+
+- library: spring-ai
+  versions: "spring-web 7.0"
+  parameter: retryOn.ResourceAccessException
+  value: not-sent,reset,timeout # RestClient wraps every IOException of the exchange (connect, reset, read timeout)
+  unit: failure-classes
+  source: https://github.com/spring-projects/spring-framework/blob/v7.0.1/spring-web/src/main/java/org/springframework/web/client/DefaultRestClient.java
+  verified_by: source
+
+- library: spring-ai
+  versions: "2.0.0-M1, 2.0.3"
+  parameter: givesUpAs.not-sent
+  value: not-sent             # RetryUtils.execute rethrows the last error as it is
+  unit: failure-classes
+  source: https://github.com/spring-projects/spring-ai/blob/v2.0.0-M1/spring-ai-retry/src/main/java/org/springframework/ai/retry/RetryUtils.java
+  verified_by: oracle
+
+- library: spring-ai
+  versions: "2.0.0-M1, 2.0.3"
+  parameter: givesUpAs.reset
+  value: reset
+  unit: failure-classes
+  source: https://github.com/spring-projects/spring-ai/blob/v2.0.0-M1/spring-ai-retry/src/main/java/org/springframework/ai/retry/RetryUtils.java
+  verified_by: oracle
+
+- library: spring-ai
+  versions: "2.0.0-M1, 2.0.3"
+  parameter: givesUpAs.timeout
+  value: timeout
+  unit: failure-classes
+  source: https://github.com/spring-projects/spring-ai/blob/v2.0.0-M1/spring-ai-retry/src/main/java/org/springframework/ai/retry/RetryUtils.java
+  verified_by: oracle
+
+# OpenAI chat model. 2.0.0-M1 to 2.0.0-M4: OpenAiChatModel.call runs the RestClient call to the provider through
+# the RetryTemplate bean (RetryUtils.execute in internalCall); stream() does not retry. From 2.0.0-M5 on, the
+# OpenAI module uses the OpenAI Java SDK, which has retries of its own: not modelled.
+- library: spring-ai
+  versions: "2.0.0-M1 - 2.0.0-M4"
+  parameter: openai.retry-template-versions
+  value: 2.0.0-M1,2.0.0-M2,2.0.0-M3,2.0.0-M4 # the versions whose OpenAiChatModel retries with the RetryTemplate
+  unit: versions
+  source: https://github.com/spring-projects/spring-ai/blob/v2.0.0-M1/models/spring-ai-openai/src/main/java/org/springframework/ai/openai/OpenAiChatModel.java
+  verified_by: source
+
+- library: spring-ai
+  versions: "2.0.0-M1 - 2.0.0-M4"
+  parameter: openai.completions-path
+  value: /v1/chat/completions
+  unit: path
+  source: https://github.com/spring-projects/spring-ai/blob/v2.0.0-M1/models/spring-ai-openai/src/main/java/org/springframework/ai/openai/api/OpenAiApi.java
+  verified_by: source
